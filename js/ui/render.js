@@ -966,12 +966,6 @@
     if (s.tab === 'guide') renderGuide(s);
     else if (s.tab === 'diff') renderDiff(s);
     else if (s.tab === 'tools') renderTools(s);
-    // 切页时重放一次进场动效（display 切换不会自动重启动画）
-    if (shown) {
-      shown.style.animation = 'none';
-      void shown.offsetWidth;
-      shown.style.animation = '';
-    }
     // 整页统一的果冻进场：只在真正换页时触发，边打字边筛不会一直晃
     if (shown && lastTab !== s.tab) {
       const wrapEl = document.querySelector('main.wrap');
