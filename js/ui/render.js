@@ -213,6 +213,29 @@
       .filter(x => x.added && x.status === 'ok' && x.version && x.project);
   }
 
+  /* Fabric 模组装不进 Forge 时的替代方案：装 Sinytra Connector */
+  function connectorBar(s, gid) {
+    const c = s.connector;
+    const st = c && c.status;
+    if (!st) {
+      return '<button type="button" class="btn line xs" data-act="getconnector" data-group="' + esc(gid) + '">用 Sinytra Connector 兼容</button>';
+    }
+    if (st === 'loading') {
+      return '<span class="hint adnote">正在找 ' + esc(c.mc || s.env.mc) + ' 能用的 Connector…</span>';
+    }
+    if (st === 'error') {
+      return '<button type="button" class="btn line xs" data-act="getconnector" data-group="' + esc(gid) + '">再找一次 Connector</button>' +
+        '<span class="hint err">' + esc(c.reason || 'Modrinth 查询失败') + '</span>';
+    }
+    if (st === 'none' || !(c.items || []).length) {
+      return '<a class="btn line xs" href="https://modrinth.com/mod/sinytra-connector/versions" target="_blank" rel="noopener">去 Modrinth 手动找</a>';
+    }
+    return c.items.map(it =>
+      '<a class="btn grad xs" href="' + esc(it.url || it.page) + '" target="_blank" rel="noopener">下载 ' + esc(it.name) + ' ' + esc(it.version) + '</a>'
+    ).join('') +
+      '<span class="hint adnote">装进包里再扫一次，Fabric 模组就会标成「经 Connector 兼容」。</span>';
+  }
+
   function adaptState(s, key, attrs) {
     const ad = s.adapt && s.adapt[key];
     if (!ad) {
@@ -303,9 +326,13 @@
         '<div class="main"><div class="name">' + esc(first.entry.nameZh || first.entry.name || group.displayId) +
         (first.entry.nameZh && first.entry.name ? '<i class="alias">' + esc(first.entry.name) + '</i>' : '') +
         ' <i>' + esc(first.entry.version || '') + '</i></div>' +
-        '<div class="sub"><span class="tag bad">' + esc(reason) + '</span><span class="tag">不进打包</span></div></div>' +
+        '<div class="sub"><span class="tag bad">' + esc(reason) + '</span>' +
+        (first.connectorFix
+          ? '<span class="tag src">可用 Connector 兼容</span>'
+          : '<span class="tag">不进打包</span>') + '</div></div>' +
         '<div class="side"><span class="dot bad"></span></div></div>' +
-        '<div class="adaptbar">' + adaptState(s, group.id, attrs) + '</div>' +
+        '<div class="adaptbar">' + adaptState(s, group.id, attrs) +
+        (first.connectorFix ? connectorBar(s, group.id) : '') + '</div>' +
         '</div>';
     }
 
@@ -318,6 +345,7 @@
     ];
     if (group.sizes > 1) tags.push('<span class="tag">同 ID ' + group.sizes + ' 份</span>');
     if (s.filter === 'dup') tags.push('<span class="tag ok">已合并保留 1 份</span>');
+    if (chosen.viaConnector) tags.push('<span class="tag src" title="Fabric 模组，通过 Sinytra Connector 在 Forge 上运行">经 Connector 兼容</span>');
 
     const items = rows.map(r => ({
       value: r.uid,

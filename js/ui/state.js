@@ -24,6 +24,7 @@
     excluded: {},       // modId → true（用户手动不进包）
     deps: [],           // 缺前置 + 匹配结果
     adapt: {},          // 不兼容 / 前置版本不够 → 找来的适配版本
+    connector: null,    // Sinytra Connector 的匹配结果 { status, mc, items }
     filter: 'all',
     organizeQuery: '',  // 整理页搜索词（边打边筛，按回车也行）
     includeOptional: false,

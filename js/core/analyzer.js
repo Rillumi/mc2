@@ -27,8 +27,27 @@
     return entry.loaders && entry.loaders.length ? entry.loaders : [entry.loader];
   }
 
-  function matchesEnv(entry, env) {
-    if (loadersOf(entry).indexOf(env.loader) < 0) return false;
+  function isFabricEntry(entry) {
+    return loadersOf(entry).some(l => /fabric/i.test(String(l || '')));
+  }
+
+  /** 包里有没有 Sinytra Connector（以及它需要的 Forgified Fabric API） */
+  function detectConnector(modFiles) {
+    const ids = new Set(modFiles.map(m => String(m.id || '').toLowerCase()));
+    return {
+      has: ids.has('connectormod'),
+      ffapi: ids.has('fabric_api') || ids.has('forgified-fabric-api')
+    };
+  }
+
+  /**
+   * 能不能装进这个环境。
+   * connector = true 时，Forge 环境里的 Fabric 模组也算能装（由 Sinytra Connector 转接）
+   */
+  function matchesEnv(entry, env, connector) {
+    const direct = loadersOf(entry).indexOf(env.loader) >= 0;
+    const via = !!connector && env.loader === 'Forge' && isFabricEntry(entry);
+    if (!direct && !via) return false;
     return V.mcMatches(entry.mcRange || entry.mc, env.mc);
   }
 
@@ -60,6 +79,7 @@
 
     const modFiles = mods.filter(m => (m.kind || 'mod') === 'mod');
     const others = mods.filter(m => (m.kind || 'mod') !== 'mod');
+    const connector = opts.connector || detectConnector(modFiles);
 
     const byId = new Map();
     modFiles.forEach(m => {
@@ -70,9 +90,13 @@
 
     const rows = modFiles.map(entry => {
       const issues = [];
-      const usable = matchesEnv(entry, env);
+      const direct = loadersOf(entry).indexOf(env.loader) >= 0;
+      const usable = matchesEnv(entry, env, connector.has);
+      const viaConnector = usable && !direct;
+      // 这个模组本身装不上，但可以靠 Sinytra Connector 转接（Fabric → Forge）
+      const connectorFix = !direct && isFabricEntry(entry) && env.loader === 'Forge';
       if (!usable) {
-        if (loadersOf(entry).indexOf(env.loader) < 0) {
+        if (!direct) {
           issues.push({ type: 'loader', text: '加载器不符（' + loadersOf(entry).join('/') + '）' });
         } else {
           issues.push({ type: 'mc', text: 'MC 版本不符（' + (entry.mc || '?') + '）' });
@@ -81,7 +105,7 @@
       if (entry.error) issues.push({ type: 'meta', text: entry.error });
       const groupSize = byId.get(String(entry.id || '').toLowerCase()).length;
       if (groupSize > 1) issues.push({ type: 'dup', text: '同 ID 共 ' + groupSize + ' 份' });
-      return { uid: entry.uid, entry, usable, issues, groupSize, depInfo: [] };
+      return { uid: entry.uid, entry, usable, viaConnector, connectorFix, issues, groupSize, depInfo: [] };
     });
 
     // 只有“真的会被加载”的 jar 才算提供前置
@@ -176,6 +200,7 @@
       rows,
       groups,
       others,
+      connector,
       missing,
       versionIssues,
       overlaps,
@@ -194,5 +219,5 @@
     };
   }
 
-  MC.analyzer = { analyze, matchesEnv, normDep, depStatus, ENV_IDS };
+  MC.analyzer = { analyze, matchesEnv, normDep, depStatus, ENV_IDS, detectConnector };
 })(globalThis);

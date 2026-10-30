@@ -238,6 +238,7 @@
     const legacy = await zip.readEntry(z, 'mcmod.info');
 
     const found = [];
+    const manifest = await zip.readEntry(z, 'META-INF/MANIFEST.MF');
     if (fabric) {
       const p = parseFabricJson(fabric);
       if (p) found.push({ loader: 'Fabric', meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
@@ -247,8 +248,7 @@
       if (p.mods.length) {
         // mods.toml 里常见 version = "${file.jarVersion}"，真实版本在 MANIFEST 里
         if (!p.mods[0].version) {
-          const mf = await zip.readEntry(z, 'META-INF/MANIFEST.MF');
-          const mv = mf && String(mf).match(/Implementation-Version:\s*(\S+)/i);
+          const mv = manifest && String(manifest).match(/Implementation-Version:\s*(\S+)/i);
           if (mv) p.mods[0].version = mv[1].trim();
         }
         found.push({ loader: 'Forge', meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
@@ -259,6 +259,21 @@
       if (p.mods.length) found.push({ loader: 'Forge1.12', meta: p, provides: [], mcRange: p.mods[0].mc || '' });
     }
     if (!found.length) {
+      // Sinytra Connector 不是普通 Forge 模组（没有 mods.toml），靠 MANIFEST 认出来
+      if (manifest && /Automatic-Module-Name:\s*org\.sinytra\.connector/i.test(String(manifest))) {
+        const mv = String(manifest).match(/Implementation-Version:\s*(\S+)/i);
+        const ver = mv ? mv[1].trim() : '';
+        const mc = (ver.match(/\+(\d+\.\d+(?:\.\d+)?)/) || [])[1] || '';
+        return {
+          kind: 'mod',
+          info: {
+            loader: 'Forge', loaders: ['Forge'], id: 'connectormod',
+            version: ver, name: 'Sinytra Connector', nameZh: 'Sinytra Connector',
+            description: '让一部分 Fabric 模组跑在 Forge 上（需要 Forgified Fabric API）。', recipes: 0,
+            mc, mcRange: mc, allIds: ['connectormod'], deps: [], optionalDeps: []
+          }
+        };
+      }
       // 不是模组：再判断资源包 / 光影
       let isShader = false;
       let isPack = false;
