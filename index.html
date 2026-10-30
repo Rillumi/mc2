@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>ModPilot · 模组前置与打包</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+</head>
+<body>
+
+<header class="site-head">
+  <div class="wrap bar">
+    <div class="logo">
+      <svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>
+    </div>
+    <div class="brand">
+      <h1>ModPilot</h1>
+      <span>模组管家 · 前置 / 冲突 / 打包</span>
+    </div>
+    <div class="env">
+      <div class="seg" id="segLoader" role="group" aria-label="目标加载器">
+        <button type="button" data-loader="Forge" aria-pressed="true">Forge</button>
+        <button type="button" data-loader="Fabric" aria-pressed="false">Fabric</button>
+      </div>
+      <label class="mc-field">游戏版本
+        <input id="mcInput" value="1.20.1" inputmode="decimal" spellcheck="false" aria-label="Minecraft 游戏版本">
+      </label>
+      <label class="mc-field">加载器
+        <input id="loaderInput" value="47.4.0" spellcheck="false" aria-label="加载器版本，写进整合包清单">
+      </label>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="hero">
+    <div class="drop" id="drop" role="button" tabindex="0" aria-label="拖入或选择 mods 文件夹">
+      <div class="art">
+        <svg viewBox="0 0 140 120" width="132" height="113" fill="none" aria-hidden="true">
+          <defs>
+            <linearGradient id="g1" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#F9C6DC"/><stop offset="1" stop-color="#C7B4FA"/>
+            </linearGradient>
+            <linearGradient id="g2" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0" stop-color="#BFD8FB"/><stop offset="1" stop-color="#F6BBD7"/>
+            </linearGradient>
+          </defs>
+          <ellipse cx="70" cy="104" rx="46" ry="8" fill="#EFE2F6" opacity=".75"/>
+          <rect x="24" y="40" width="52" height="52" rx="13" fill="url(#g1)" transform="rotate(-9 50 66)"/>
+          <rect x="58" y="30" width="52" height="52" rx="13" fill="url(#g2)" transform="rotate(8 84 56)"/>
+          <path d="M74 48v18m0 0 7-7m-7 7-7-7" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"/>
+          <circle cx="112" cy="26" r="5" fill="#F7C4DC"/>
+          <circle cx="30" cy="28" r="3.4" fill="#C9B8FA"/>
+        </svg>
+      </div>
+      <div>
+        <h2 id="dropTitle">把 mods 文件夹拖进来</h2>
+        <p id="dropDesc">自动读取每个 jar 的模组信息，按你的加载器和游戏版本挑出合适的版本，<br>缺前置自动去 Modrinth 配好，最后一键打包成可以直接安装的整合包。</p>
+        <div class="drop-acts">
+          <button type="button" class="btn grad" id="pickFolder">选择 mods 文件夹</button>
+          <button type="button" class="btn line" id="pickOne">只查一个模组</button>
+        </div>
+        <div class="pills">
+          <span class="pill">
+            <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v3h16v-3"/></svg>
+            文件不上传
+          </span>
+          <span class="pill">
+            <svg viewBox="0 0 24 24"><path d="M12 3l7 3v6c0 4-3 6.5-7 9-4-2.5-7-5-7-9V6l7-3Z"/><path d="M9 12l2 2 4-4"/></svg>
+            自动校验前置
+          </span>
+          <span class="pill">
+            <svg viewBox="0 0 24 24"><path d="M4 7l8-4 8 4-8 4-8-4Z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/></svg>
+            一键打包
+          </span>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="fileInput" multiple webkitdirectory hidden aria-hidden="true" tabindex="-1">
+    <input type="file" id="singleInput" accept=".jar,.zip" multiple hidden aria-hidden="true" tabindex="-1">
+  </section>
+
+  <section class="stats" id="stats" aria-live="polite"></section>
+
+  <nav class="tabs" id="tabs" role="tablist" aria-label="视图切换"></nav>
+
+  <div class="workspace" id="organizeView">
+    <section class="panel">
+      <div class="panel-head">
+        <h3 id="listTitle">整理方案</h3>
+        <div class="filters" id="filters" role="group" aria-label="筛选"></div>
+        <button type="button" class="btn line sm" id="selectBtn" aria-pressed="false">选择模组</button>
+        <button type="button" class="btn line sm" id="clearBtn">清空</button>
+      </div>
+      <div id="deps"></div>
+      <div id="rows"></div>
+    </section>
+
+    <aside>
+      <div class="panel pack" id="pack"></div>
+    </aside>
+  </div>
+
+  <section class="view" id="guideView" hidden></section>
+  <section class="view" id="diffView" hidden></section>
+  <section class="view" id="toolsView" hidden></section>
+
+  <input type="file" id="diffInput" multiple webkitdirectory hidden aria-hidden="true" tabindex="-1">
+  <input type="file" id="logInput" accept=".log,.txt" multiple hidden aria-hidden="true" tabindex="-1">
+
+  <footer class="site-foot">
+    <b>数据来源：</b>Modrinth 有公开接口，可以自动搜项目、查版本、拿直链和哈希 —— 自动匹配和打包都靠它。<br>
+    CurseForge 的接口必须带密钥，浏览器跨域会被拦；Planet Minecraft 没有公开接口 —— 这两个站点给你一键跳转的搜索链接，点过去自己挑。<br>
+    <b>关于搜不到前置：</b>依赖里写的是内部 ID（比如 fabric_api_base），不是项目名。工具会先试精确 ID、再查别名、再搜索比对，最后还可以手动改搜索词，改对一次就记住了。
+  </footer>
+</main>
+
+<div class="overlay" id="overlay" hidden></div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/core/zip-reader.js"></script>
+<script src="js/core/version.js"></script>
+<script src="js/core/metadata.js"></script>
+<script src="js/core/analyzer.js"></script>
+<script src="js/core/catalog.js"></script>
+<script src="js/core/diff.js"></script>
+<script src="js/core/selector.js"></script>
+<script src="js/api/modrinth.js"></script>
+<script src="js/api/links.js"></script>
+<script src="js/core/updates.js"></script>
+<script src="js/core/logscan.js"></script>
+<script src="js/core/resolver.js"></script>
+<script src="js/core/zip-writer.js"></script>
+<script src="js/pack/mrpack.js"></script>
+<script src="js/ui/state.js"></script>
+<script src="js/ui/render.js"></script>
+<script src="js/ui/events.js"></script>
+<script src="js/main.js"></script>
+</body>
+</html>

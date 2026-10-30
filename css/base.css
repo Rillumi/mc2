@@ -1,0 +1,57 @@
+/* ===== 基础层：reset / 排版 / 背景 / 骨架 ===== */
+* { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; }
+
+body {
+  font-family: "Outfit", "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  color: var(--ink);
+  background:
+    radial-gradient(900px 520px at 6% -8%, #FDE6F2 0%, transparent 62%),
+    radial-gradient(820px 520px at 96% 2%, #E9E3FF 0%, transparent 58%),
+    radial-gradient(760px 480px at 52% 108%, #E4F2FF 0%, transparent 60%),
+    #FBF8FD;
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+}
+
+button, select, input { font-family: inherit; }
+button { cursor: pointer; }
+a { color: var(--violet-deep); }
+
+.wrap { max-width: 1180px; margin: 0 auto; padding: 0 26px; }
+
+/* 顶栏 */
+.site-head {
+  position: sticky; top: 0; z-index: 30;
+  backdrop-filter: blur(16px);
+  background: rgba(251, 248, 253, .78);
+  border-bottom: 1px solid var(--line);
+}
+.bar { display: flex; align-items: center; gap: 14px; padding: 14px 0; }
+.brand { display: flex; align-items: baseline; gap: 8px; margin-right: auto; }
+.brand h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
+.brand span { font-size: 11.5px; color: var(--ink-3); }
+
+main.wrap { padding-bottom: 40px; }
+
+footer.site-foot {
+  padding: 30px 0 46px;
+  font-size: 11.5px;
+  color: var(--ink-3);
+  line-height: 1.9;
+  max-width: 860px;
+}
+footer.site-foot b { color: var(--ink-2); font-weight: 600; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0;
+}
+
+@media (max-width: 780px) {
+  .wrap { padding: 0 16px; }
+  .bar { flex-wrap: wrap; }
+}
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}

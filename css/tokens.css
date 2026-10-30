@@ -1,0 +1,48 @@
+/* ===== ModPilot 设计令牌：换主题只改这个文件 ===== */
+:root {
+  /* 品牌色 */
+  --pink: #EC7FAE;
+  --pink-deep: #D4568F;
+  --violet: #9A86F5;
+  --violet-deep: #7C63E8;
+  --sky: #6FB5F0;
+  --sky-deep: #3E92DB;
+
+  --grad-main: linear-gradient(135deg, #F58FB8 0%, #B18BF7 55%, #7FB9F2 100%);
+  --grad-soft: linear-gradient(135deg, #FDE7F1 0%, #EFE9FF 50%, #E6F3FF 100%);
+
+  /* 文字 */
+  --ink: #2B2340;
+  --ink-2: #5C5478;
+  --ink-3: #8C85A6;
+
+  /* 线条与卡片 */
+  --line: #F1E8F6;
+  --line-2: #E6D9EE;
+  --card: #FFFFFF;
+  --card-hover: #FCFAFE;
+
+  /* 状态色 */
+  --ok: #40A87C;
+  --ok-bg: #EFFAF5;
+  --ok-line: #DCF2E8;
+  --warn: #D9963F;
+  --warn-bg: #FFF8EC;
+  --warn-line: #F7E7CC;
+  --bad: #DE5E84;
+  --bad-bg: #FEF1F4;
+  --bad-line: #F8DCE4;
+  --info-bg: #EFF6FE;
+  --info-line: #DCEBFA;
+
+  /* 圆角 */
+  --r-lg: 24px;
+  --r-md: 16px;
+  --r-sm: 11px;
+  --r-xs: 8px;
+
+  /* 阴影 */
+  --shadow: 0 14px 38px rgba(176, 124, 168, .13), 0 2px 8px rgba(150, 120, 180, .06);
+  --shadow-sm: 0 4px 14px rgba(176, 124, 168, .10);
+  --focus: 0 0 0 3px rgba(154, 134, 245, .28);
+}
