@@ -25,6 +25,7 @@
     deps: [],           // 缺前置 + 匹配结果
     adapt: {},          // 不兼容 / 前置版本不够 → 找来的适配版本
     filter: 'all',
+    organizeQuery: '',  // 整理页搜索词（边打边筛，按回车也行）
     includeOptional: false,
     includePacks: false, // 资源包 / 光影是否也放进整合包
     showOthers: false,   // 主列表里展开「资源包与光影」
@@ -40,11 +41,13 @@
     updateDone: 0,
     updateTotal: 0,
     updateError: '',    // 批量检查时的网络错误提示
-    diff: { mods: [], at: 0 }, // 另一个整合包的模组
+    diff: { mods: [], others: [], at: 0 }, // 另一个整合包的模组 + 资源包
     diffSameOpen: false,     // 对比页里「共同且一致」是否展开
     rpOrder: [],        // 资源包 uid 顺序（越靠前优先级越高）
     logs: { name: '', findings: [], lines: 0, errors: 0 },
     detail: null,       // 打开详情抽屉的组 id
+    descLang: 'zh',     // 简介显示：zh 机翻 / en 作者原文
+    descTr: {},         // 组 id → { status, text, reason } 机翻结果
     previewOpen: false, // 打包预览
     previewQuery: '',   // 预览里的搜索词
     picker: null,       // 当前展开的自绘下拉：'g:<id>' / 'd:<key>'

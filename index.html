@@ -11,30 +11,38 @@
 </head>
 <body>
 
-<header class="site-head">
-  <div class="wrap bar">
+<div class="shell">
+<aside class="rail">
+  <div class="rail-brand">
     <div class="logo">
       <svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>
     </div>
-    <div class="brand">
+    <div class="rail-brand-tx">
       <h1>ModPilot</h1>
-      <span>模组管家 · 前置 / 冲突 / 打包</span>
-    </div>
-    <div class="env">
-      <div class="seg" id="segLoader" role="group" aria-label="目标加载器">
-        <button type="button" data-loader="Forge" aria-pressed="true">Forge</button>
-        <button type="button" data-loader="Fabric" aria-pressed="false">Fabric</button>
-      </div>
-      <label class="mc-field">游戏版本
-        <input id="mcInput" value="1.20.1" inputmode="decimal" spellcheck="false" aria-label="Minecraft 游戏版本">
-      </label>
-      <label class="mc-field">加载器
-        <input id="loaderInput" value="47.4.0" spellcheck="false" aria-label="加载器版本，写进整合包清单">
-      </label>
+      <span>模组管家</span>
     </div>
   </div>
-</header>
 
+  <nav class="tabs" id="tabs" role="tablist" aria-label="视图切换"></nav>
+
+  <div class="rail-env">
+    <div class="rail-label">目标环境</div>
+    <div class="seg" id="segLoader" role="group" aria-label="目标加载器">
+      <button type="button" data-loader="Forge" aria-pressed="true">Forge</button>
+      <button type="button" data-loader="Fabric" aria-pressed="false">Fabric</button>
+    </div>
+    <label class="mc-field">游戏版本
+      <input id="mcInput" value="1.20.1" inputmode="decimal" spellcheck="false" aria-label="Minecraft 游戏版本">
+    </label>
+    <label class="mc-field ld">加载器
+      <input id="loaderInput" value="47.4.0" spellcheck="false" aria-label="加载器版本，写进整合包清单">
+    </label>
+  </div>
+
+  <div class="rail-foot">文件不上传 · 纯本地读取</div>
+</aside>
+
+<div class="page">
 <main class="wrap">
   <section class="hero">
     <div class="drop" id="drop" role="button" tabindex="0" aria-label="拖入或选择 mods 文件夹">
@@ -85,15 +93,20 @@
 
   <section class="stats" id="stats" aria-live="polite"></section>
 
-  <nav class="tabs" id="tabs" role="tablist" aria-label="视图切换"></nav>
-
-  <div class="workspace" id="organizeView">
+  <div class="workspace pane" id="organizeView">
     <section class="panel">
       <div class="panel-head">
         <h3 id="listTitle">整理方案</h3>
+        <div class="headtools">
+          <div class="searchbox">
+            <svg class="sic" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+            <input id="orgQuery" placeholder="搜模组名 / modId" spellcheck="false" aria-label="搜索模组" autocomplete="off">
+            <button type="button" class="sclear" id="orgClear" aria-label="清空搜索" hidden>×</button>
+          </div>
+          <button type="button" class="btn line sm" id="selectBtn" aria-pressed="false">选择模组</button>
+          <button type="button" class="btn line sm" id="clearBtn">清空</button>
+        </div>
         <div class="filters" id="filters" role="group" aria-label="筛选"></div>
-        <button type="button" class="btn line sm" id="selectBtn" aria-pressed="false">选择模组</button>
-        <button type="button" class="btn line sm" id="clearBtn">清空</button>
       </div>
       <div id="deps"></div>
       <div id="rows"></div>
@@ -117,6 +130,8 @@
     <b>关于搜不到前置：</b>依赖里写的是内部 ID（比如 fabric_api_base），不是项目名。工具会先试精确 ID、再查别名、再搜索比对，最后还可以手动改搜索词，改对一次就记住了。
   </footer>
 </main>
+</div>
+</div>
 
 <div class="overlay" id="overlay" hidden></div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
@@ -130,6 +145,7 @@
 <script src="js/core/selector.js"></script>
 <script src="js/api/modrinth.js"></script>
 <script src="js/api/links.js"></script>
+<script src="js/api/translate.js"></script>
 <script src="js/core/updates.js"></script>
 <script src="js/core/logscan.js"></script>
 <script src="js/core/resolver.js"></script>

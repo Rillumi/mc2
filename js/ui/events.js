@@ -149,7 +149,8 @@
     await analyzeAndResolve(true);
 
     if (notMod) {
-      toast('另外 ' + notMod + ' 个文件不是模组（资源包 / 光影），不会进 mods');
+      st.showOthers = true;
+      toast('识别到 ' + notMod + ' 个资源包 / 光影，已放到「资源包与光影」里，不会进 mods');
     }
     if (single && st.analysis && st.analysis.groups.length) {
       st.detail = st.analysis.groups[0].id;
@@ -328,6 +329,31 @@
     return rows.find(r => r.uid === st.selection[g.id]) || rows[0] || null;
   }
 
+  /* ---------- 简介机翻：打开详情时自动翻一次 ---------- */
+  async function ensureDesc(gid) {
+    const st = S();
+    if (!st.analysis || !gid) return;
+    const g = st.analysis.groups.find(x => x.id === gid);
+    if (!g) return;
+    const row = chosenOf(st, g);
+    const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
+    if (!e || !e.description) return;
+    const prev = st.descTr[gid];
+    if (prev && (prev.status === 'loading' || prev.status === 'ok')) return;
+    st.descTr[gid] = { status: 'loading' };
+    touch();
+    let res;
+    try {
+      res = await MC.translate.zh(e.description);
+    } catch (err) {
+      res = { ok: false, reason: err && err.message ? err.message : String(err) };
+    }
+    st.descTr[gid] = res.ok
+      ? { status: 'ok', text: res.text }
+      : { status: 'error', reason: res.reason || '连不上翻译接口' };
+    touch();
+  }
+
   async function checkOneUpdate(groupId) {
     const st = S();
     if (!st.analysis) return;
@@ -436,10 +462,15 @@
     if (!list.length) return toast('没找到 .jar / .zip 文件');
     const built = await buildEntries(list, '正在读取另一个包');
     st.progress = '';
-    st.diff = { mods: built.entries.filter(e => (e.kind || 'mod') === 'mod'), at: Date.now() };
+    st.diff = {
+      mods: built.entries.filter(e => (e.kind || 'mod') === 'mod'),
+      others: built.entries.filter(e => e.kind === 'resourcepack' || e.kind === 'shader'),
+      at: Date.now()
+    };
     touch();
-    if (!st.diff.mods.length) return toast('这个文件夹里没有模组');
-    toast('已导入另一个包的 ' + st.diff.mods.length + ' 个模组');
+    const packs = st.diff.others.length;
+    if (!st.diff.mods.length && !packs) return toast('这个文件夹里没有模组');
+    toast('已导入另一个包：' + st.diff.mods.length + ' 个模组' + (packs ? ' / ' + packs + ' 个资源包、光影' : ''));
   }
 
   /* ---------- 工具：日志粗筛 ---------- */
@@ -680,7 +711,28 @@
           st.detail = group;
           st.picker = null;
           touch();
+          if ((st.descLang || 'zh') === 'zh') ensureDesc(group);
         }
+        return true;
+
+      case 'desclang': {
+        const lang = el.dataset.lang === 'en' ? 'en' : 'zh';
+        st.descLang = lang;
+        touch();
+        const gid = st.detail;
+        if (lang === 'zh' && gid && String(gid).indexOf('o:') !== 0) {
+          const prev = st.descTr[gid];
+          if (prev && prev.status === 'error') delete st.descTr[gid];
+          ensureDesc(gid);
+        }
+        return true;
+      }
+
+      case 'gotools':
+        st.detail = null;
+        st.previewOpen = false;
+        st.tab = 'tools';
+        touch();
         return true;
 
       case 'toggle-exclude':
@@ -850,6 +902,53 @@
         if (!st.links[id].length) delete st.links[id];
         MC.store.saveLinks();
         touch();
+        return true;
+      }
+
+      case 'linkbulk': {
+        const ta = document.getElementById('linkBulk');
+        if (!ta) return true;
+        const lines = String(ta.value || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+        if (!lines.length) return toast('先把要存的链接贴进来'), true;
+
+        const known = [];
+        if (st.analysis) {
+          st.analysis.groups.forEach(g => {
+            const row = chosenOf(st, g);
+            if (!row) return;
+            const e = row.entry;
+            [e.id, e.name, e.nameZh].forEach(x => {
+              if (x) known.push({ key: String(x).toLowerCase(), id: e.id || g.displayId });
+            });
+          });
+        }
+
+        let ok = 0;
+        let bad = 0;
+        lines.forEach(line => {
+          const parts = line.split('|').map(x => x.trim());
+          let key = '';
+          let url = '';
+          let note = '';
+          if (parts.length >= 3) { key = parts[0]; url = parts[1]; note = parts.slice(2).join(' | '); }
+          else if (parts.length === 2) { url = parts[0]; note = parts[1]; }
+          else { url = parts[0]; }
+          if (!/^https?:\/\//i.test(url)) { bad++; return; }
+          let id = '未归属';
+          if (key) {
+            const hit = known.find(k => k.key === key.toLowerCase());
+            if (hit) id = hit.id;
+          }
+          st.links[id] = (st.links[id] || []).concat({ url, note, at: Date.now() });
+          ok++;
+        });
+
+        if (ok) {
+          MC.store.saveLinks();
+          ta.value = '';
+          touch();
+        }
+        toast('批量导入：存了 ' + ok + ' 条' + (bad ? '，跳过 ' + bad + ' 条（链接格式不对）' : ''));
         return true;
       }
     }
@@ -1081,6 +1180,34 @@
       });
     }
 
+    const orgQuery = document.getElementById('orgQuery');
+    const orgClear = document.getElementById('orgClear');
+    if (orgQuery) {
+      orgQuery.addEventListener('input', () => {
+        if (orgClear) orgClear.hidden = !orgQuery.value;
+        S().organizeQuery = orgQuery.value;
+        touch();
+      });
+      orgQuery.addEventListener('keydown', e => {
+        if (e.key === 'Escape') {
+          e.stopPropagation();
+          orgQuery.value = '';
+          if (orgClear) orgClear.hidden = true;
+          S().organizeQuery = '';
+          touch();
+        }
+      });
+    }
+    if (orgClear) {
+      orgClear.addEventListener('click', () => {
+        if (orgQuery) orgQuery.value = '';
+        orgClear.hidden = true;
+        S().organizeQuery = '';
+        touch();
+        if (orgQuery) orgQuery.focus();
+      });
+    }
+
     const selectBtn = document.getElementById('selectBtn');
     if (selectBtn) {
       selectBtn.addEventListener('click', () => {
@@ -1107,6 +1234,11 @@
         st.mode = 'folder';
         st.selectMode = false;
         st.tab = 'organize';
+        st.organizeQuery = '';
+        const oq = document.getElementById('orgQuery');
+        if (oq) oq.value = '';
+        const oc = document.getElementById('orgClear');
+        if (oc) oc.hidden = true;
         st.updates = {};
         st.updateBusy = false;
         st.updateError = '';

@@ -160,6 +160,34 @@
     return { mods, deps, provides: [] };
   }
 
+  /* 从 jar 自带的语言文件里找中文名：assets/<namespace>/lang/zh_cn.json */
+  async function findZhName(z, ids) {
+    for (const ns of ids) {
+      if (!ns) continue;
+      const want = ('assets/' + String(ns).toLowerCase() + '/lang/zh_cn.json');
+      let hit = null;
+      z.map.forEach((_, n) => { if (!hit && n.toLowerCase() === want) hit = n; });
+      if (!hit) continue;
+      let lang = null;
+      try { lang = JSON.parse(await zip.readEntry(z, hit) || '{}'); } catch { lang = null; }
+      if (!lang || typeof lang !== 'object') continue;
+
+      const lower = {};
+      Object.keys(lang).forEach(k => { lower[k.toLowerCase()] = lang[k]; });
+      const n = String(ns).toLowerCase();
+      const cand = [
+        'mod.' + n + '.name', 'mod.' + n + '.displayname',
+        n + '.name', n + '.displayname',
+        'itemgroup.' + n, 'itemgroup.' + n + '.name'
+      ];
+      for (const k of cand) {
+        const v = lower[k];
+        if (typeof v === 'string' && v.trim()) return plainText(v).slice(0, 80);
+      }
+    }
+    return '';
+  }
+
   function normalizeMc(v) {
     if (!v) return '';
     const m = String(v).match(/\d+\.\d+(?:\.\d+)?/);
@@ -248,14 +276,17 @@
     }
 
     const deps = [...depMap.values()];
+    const modId = primary.meta.mods[0].modId;
+    const nameZh = await findZhName(z, [modId, ...ids]);
     return {
       kind: 'mod',
       info: {
         loader: primary.loader,
         loaders: found.map(f => f.loader),
-        id: primary.meta.mods[0].modId,
+        id: modId,
         version: primary.meta.mods[0].version,
         name: primary.meta.mods[0].name,
+        nameZh,
         description: found.map(f => (f.meta.mods[0] && f.meta.mods[0].description) || '').find(Boolean) || '',
         recipes,
         mc: normalizeMc(mcRange),

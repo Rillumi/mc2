@@ -41,7 +41,12 @@
     chevron: '<path d="m6 9 6 6 6-6"/>',
     close: '<path d="M6 6l12 12M18 6L6 18"/>',
     link: '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M18 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V7a1 1 0 0 1 1-1h5"/>',
-    layers: '<path d="M4 7l8-4 8 4-8 4-8-4Z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/>'
+    layers: '<path d="M4 7l8-4 8 4-8 4-8-4Z"/><path d="M4 12l8 4 8-4M4 17l8 4 8-4"/>',
+    grid: '<rect x="3" y="3" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="2"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="2"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="2"/>',
+    book: '<path d="M4 5.5A2.5 2.5 0 0 1 6.5 3H19v15H6.5A2.5 2.5 0 0 0 4 20.5V5.5Z"/><path d="M19 18v3H6.5"/>',
+    columns: '<rect x="3" y="4" width="8" height="16" rx="2"/><rect x="13" y="4" width="8" height="16" rx="2"/><path d="M7 9h0M7 13h0M17 9h0M17 13h0"/>',
+    wrench: '<path d="M15.5 3a5 5 0 0 0-5.1 6.4L4 15.8V20h4.2l6.4-6.4A5 5 0 1 0 15.5 3Z"/><circle cx="15.5" cy="8.5" r="1.5"/>',
+    pack: '<path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/>'
   };
 
   function fmtSize(bytes) {
@@ -294,8 +299,10 @@
       const attrs = 'data-group="' + esc(group.id) + '" data-id="' + esc(first.entry.id || group.displayId) + '"';
       return '<div class="rowwrap">' +
         '<div class="row dead" data-act="detail" data-group="' + esc(group.id) + '" role="button" tabindex="0">' +
-        tile(group.displayId) +
-        '<div class="main"><div class="name">' + esc(first.entry.name || group.displayId) + ' <i>' + esc(first.entry.version || '') + '</i></div>' +
+        tile(first.entry.nameZh || first.entry.name || group.displayId) +
+        '<div class="main"><div class="name">' + esc(first.entry.nameZh || first.entry.name || group.displayId) +
+        (first.entry.nameZh && first.entry.name ? '<i class="alias">' + esc(first.entry.name) + '</i>' : '') +
+        ' <i>' + esc(first.entry.version || '') + '</i></div>' +
         '<div class="sub"><span class="tag bad">' + esc(reason) + '</span><span class="tag">不进打包</span></div></div>' +
         '<div class="side"><span class="dot bad"></span></div></div>' +
         '<div class="adaptbar">' + adaptState(s, group.id, attrs) + '</div>' +
@@ -321,8 +328,9 @@
 
     return '<div class="row' + (s.excluded[group.id] ? ' off' : '') + '" data-act="detail" data-group="' + esc(group.id) + '"' +
       ' role="button" tabindex="0" title="' + esc(e.fileName || '') + '">' +
-      check + tile(e.name || group.displayId) +
-      '<div class="main"><div class="name">' + esc(e.name || group.displayId) +
+      check + tile(e.nameZh || e.name || group.displayId) +
+      '<div class="main"><div class="name">' + esc(e.nameZh || e.name || group.displayId) +
+      (e.nameZh && e.name ? '<i class="alias">' + esc(e.name) + '</i>' : '') +
       ' <i>' + esc(e.version || '') + '</i></div>' +
       '<div class="sub">' + tags.join('') +
       (s.excluded[group.id] ? '<span class="tag bad">已排除</span>' : '') + '</div></div>' +
@@ -398,6 +406,15 @@
     if (s.filter === 'bad') { groups = groups.filter(g => g.usableRows.length === 0); label = '不兼容 · 已自动排除'; }
     if (s.filter === 'dup') { groups = groups.filter(g => g.sizes > 1); label = '同一模组多份 · 每组只留 1 份'; }
 
+    const q = String(s.organizeQuery || '').trim().toLowerCase();
+    if (q) {
+      groups = groups.filter(g => {
+        const row = chosenOf(s, g) || g.rows[0];
+        const e = row.entry || {};
+        return [g.displayId, e.name, e.nameZh, e.id, e.fileName].join(' ').toLowerCase().indexOf(q) >= 0;
+      });
+    }
+
     const extras = (s.mode === 'single'
       ? '<div class="extraline">单模组模式：只分析这一个 jar 的前置。' +
         '<button type="button" data-act="exit-single">退出，回到文件夹整理</button></div>'
@@ -405,15 +422,17 @@
 
     const others = (a.others && a.others.length && s.mode === 'folder') ? othersSection(s, a.others) : '';
 
-    el.innerHTML = '<div class="section-label">' + label + ' · ' + groups.length + ' 组' +
+    el.innerHTML = '<div class="section-label">' + esc(label) + ' · ' + groups.length + ' 组' +
       (s.selectMode ? '<span class="selhint">点左边的方框取消进包</span>' : '') + '</div>' +
       extras +
       (s.progress ? '<div class="loading"><span class="spinner"></span>' + esc(s.progress) + '</div>' : '') +
       '<div class="rows">' + (groups.length
         ? groups.map(g => rowHtml(s, g)).join('')
-        : '<div class="empty">' + (others
-          ? '这个文件夹里没有模组，只有下面的资源包与光影。'
-          : '这个分类下没有内容。') + '</div>') + '</div>' +
+        : '<div class="empty">' + (q
+          ? '没有匹配「' + esc(s.organizeQuery) + '」的模组。'
+          : others
+            ? '这个文件夹里没有模组，只有下面的资源包与光影。'
+            : '这个分类下没有内容。') + '</div>') + '</div>' +
       others;
   }
 
@@ -583,7 +602,7 @@
         '<span>光影一次只会启用一个，多个光影包不冲突，选一个用就行。</span></div>';
     }
 
-    return '<div class="sheet drawer" role="dialog" aria-modal="true" aria-label="资源包详情">' +
+    return '<div class="sheet detail" role="dialog" aria-modal="true" aria-label="资源包详情">' +
       '<div class="sheet-head">' +
       '<div class="sheet-title">' + tile(o.fileName, true) +
       '<div><b>' + esc(o.fileName) + '</b><small>' +
@@ -599,6 +618,39 @@
       '</div>' +
       '<div class="sheet-foot"><button type="button" class="btn grad" data-act="close">看完了</button></div>' +
       '</div>';
+  }
+
+  /* ---------- 简介：原文 + 机翻切换 ---------- */
+  function descSection(s, gid, e) {
+    if (!e.description) {
+      return '<div class="dsec-label">这个模组是干什么的</div>' +
+        '<div class="hint">这个 jar 里没写简介。说明可能在 Modrinth 页面或作者的网盘里，下面「找资源」可以直接跳过去。</div>';
+    }
+    const lang = s.descLang || 'zh';
+    const tr = s.descTr && s.descTr[gid];
+    const tabs = '<div class="desc-tabs">' +
+      '<button type="button" data-act="desclang" data-lang="zh" aria-pressed="' + (lang === 'zh') + '">中文（机翻）</button>' +
+      '<button type="button" data-act="desclang" data-lang="en" aria-pressed="' + (lang === 'en') + '">作者原文</button>' +
+      '</div>';
+
+    let body = '';
+    let note = '';
+    if (lang === 'en') {
+      body = '<div class="descbox raw">' + esc(e.description) + '</div>';
+      note = '这是 jar 里作者写的原文。';
+    } else if (tr && tr.status === 'ok') {
+      body = '<div class="descbox">' + esc(tr.text) + '</div>';
+      note = '机翻只作参考，模组名和专有名词可能翻歪；想看原句点「作者原文」。';
+    } else if (tr && tr.status === 'error') {
+      body = '<div class="descbox raw">' + esc(e.description) + '</div>';
+      note = '机翻没成功（' + (tr.reason || '网络问题') + '），先显示原文。点一下「中文（机翻）」可以再试。';
+    } else {
+      body = '<div class="descbox raw">' + esc(e.description) + '</div>';
+      note = '正在机翻…（第一次要连一下翻译接口，文本会发给 Google 翻译）';
+    }
+
+    return '<div class="dsec-label">这个模组是干什么的<span class="dsrc">来源：jar 里作者写的说明</span></div>' +
+      tabs + body + '<div class="descnote">' + esc(note) + '</div>';
   }
 
   function detailHtml(s) {
@@ -648,13 +700,15 @@
       '<input id="linkNote" placeholder="备注（可选）">' +
       '<button type="button" class="btn line xs" data-act="linkadd" data-id="' + esc(e.id) + '">存下</button>' +
       '</div>' +
-      '<div class="hint">只存在这台电脑的浏览器里，下次打开还在。</div>' +
+      '<div class="hint">只存在这台电脑的浏览器里，下次打开还在。要一次存很多个，去「工具 → 下载页仓库」批量导入。</div>' +
+      '<div class="actions"><button type="button" class="btn line xs" data-act="gotools">打开批量导入</button></div>' +
       '</div>';
 
-    return '<div class="sheet drawer" role="dialog" aria-modal="true" aria-label="模组详情">' +
+    return '<div class="sheet detail" role="dialog" aria-modal="true" aria-label="模组详情">' +
       '<div class="sheet-head">' +
-        '<div class="sheet-title">' + tile(e.name || group.displayId, true) +
-        '<div><b>' + esc(e.name || group.displayId) + '</b><small>' + esc(e.version || '版本未知') +
+        '<div class="sheet-title">' + tile(e.nameZh || e.name || group.displayId, true) +
+        '<div><b>' + esc(e.nameZh || e.name || group.displayId) +
+        (e.nameZh && e.name ? '<i class="alias">' + esc(e.name) + '</i>' : '') + '</b><small>' + esc(e.version || '版本未知') +
         ' · ' + esc(e.loader || '?') + ' · ' + fmtSize(e.size) + '</small></div></div>' +
         '<button type="button" class="icon-btn" data-act="close" aria-label="关闭">' + icon(IC.close) + '</button>' +
       '</div>' +
@@ -662,13 +716,12 @@
         '<div class="dsec-label">文件</div>' +
         '<div class="dmeta"><b>' + esc(e.fileName || '—') + '</b><span>' + fmtSize(e.size) + ' · modId ' +
         esc(e.id || '—') + '</span><span>MC 要求：' + esc(e.mcRange || e.mc || '未声明') + '</span></div>' +
-        (e.description ? '<div class="dsec-label">这个模组是干什么的</div>' +
-          '<div class="descbox">' + esc(e.description) + '</div>' : '') +
+        descSection(s, group.id, e) +
         recipeHtml(e) +
         (chosen ? updateSection(s, group.id, e) : '') +
         (rows.length > 1 ? '<div class="dsec-label">这个模组有 ' + rows.length + ' 份，进包的是</div>' +
           picker(s, 'g:' + group.id, MC.selector.label(chosen.entry), items, 'row-picker detail-picker') : '') +
-        bad + depList + (chosen ? sourceSection(s, e) : '') + (chosen ? compatSection(s, e) : '') + note + links +
+        bad + depList + links + (chosen ? sourceSection(s, e) : '') + (chosen ? compatSection(s, e) : '') + note +
       '</div>' +
       '<div class="sheet-foot">' +
         '<button type="button" class="btn line" data-act="toggle-exclude" data-group="' + esc(group.id) + '">' +
@@ -684,8 +737,8 @@
     const rows = MC.selector.sortRows(group.usableRows, s.env);
     const chosen = rows.find(r => r.uid === s.selection[group.id]) || rows[0];
     const e = chosen ? chosen.entry : group.rows[0].entry;
-    return '<div class="pitem">' + tile(e.name || group.displayId, true) +
-      '<div class="t"><b>' + esc(e.name || group.displayId) + '</b><small>' + esc(e.version || '版本未知') +
+    return '<div class="pitem">' + tile(e.nameZh || e.name || group.displayId, true) +
+      '<div class="t"><b>' + esc(e.nameZh || e.name || group.displayId) + '</b><small>' + esc(e.version || '版本未知') +
       ' · ' + fmtSize(e.size) + '</small></div>' +
       '<button type="button" class="btn line xs" data-act="exremove" data-group="' + esc(group.id) + '">移除</button>' +
       '</div>';
@@ -750,8 +803,8 @@
         '</div>';
     }).join('') + '</div>';
     const badBody = '<div class="plist">' + badShown.map(g =>
-      '<div class="pitem muted">' + tile(g.displayId, true) +
-      '<div class="t"><b>' + esc(g.rows[0].entry.name || g.displayId) + '</b><small>' +
+      '<div class="pitem muted">' + tile(g.rows[0].entry.nameZh || g.rows[0].entry.name || g.displayId, true) +
+      '<div class="t"><b>' + esc(g.rows[0].entry.nameZh || g.rows[0].entry.name || g.displayId) + '</b><small>' +
       esc((g.rows[0].issues[0] && g.rows[0].issues[0].text) || '不可用') + '</small></div>' +
       '<span class="tag bad">不进包</span></div>').join('') + '</div>';
     const otherBody = '<div class="plist">' + othersShown.map(o =>
@@ -801,16 +854,29 @@
 
     if (!html) {
       el.hidden = true;
-      el.classList.remove('open', 'right');
+      el.classList.remove('open');
       el.innerHTML = '';
       document.body.classList.remove('no-scroll');
       return;
     }
+
+    // 预览里「移出」会重绘整个面板，先把滚动位置记下来，避免画面跳一下
+    const prevBody = el.querySelector('.sheet-body');
+    const keepTop = prevBody ? prevBody.scrollTop : 0;
+    const sameSheet = !el.hidden && el.querySelector('.sheet');
+
     el.hidden = false;
     el.classList.add('open');
-    el.classList.toggle('right', !!s.detail);
     el.innerHTML = '<div class="scrim" data-act="close"></div>' + html;
     document.body.classList.add('no-scroll');
+
+    const body = el.querySelector('.sheet-body');
+    if (body && sameSheet) body.scrollTop = keepTop;
+    // 已经打开着的弹窗，内容刷新时不要再播一次入场动效，否则看起来像闪了一下
+    if (sameSheet) {
+      const sheet = el.querySelector('.sheet');
+      if (sheet) sheet.style.animation = 'none';
+    }
   }
 
   /* ---------- 页签 ---------- */
@@ -818,30 +884,40 @@
     const el = document.getElementById('tabs');
     if (!el) return;
     const items = [
-      ['organize', '整理', '挑版本 / 补前置 / 打包'],
-      ['guide', '导览', '这个包有什么'],
-      ['diff', '对比', '两个包差什么'],
-      ['tools', '工具', '日志 / 资源包顺序']
+      ['organize', '整理', '挑版本 / 补前置 / 打包', IC.grid],
+      ['guide', '导览', '这个包有什么', IC.book],
+      ['diff', '对比', '两个包差什么', IC.columns],
+      ['tools', '工具', '日志 / 资源包顺序', IC.wrench]
     ];
-    el.innerHTML = items.map(([id, label, hint]) => {
+    el.innerHTML = items.map(([id, label, hint, ic]) => {
       let n = 0;
       if (id === 'guide' && s.analysis) n = s.analysis.groups.length;
       if (id === 'diff' && s.diff && s.diff.mods.length) n = s.diff.mods.length;
       return '<button type="button" role="tab" data-tab="' + id + '" aria-selected="' + (s.tab === id) + '">' +
-        '<b>' + label + '</b><small>' + hint + '</small>' +
+        '<span class="tic">' + icon(ic) + '</span>' +
+        '<span class="tx"><b>' + label + '</b><small>' + hint + '</small></span>' +
         (n ? '<span class="tcount">' + n + '</span>' : '') + '</button>';
     }).join('');
   }
 
   function renderViews(s) {
     const map = { organize: 'organizeView', guide: 'guideView', diff: 'diffView', tools: 'toolsView' };
+    let shown = null;
     Object.keys(map).forEach(k => {
       const el = document.getElementById(map[k]);
-      if (el) el.hidden = s.tab !== k;
+      if (!el) return;
+      el.hidden = s.tab !== k;
+      if (s.tab === k) shown = el;
     });
     if (s.tab === 'guide') renderGuide(s);
     else if (s.tab === 'diff') renderDiff(s);
     else if (s.tab === 'tools') renderTools(s);
+    // 切页时重放一次进场动效（display 切换不会自动重启动画）
+    if (shown) {
+      shown.style.animation = 'none';
+      void shown.offsetWidth;
+      shown.style.animation = '';
+    }
   }
 
   function chosenOf(s, g) {
@@ -867,9 +943,10 @@
     const cat = MC.catalog.labelOf(MC.catalog.categoryOf(e));
     const rec = typeof e.recipes === 'number' ? (e.recipes ? e.recipes + ' 个配方' : '没找到配方') : '';
     return '<div class="gcard" data-act="detail" data-group="' + esc(it.groupId) + '" role="button" tabindex="0" title="' + esc(e.fileName || '') + '">' +
-      tile(e.name || e.id, true) +
+      tile(e.nameZh || e.name || e.id, true) +
       '<div class="gmain">' +
-      '<div class="gname">' + esc(e.name || e.id) +
+      '<div class="gname"><span class="namezh">' + esc(e.nameZh || e.name || e.id) + '</span>' +
+      (e.nameZh && e.name ? '<i class="alias">' + esc(e.name) + '</i>' : '') +
       (e.version ? ' <i>' + esc(e.version) + '</i>' : '') +
       '<span class="tag">' + esc(cat) + '</span>' + updateChip(s.updates[it.groupId]) + '</div>' +
       '<div class="gdesc">' + esc(e.description || '这个 jar 没写简介。') + '</div>' +
@@ -902,8 +979,8 @@
       const e = it.entry;
       if (s.guideCat !== 'all' && MC.catalog.categoryOf(e) !== s.guideCat) return false;
       if (!q) return true;
-      return [e.name, e.id, e.description, e.fileName].join(' ').toLowerCase().indexOf(q) >= 0;
-    }).sort((x, y) => String(x.entry.name || x.entry.id).localeCompare(String(y.entry.name || y.entry.id), 'zh'));
+      return [e.name, e.nameZh, e.id, e.description, e.fileName].join(' ').toLowerCase().indexOf(q) >= 0;
+    }).sort((x, y) => String(x.entry.nameZh || x.entry.name || x.entry.id).localeCompare(String(y.entry.nameZh || y.entry.name || y.entry.id), 'zh'));
 
     const head = '<div class="vhead">' +
       '<h3>导览 · ' + items.length + ' 个模组</h3>' +
@@ -940,7 +1017,7 @@
     return '<div class="vpanel"><div class="vhead"><h3>对比两个整合包</h3></div>' +
       '<div class="minidrop" id="diffDrop" data-drop="diff" data-act="pick-diff" role="button" tabindex="0">' +
       '<b>拖入另一个整合包的 mods 文件夹</b>' +
-      '<span>按 modId 对比：共有、只在当前、只在另一个、版本不同。当前这份不会被改动。</span></div>' +
+      '<span>按 modId 对比模组：共有、只在当前、只在另一个、版本不同；资源包和光影按文件名对比。当前这份不会被改动。</span></div>' +
       '<div class="vfoot">只会读 jar 里的元数据，不上传文件；对比结果不保存，换文件夹重来就行。</div></div>';
   }
 
@@ -994,11 +1071,38 @@
         '<small>' + (s.diffSameOpen ? '收起' : '展开看清单') + '</small></button>' + sameBody + '</div>'
       : '';
 
+    // 资源包 / 光影对比
+    const curPacks = (s.analysis && s.analysis.others) || [];
+    const othPacks = d.others || [];
+    const pk = MC.diff.comparePacks(curPacks, othPacks);
+    const pkRow = (x, kind) => {
+      if (kind === 'both') {
+        return '<div class="drow">' + tile(x.name, true) +
+          '<div class="t"><b>' + esc(x.name) + '</b><small>两个包都有 · 覆盖文件 ' +
+          x.na.toLocaleString() + ' / ' + x.nb.toLocaleString() + '</small></div>' +
+          '<span class="tag ' + (x.same ? 'ok' : 'warn') + '">' + (x.same ? '一样' : '不一样') + '</span></div>';
+      }
+      return '<div class="drow">' + tile(x.name, true) +
+        '<div class="t"><b>' + esc(x.name) + '</b><small>' +
+        (x.entry.kind === 'shader' ? '光影' : '资源包') + ' · ' +
+        ((x.entry.assets && x.entry.assets.length) || 0).toLocaleString() + ' 个文件 · ' + fmtSize(x.entry.size) +
+        '</small></div></div>';
+    };
+    const packSec = pk.count
+      ? '<div class="dsec"><div class="psec-head"><b>资源包 / 光影</b><span>' + pk.count + '</span>' +
+        '<small>按文件名配对，同名就并排比覆盖的文件数</small></div>' +
+        (pk.common.length ? '<div class="dlist">' + pk.common.map(x => pkRow(x, 'both')).join('') + '</div>' : '') +
+        (pk.onlyA.length ? '<div class="dlist">' + pk.onlyA.map(x => pkRow(x, 'a')).join('') + '</div>' : '') +
+        (pk.onlyB.length ? '<div class="dlist">' + pk.onlyB.map(x => pkRow(x, 'b')).join('') + '</div>' : '') +
+        '</div>'
+      : '';
+
     el.innerHTML = '<div class="vpanel">' + head + stats + warning +
       '<div class="dlistwrap">' +
-      (onlyB + onlyA + ver + same || '<div class="empty">两个包没有可对比的模组。</div>') +
+      (onlyB + onlyA + ver + same + packSec || '<div class="empty">两个包没有可对比的模组。</div>') +
       '</div>' +
-      '<div class="vfoot">按 jar 里声明的主 modId 对比。如果某个模组在另一份里被拆成多个子模块，可能出现对不上的情况。</div></div>';
+      '<div class="vfoot">模组按 jar 里声明的主 modId 对比；资源包 / 光影按文件名对比，同名会并排比覆盖文件数。' +
+      '如果某个模组在另一份里被拆成多个子模块，可能出现对不上的情况。</div></div>';
   }
 
   /* ---------- 工具 ---------- */
@@ -1060,10 +1164,64 @@
       '<div class="vbody"><div class="loglist">' + list + '</div></div></div>';
   }
 
+  /* ---------- 工具：下载页仓库 ---------- */
+  function allLinks(s) {
+    const out = [];
+    Object.keys(s.links || {}).forEach(id => {
+      (s.links[id] || []).forEach(l => out.push({ id, url: l.url, note: l.note || '', at: l.at || 0 }));
+    });
+    return out.sort((a, b) => b.at - a.at);
+  }
+
+  function entryById(s, id) {
+    const a = s.analysis;
+    if (!a) return null;
+    const want = String(id || '').toLowerCase();
+    for (const g of a.groups) {
+      const row = chosenOf(s, g);
+      if (!row) continue;
+      const e = row.entry;
+      if ([e.id, e.name, e.nameZh].some(x => String(x || '').toLowerCase() === want)) return e;
+    }
+    return null;
+  }
+
+  function linkCard(s) {
+    const list = allLinks(s);
+    const ids = Object.keys(s.links || {}).length;
+    const whom = (id) => {
+      const e = entryById(s, id);
+      return e ? (e.nameZh || e.name || e.id) : id;
+    };
+
+    return '<div class="vpanel toolcard" style="margin-top:16px">' +
+      '<div class="vhead"><h3>下载页仓库</h3>' +
+      '<span class="adnote">' + list.length + ' 条 · ' + ids + ' 个模组</span></div>' +
+      '<div class="vbody">' +
+      '<div class="rpnum-note">存在这台电脑的浏览器里（localStorage），不是数据库；换浏览器或清缓存会丢。每条挂在模组下面，详情弹窗里也能单独加。' +
+      '导出的整合包不会带这些链接。</div>' +
+      (list.length
+        ? '<div class="linklist">' + list.slice(0, 80).map(l =>
+          '<div class="linkitem"><span class="tag">' + siteTag(l.url) + '</span>' +
+          '<span class="lm">' + esc(whom(l.id)) + '</span>' +
+          '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.note || l.url) + '</a>' +
+          '<button type="button" class="icon-btn sm" data-act="linkdel" data-id="' + esc(l.id) +
+          '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
+          (list.length > 80 ? '<div class="hint">只显示最近 80 条</div>' : '') + '</div>'
+        : '<div class="hint">还没有存过链接。</div>') +
+      '<div class="bulkbox">' +
+      '<div class="bulk-label">批量导入 <small>一行一个，粘完点下面的按钮就行</small></div>' +
+      '<textarea id="linkBulk" spellcheck="false" aria-label="批量导入下载页" placeholder="每行一条，用 | 分隔&#10;模组ID或名字 | 链接 | 备注&#10;例：jei | https://www.curseforge.com/minecraft/mc-mods/jei | CF 页面&#10;也可以只写：链接 | 备注（会存成「未归属」）"></textarea>' +
+      '<div class="bulkrow"><button type="button" class="btn grad" data-act="linkbulk">批量存进仓库</button>' +
+      '<span class="hint">名字对不上会存成「未归属」，之后也能在详情里补。</span></div>' +
+      '</div>' +
+      '</div></div>';
+  }
+
   function renderTools(s) {
     const el = document.getElementById('toolsView');
     if (!el) return;
-    el.innerHTML = '<div class="toolgrid">' + rpCard(s) + logCard(s) + '</div>';
+    el.innerHTML = '<div class="toolgrid">' + rpCard(s) + logCard(s) + '</div>' + linkCard(s);
   }
 
   /* ---------- 详情里的小节 ---------- */

@@ -65,5 +65,41 @@
     };
   }
 
-  MC.diff = { compare };
+  /* 资源包 / 光影：按文件名配对，同名就并排比覆盖的文件数 */
+  function packIndex(list) {
+    const map = new Map();
+    (list || []).forEach(e => {
+      if (e.kind !== 'resourcepack' && e.kind !== 'shader') return;
+      const k = String(e.fileName || '').toLowerCase();
+      if (k && !map.has(k)) map.set(k, e);
+    });
+    return map;
+  }
+
+  function comparePacks(current, other) {
+    const A = packIndex(current);
+    const B = packIndex(other);
+    const common = [];
+    const onlyA = [];
+    const onlyB = [];
+    A.forEach((a, k) => {
+      const b = B.get(k);
+      if (b) {
+        const na = (a.assets && a.assets.length) || 0;
+        const nb = (b.assets && b.assets.length) || 0;
+        common.push({ id: k, name: a.fileName, a, b, same: na === nb && a.size === b.size, na, nb });
+      } else onlyA.push({ id: k, name: a.fileName, entry: a });
+    });
+    B.forEach((b, k) => {
+      if (!A.has(k)) onlyB.push({ id: k, name: b.fileName, entry: b });
+    });
+    const byName = (x, y) => String(x.name).localeCompare(String(y.name), 'zh');
+    common.sort(byName);
+    onlyA.sort(byName);
+    onlyB.sort(byName);
+    const count = common.length + onlyA.length + onlyB.length;
+    return { common, onlyA, onlyB, count };
+  }
+
+  MC.diff = { compare, comparePacks };
 })(globalThis);
