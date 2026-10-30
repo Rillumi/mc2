@@ -2,7 +2,7 @@
 (function (root) {
   'use strict';
   const MC = (root.MC = root.MC || {});
-  const KEY = 'modpilot.tr.v1';
+  const KEY = 'modpilot.tr.v2';   // v2：保留段落/换行的新排版，旧缓存作废
   const ENDPOINT = 'https://translate.googleapis.com/translate_a/single?client=gtx&sl=en&tl=zh-CN&dt=t&q=';
 
   const mem = new Map();      // 本次会话缓存
