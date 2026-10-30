@@ -244,7 +244,15 @@
     }
     if (forge) {
       const p = parseForgeToml(forge);
-      if (p.mods.length) found.push({ loader: 'Forge', meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
+      if (p.mods.length) {
+        // mods.toml 里常见 version = "${file.jarVersion}"，真实版本在 MANIFEST 里
+        if (!p.mods[0].version) {
+          const mf = await zip.readEntry(z, 'META-INF/MANIFEST.MF');
+          const mv = mf && String(mf).match(/Implementation-Version:\s*(\S+)/i);
+          if (mv) p.mods[0].version = mv[1].trim();
+        }
+        found.push({ loader: 'Forge', meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
+      }
     }
     if (legacy) {
       const p = parseMcmodInfo(legacy);

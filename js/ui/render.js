@@ -312,8 +312,9 @@
     const e = chosen.entry;
     const multi = rows.length > 1;
     const tags = [
-      '<span class="tag ok">' + esc(e.loader || '?') + '</span>',
-      '<span class="tag">' + esc(e.mc || '?') + '</span>'
+      '<span class="tag' + (e.loader ? ' ok' : '') + '"' + (e.loader ? '' : ' title="jar 里没写加载器"') + '>' +
+      esc(e.loader || '加载器未知') + '</span>',
+      '<span class="tag"' + (e.mc ? '' : ' title="jar 里没写支持的 MC 版本"') + '>' + esc(e.mc || 'MC 未知') + '</span>'
     ];
     if (group.sizes > 1) tags.push('<span class="tag">同 ID ' + group.sizes + ' 份</span>');
     if (s.filter === 'dup') tags.push('<span class="tag ok">已合并保留 1 份</span>');
@@ -896,6 +897,8 @@
       '</div>';
   }
 
+  let lastSheetKey = '';
+
   function renderOverlay(s) {
     const el = document.getElementById('overlay');
     if (!el) return;
@@ -908,25 +911,27 @@
       el.classList.remove('open');
       el.innerHTML = '';
       document.body.classList.remove('no-scroll');
+      lastSheetKey = '';
       return;
     }
 
-    // 预览里「移出」会重绘整个面板，先把滚动位置记下来，避免画面跳一下
+    // 同一个弹窗里重新渲染（切中英文、预览移出、选版本）：保留滚动位置，也不重播入场动效
+    const key = s.detail || 'preview';
     const prevBody = el.querySelector('.sheet-body');
-    const keepTop = prevBody ? prevBody.scrollTop : 0;
-    const sameSheet = !el.hidden && el.querySelector('.sheet');
+    const sameSheet = !el.hidden && !!el.querySelector('.sheet') && key === lastSheetKey;
+    const keepTop = sameSheet && prevBody ? prevBody.scrollTop : 0;
+    lastSheetKey = key;
 
     el.hidden = false;
     el.classList.add('open');
-    el.innerHTML = '<div class="scrim" data-act="close"></div>' + html;
+    el.innerHTML = '<div class="scrim' + (sameSheet ? '' : ' pop') + '" data-act="close"></div>' + html;
     document.body.classList.add('no-scroll');
 
     const body = el.querySelector('.sheet-body');
-    if (body && sameSheet) body.scrollTop = keepTop;
-    // 已经打开着的弹窗，内容刷新时不要再播一次入场动效，否则看起来像闪了一下
-    if (sameSheet) {
+    if (body) body.scrollTop = keepTop;
+    if (!sameSheet) {
       const sheet = el.querySelector('.sheet');
-      if (sheet) sheet.style.animation = 'none';
+      if (sheet) sheet.classList.add('pop');
     }
   }
 

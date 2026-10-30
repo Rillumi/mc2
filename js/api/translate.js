@@ -21,17 +21,35 @@
     return String(text).trim().slice(0, 900);
   }
 
-  /* 长文本按句子切成小段，逐段翻，避免单次 URL 过长或被截断 */
+  /* 长文本按行/句子切成小段，逐段翻，避免单次 URL 过长或被截断；
+     保留换行，译文才不会挤成一大坨 */
   function chunk(text) {
-    const clean = String(text || '').replace(/\s+/g, ' ').trim();
-    if (clean.length <= 480) return clean ? [clean] : [];
+    const clean = String(text || '')
+      .replace(/\r/g, '')
+      .replace(/[ \t]+/g, ' ')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    if (!clean) return [];
+    if (clean.length <= 480) return [clean];
+
     const out = [];
     let buf = '';
-    clean.split(/(?<=[.!?;:。！？；])\s+/).forEach(part => {
-      if ((buf + ' ' + part).length > 480 && buf) { out.push(buf.trim()); buf = part; }
-      else buf = buf ? buf + ' ' + part : part;
+    const flush = () => { if (buf.trim()) out.push(buf.trim()); buf = ''; };
+    clean.split('\n').forEach(line => {
+      if (line.length > 480 && !/^([-*•]|\d+\.)\s/.test(line)) {
+        // 超长正文按句子切；列表行不切
+        line.split(/(?<=[.!?;:])\s+/).forEach(part => {
+          if (buf && (buf.length + part.length + 1) > 480) flush();
+          buf = buf ? buf + ' ' + part : part;
+          if (buf.length > 480) flush();
+        });
+        return;
+      }
+      if (buf && (buf.length + line.length + 1) > 480) flush();
+      buf = buf ? buf + '\n' + line : line;
     });
-    if (buf.trim()) out.push(buf.trim());
+    flush();
     return out;
   }
 
@@ -63,7 +81,7 @@
       const parts = chunk(src);
       const out = [];
       for (const p of parts) out.push(await one(p));
-      const text2 = out.join('');
+      const text2 = out.join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
       mem.set(key, text2);
       disk[key] = text2;
       saveDisk();
