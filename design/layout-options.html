@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>ModPilot · 布局方案对比</title>
+<style>
+:root{
+  --bg:#F3F4F9;
+  --surface:#fff;
+  --ink:#20233A;
+  --ink2:#5B6076;
+  --ink3:#8D93A8;
+  --line:#E9EAF2;
+  --line2:#DDDFEB;
+  --accent:#E26D9E;
+  --accent-soft:#FDEEF4;
+  --accent-ink:#B84577;
+  --violet:#7B6CF0;
+  --ok:#2F9E73;
+  --ok-bg:#EDF9F4;
+  --warn:#B97B22;
+  --warn-bg:#FFF7E8;
+  --bad:#CF4F6F;
+  --bad-bg:#FDF0F3;
+  --r:14px;
+  --shadow:0 12px 34px rgba(32,35,58,.08);
+  --shadow-sm:0 4px 14px rgba(32,35,58,.06);
+}
+*{box-sizing:border-box}
+html,body{margin:0}
+body{
+  background:
+    radial-gradient(800px 400px at 8% -10%, #FBE7F1 0%, transparent 60%),
+    radial-gradient(700px 380px at 100% 0%, #E8E9FF 0%, transparent 55%),
+    var(--bg);
+  color:var(--ink);
+  font:14px/1.65 "PingFang SC","Microsoft YaHei",system-ui,-apple-system,sans-serif;
+  padding:22px 18px 40px;
+  -webkit-font-smoothing:antialiased;
+}
+button,input{font:inherit;color:inherit}
+button{cursor:pointer;border:0;background:none}
+a{color:inherit}
+
+/* ===== 顶部方案切换 ===== */
+.switchbar{
+  max-width:1180px;margin:0 auto 16px;display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  background:rgba(255,255,255,.78);border:1px solid #fff;box-shadow:var(--shadow-sm);
+  padding:10px 12px;border-radius:999px;backdrop-filter:blur(10px);position:sticky;top:12px;z-index:20;
+}
+.switchbar .tag{font-size:11.5px;letter-spacing:.08em;color:var(--ink3);padding:0 6px}
+.seg{display:flex;gap:4px;background:#F4F4FA;border-radius:999px;padding:3px}
+.seg button{padding:7px 13px;border-radius:999px;font-size:12.5px;color:var(--ink2);transition:.16s}
+.seg button:hover{color:var(--ink)}
+.seg button.on{background:#fff;color:var(--ink);box-shadow:0 2px 8px rgba(32,35,58,.08);font-weight:600}
+.switchbar .note{font-size:11.5px;color:var(--ink3);margin-left:auto}
+.switchbar .ghost{
+  border:1px solid var(--line2);border-radius:999px;padding:7px 12px;font-size:12px;background:#fff;color:var(--ink2);
+}
+.switchbar .ghost:hover{border-color:var(--accent);color:var(--accent-ink)}
+
+/* ===== 舞台 ===== */
+.stage{
+  max-width:1180px;margin:0 auto;background:var(--surface);border:1px solid #fff;border-radius:20px;
+  box-shadow:var(--shadow);overflow:hidden;min-height:720px;
+}
+[hidden]{display:none!important}
+
+/* 通用顶栏 */
+.appbar{
+  display:flex;align-items:center;gap:18px;padding:0 22px;height:58px;border-bottom:1px solid var(--line);
+  background:rgba(255,255,255,.92);backdrop-filter:blur(8px);
+}
+.logo{display:flex;align-items:center;gap:9px;font-weight:700;letter-spacing:.01em}
+.logo .mark{
+  width:28px;height:28px;border-radius:9px;background:linear-gradient(135deg,#F49BC1,#9B89F6);
+  display:grid;place-items:center;box-shadow:0 4px 10px rgba(226,109,158,.22);
+}
+.logo .mark svg{width:15px;height:15px;stroke:#fff;fill:none;stroke-width:1.7}
+.nav{display:flex;align-items:center;gap:2px;margin-left:8px}
+.nav button{
+  padding:7px 12px;border-radius:9px;font-size:12.8px;color:var(--ink2);position:relative;transition:.15s;
+}
+.nav button:hover{color:var(--ink);background:#F7F7FC}
+.nav button.on{color:var(--accent-ink);font-weight:600;background:var(--accent-soft)}
+.env{
+  margin-left:auto;display:flex;align-items:center;gap:8px;
+  border:1px solid var(--line2);border-radius:10px;padding:6px 10px;font-size:12px;color:var(--ink2);background:#fff;
+}
+.env b{color:var(--ink);font-weight:600}
+.env:hover{border-color:var(--accent)}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--ok)}
+
+/* 页面 */
+.page{padding:20px 22px 24px;min-height:660px}
+.pagehead{display:flex;align-items:flex-start;gap:16px;flex-wrap:wrap;margin-bottom:14px}
+.pagehead h2{margin:0;font-size:21px;letter-spacing:-.01em}
+.pagehead p{margin:3px 0 0;font-size:12px;color:var(--ink3)}
+.pagehead .acts{margin-left:auto;display:flex;gap:8px;align-items:center}
+.search{
+  display:flex;align-items:center;gap:7px;background:#F7F7FC;border:1px solid var(--line);border-radius:10px;
+  padding:7px 10px;width:220px;color:var(--ink3);font-size:12.5px;
+}
+.search svg{width:14px;height:14px;stroke:var(--ink3);fill:none;stroke-width:1.7}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;padding:7px 12px;border-radius:9px;font-size:12.5px;
+  border:1px solid var(--line2);background:#fff;color:var(--ink2);transition:.15s;white-space:nowrap;
+}
+.btn:hover{border-color:#D4C4F0;color:var(--ink);background:#FCFBFE}
+.btn.primary{border-color:transparent;background:linear-gradient(135deg,#E97CA8,#8F7BF3);color:#fff;font-weight:600;box-shadow:0 5px 14px rgba(160,110,200,.24)}
+.btn.primary:hover{filter:saturate(1.08);transform:translateY(-1px)}
+.btn.sm{padding:5px 10px;font-size:12px}
+.btn.icon{padding:7px 9px}
+.btn svg{width:14px;height:14px;stroke:currentColor;fill:none;stroke-width:1.7}
+
+.toolbar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;margin:0 0 12px}
+.chip{
+  padding:5px 10px;border-radius:999px;font-size:11.5px;color:var(--ink2);background:#F6F6FB;border:1px solid transparent;transition:.15s;
+}
+.chip:hover{background:#EFEFF8}
+.chip.on{background:var(--accent-soft);color:var(--accent-ink);border-color:#F6D5E3;font-weight:600}
+.chip .n{color:var(--ink3);margin-left:5px;font-variant-numeric:tabular-nums}
+.chip.on .n{color:var(--accent-ink);opacity:.7}
+.toolbar .sp{margin-left:auto}
+
+.content{display:grid;grid-template-columns:minmax(0,1fr) 292px;gap:14px}
+.panel{background:#fff;border:1px solid var(--line);border-radius:var(--r);overflow:hidden}
+.panel-h{display:flex;align-items:center;gap:8px;padding:11px 14px;border-bottom:1px solid var(--line);background:#FCFCFE}
+.panel-h b{font-size:12.5px}
+.panel-h .meta{margin-left:auto;font-size:11.5px;color:var(--ink3)}
+.list{display:flex;flex-direction:column}
+.row{
+  display:grid;grid-template-columns:34px minmax(0,1fr) auto;align-items:center;gap:11px;
+  padding:11px 14px;border-bottom:1px solid #F1F1F7;cursor:pointer;transition:background .14s;
+}
+.row:last-child{border-bottom:0}
+.row:hover{background:#FAFAFE}
+.row:focus-visible{outline:none;box-shadow:inset 0 0 0 2px #E4D9FB}
+.ava{
+  width:34px;height:34px;border-radius:9px;display:grid;place-items:center;font-size:12px;font-weight:700;color:#fff;
+  background:linear-gradient(135deg,#F0A7C4,#B79BF0);box-shadow:inset 0 0 0 1px rgba(255,255,255,.35);
+}
+.ava.v2{background:linear-gradient(135deg,#9FC9F5,#8E9BF3)}
+.ava.v3{background:linear-gradient(135deg,#F3C48F,#E79EC1)}
+.ava.v4{background:linear-gradient(135deg,#93D6BE,#83B7EE)}
+.rname{display:flex;align-items:center;gap:7px;min-width:0}
+.rname b{font-size:13.2px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rsub{font-size:11.3px;color:var(--ink3);margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.rright{display:flex;align-items:center;gap:6px}
+.pill{font-size:10.5px;padding:3px 7px;border-radius:999px;white-space:nowrap;line-height:1.5}
+.pill.ok{background:var(--ok-bg);color:var(--ok)}
+.pill.warn{background:var(--warn-bg);color:var(--warn)}
+.pill.bad{background:var(--bad-bg);color:var(--bad)}
+.pill.mute{background:#F3F3F9;color:var(--ink3)}
+.pill.line{border:1px solid var(--line2);color:var(--ink2);background:#fff}
+.switch{
+  width:32px;height:18px;border-radius:999px;background:#E7E7F1;position:relative;flex:none;transition:.16s;
+}
+.switch::after{content:"";position:absolute;width:14px;height:14px;border-radius:50%;background:#fff;top:2px;left:2px;box-shadow:0 1px 3px rgba(0,0,0,.14);transition:.16s}
+.switch.on{background:#C9B6F6}
+.switch.on::after{left:16px}
+
+/* 打包卡 */
+.pack{padding:14px}
+.pack h3{margin:0;font-size:13px;display:flex;align-items:center;gap:7px}
+.pack h3 .pill{margin-left:auto}
+.big{font-size:26px;font-weight:700;letter-spacing:-.02em;margin:10px 0 2px;font-variant-numeric:tabular-nums}
+.big small{font-size:12px;color:var(--ink3);font-weight:400;margin-left:5px}
+.kv{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px dashed #EEEEF5;font-size:12px;color:var(--ink2)}
+.kv:last-of-type{border-bottom:0}
+.kv b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.pack .btns{display:flex;flex-direction:column;gap:7px;margin-top:10px}
+.pack .btns .btn{justify-content:center}
+.tip{font-size:11px;color:var(--ink3);line-height:1.7;margin-top:9px;padding-top:9px;border-top:1px dashed #EEEEF5}
+.mini{display:flex;gap:6px;flex-wrap:wrap;margin-top:9px}
+.mini span{font-size:10.5px;color:var(--ink2);background:#F6F6FB;border-radius:7px;padding:4px 7px}
+
+/* ===== 方案 B 侧栏 ===== */
+.side{display:grid;grid-template-columns:208px minmax(0,1fr);min-height:720px}
+.rail{background:#FBFBFE;border-right:1px solid var(--line);padding:16px 12px;display:flex;flex-direction:column;gap:6px}
+.rail .logo{padding:2px 8px 14px}
+.rail .nav{display:flex;flex-direction:column;gap:3px;margin:0}
+.rail .nav button{display:flex;align-items:center;gap:9px;padding:9px 10px;border-radius:10px;text-align:left;font-size:12.8px;color:var(--ink2)}
+.rail .nav button .ic{width:26px;height:26px;border-radius:8px;background:#F1F1F8;display:grid;place-items:center;font-size:11px;color:var(--ink3)}
+.rail .nav button.on{background:var(--accent-soft);color:var(--accent-ink);font-weight:600}
+.rail .nav button.on .ic{background:#F8DCE8;color:var(--accent-ink)}
+.rail .foot{margin-top:auto;border-top:1px solid var(--line);padding-top:10px}
+.rail .env{margin:0;width:100%;justify-content:flex-start}
+
+/* ===== 方案 C 首页 ===== */
+.hub{padding:34px 32px;max-width:980px;margin:0 auto}
+.hub h1{font-size:27px;margin:0 0 5px;letter-spacing:-.02em}
+.hub .sub{color:var(--ink3);font-size:12.5px;margin:0 0 22px}
+.hubdrop{
+  border:1.5px dashed #E7C9DC;background:linear-gradient(180deg,#FFF8FB,#FBF9FF);border-radius:16px;
+  padding:26px 24px;display:flex;align-items:center;gap:18px;cursor:pointer;transition:.18s;
+}
+.hubdrop:hover{border-color:var(--accent);background:#FFF7FB}
+.hubdrop .ic{
+  width:54px;height:54px;border-radius:15px;background:linear-gradient(135deg,#F6A7C8,#A38BF3);
+  display:grid;place-items:center;flex:none;box-shadow:0 8px 18px rgba(200,130,190,.25);
+}
+.hubdrop .ic svg{width:24px;height:24px;stroke:#fff;fill:none;stroke-width:1.8}
+.hubdrop b{font-size:15px}
+.hubdrop p{margin:2px 0 0;color:var(--ink3);font-size:12px}
+.hubdrop .btn{margin-left:auto;flex:none}
+.hubgrid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;margin-top:18px}
+.entry{
+  display:flex;gap:13px;align-items:flex-start;padding:16px;border:1px solid var(--line);border-radius:14px;
+  background:#fff;text-align:left;transition:.16s;
+}
+.entry:hover{border-color:#E3C9F2;box-shadow:0 8px 22px rgba(120,90,160,.09);transform:translateY(-1px)}
+.entry .ic{width:38px;height:38px;border-radius:11px;display:grid;place-items:center;flex:none;font-size:12px;font-weight:700;color:#fff}
+.entry b{display:block;font-size:13.5px}
+.entry p{margin:2px 0 0;font-size:11.5px;color:var(--ink3);line-height:1.6}
+.entry .stat{margin-top:6px;font-size:11px;color:var(--accent-ink);background:var(--accent-soft);padding:2px 7px;border-radius:999px;display:inline-block}
+.recent{margin-top:22px;border-top:1px solid var(--line);padding-top:14px}
+.recent h4{margin:0 0 8px;font-size:12px;color:var(--ink3);font-weight:500}
+.recent .item{display:flex;align-items:center;gap:9px;padding:8px 0;font-size:12.5px;color:var(--ink2)}
+.recent .item b{color:var(--ink);font-weight:600}
+.recent .item .pill{margin-left:auto}
+
+/* ===== 详情弹窗 ===== */
+.scrim{position:fixed;inset:0;background:rgba(25,27,42,.44);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;padding:22px;z-index:60}
+.modal{
+  width:min(760px,94vw);max-height:88vh;overflow:auto;background:#fff;border-radius:16px;
+  box-shadow:0 30px 80px rgba(20,20,40,.3);animation:pop .18s ease-out;
+}
+@keyframes pop{from{opacity:0;transform:translateY(8px) scale(.985)}to{opacity:1;transform:none}}
+.mhead{position:sticky;top:0;z-index:2;background:#fff;padding:20px 26px 14px;border-bottom:1px solid var(--line);display:flex;gap:12px;align-items:flex-start}
+.mhead .ava{width:42px;height:42px;border-radius:12px;font-size:14px}
+.mhead h3{margin:0;font-size:18px;letter-spacing:-.01em}
+.mhead .ids{margin-top:3px;font-size:11.5px;color:var(--ink3);display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.mhead .x{margin-left:auto;width:30px;height:30px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink3);font-size:16px;line-height:1}
+.mhead .x:hover{border-color:var(--line2);color:var(--ink)}
+.mbody{padding:6px 26px 24px}
+.mfacts{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin:12px 0 18px}
+.fact{background:#FAFAFE;border:1px solid var(--line);border-radius:10px;padding:9px 11px}
+.fact span{display:block;font-size:10.5px;color:var(--ink3);margin-bottom:2px}
+.fact b{font-size:12.5px;font-weight:600;font-variant-numeric:tabular-nums}
+.sec{margin-top:18px}
+.sec h4{margin:0 0 7px;font-size:12px;color:var(--ink3);font-weight:600;letter-spacing:.03em}
+.sec p{margin:0 0 9px;font-size:13.5px;line-height:1.85;color:#33374D}
+.intro-switch{display:inline-flex;background:#F4F4FA;border-radius:8px;padding:2px;margin-bottom:9px}
+.intro-switch button{padding:4px 10px;border-radius:6px;font-size:11.5px;color:var(--ink3)}
+.intro-switch button.on{background:#fff;color:var(--ink);box-shadow:0 1px 4px rgba(0,0,0,.08);font-weight:600}
+.note{font-size:11px;color:var(--ink3);line-height:1.7}
+.note b{color:var(--ink2);font-weight:500}
+.dep{display:flex;align-items:center;gap:9px;padding:8px 10px;border:1px solid var(--line);border-radius:9px;margin-bottom:6px;font-size:12.5px}
+.dep b{font-weight:600}
+.dep .pill{margin-left:auto}
+.rec-box{background:#FFF9ED;border:1px solid #F6E6C9;border-radius:10px;padding:10px 12px;font-size:12px;line-height:1.75;color:#7A5B24}
+.rec-box b{color:#5E4315}
+.mactions{display:flex;gap:8px;flex-wrap:wrap;margin-top:20px;padding-top:16px;border-top:1px solid var(--line)}
+
+@media (max-width:900px){
+  .content{grid-template-columns:1fr}
+  .hubgrid{grid-template-columns:1fr}
+  .mfacts{grid-template-columns:repeat(2,1fr)}
+  .side{grid-template-columns:1fr}
+  .rail{border-right:0;border-bottom:1px solid var(--line)}
+  .rail .nav{flex-direction:row;overflow:auto}
+  .rail .foot{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+
+<div class="switchbar">
+  <span class="tag">布局方案</span>
+  <div class="seg" role="group" aria-label="切换布局方案">
+    <button type="button" data-variant="a" class="on">A 顶栏 + 子页面</button>
+    <button type="button" data-variant="b">B 左侧栏 + 子页面</button>
+    <button type="button" data-variant="c">C 首页入口 + 子页面</button>
+  </div>
+  <button type="button" class="ghost" id="openDetail">看详情弹窗</button>
+  <span class="note">点任意模组行也能打开详情 · 静态示意，不连接真实数据</span>
+</div>
+
+<!-- ================= 方案 A ================= -->
+<section class="stage" data-view="a">
+  <div class="appbar">
+    <div class="logo">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg></span>
+      ModPilot
+    </div>
+    <nav class="nav">
+      <button class="on">整理</button>
+      <button>导览</button>
+      <button>对比</button>
+      <button>工具</button>
+    </nav>
+    <button class="env"><span class="dot"></span>Forge <b>1.20.1</b><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 9 6 6 6-6"/></svg></button>
+  </div>
+  <div class="page">
+    <div class="pagehead">
+      <div>
+        <h2>整理方案</h2>
+        <p>95 个模组 · 88 个可用 · 7 个缺前置 · 已选 88</p>
+      </div>
+      <div class="acts">
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>搜模组名 / ID</div>
+        <button class="btn icon" title="设置"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="3"/><path d="M19 12a7 7 0 0 0-.2-1.6l2-1.6-2-3.4-2.3 1a7 7 0 0 0-2.6-1.5L13.5 3h-3l-.4 2.4A7 7 0 0 0 7.5 7L5 8l-2 3.4 2 1.6a7 7 0 0 0 0 3.2l-2 1.6L5 21l2.3-1a7 7 0 0 0 2.6 1.5l.4 2.4h3l.4-2.4a7 7 0 0 0 2.6-1.5l2.3 1 2-3.4-2-1.6c.1-.5.2-1 .2-1.6Z"/></svg></button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="chip on">全部<span class="n">95</span></button>
+      <button class="chip">缺前置<span class="n">7</span></button>
+      <button class="chip">不兼容<span class="n">3</span></button>
+      <button class="chip">有更新<span class="n">2</span></button>
+      <span class="sp"></span>
+      <button class="btn sm">选择模组</button>
+      <button class="btn sm">清空</button>
+    </div>
+    <div class="content">
+      <div class="panel">
+        <div class="panel-h"><b>模组</b><span class="meta">按状态排序</span></div>
+        <div class="list" id="listA"></div>
+      </div>
+      <aside class="panel pack">
+        <div class="pack">
+          <h3>打包预览<span class="pill ok">可生成</span></h3>
+          <div class="big">88<small>个模组</small></div>
+          <div class="kv"><span>缺失前置</span><b style="color:#B97B22">7 个</b></div>
+          <div class="kv"><span>不兼容版本</span><b style="color:#CF4F6F">3 个</b></div>
+          <div class="kv"><span>预计体积</span><b>214 MB</b></div>
+          <div class="kv"><span>目标环境</span><b>Forge 1.20.1</b></div>
+          <div class="btns">
+            <button class="btn primary">生成整合包</button>
+            <button class="btn">预览里面的模组</button>
+          </div>
+          <div class="tip">打包只使用本地文件；缺前置会单独提示，不会偷偷替换版本。</div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 方案 B ================= -->
+<section class="stage side" data-view="b" hidden>
+  <aside class="rail">
+    <div class="logo">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg></span>
+      ModPilot
+    </div>
+    <nav class="nav">
+      <button class="on"><span class="ic">整</span>整理</button>
+      <button><span class="ic">览</span>导览</button>
+      <button><span class="ic">比</span>对比</button>
+      <button><span class="ic">具</span>工具</button>
+    </nav>
+    <div class="foot">
+      <button class="env"><span class="dot"></span>Forge <b>1.20.1</b></button>
+    </div>
+  </aside>
+  <div class="page">
+    <div class="pagehead">
+      <div>
+        <h2>整理方案</h2>
+        <p>95 个模组 · 88 个可用 · 7 个缺前置 · 已选 88</p>
+      </div>
+      <div class="acts">
+        <div class="search"><svg viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>搜模组名 / ID</div>
+        <button class="btn primary">生成整合包</button>
+      </div>
+    </div>
+    <div class="toolbar">
+      <button class="chip on">全部<span class="n">95</span></button>
+      <button class="chip">缺前置<span class="n">7</span></button>
+      <button class="chip">不兼容<span class="n">3</span></button>
+      <button class="chip">有更新<span class="n">2</span></button>
+      <span class="sp"></span>
+      <button class="btn sm">选择模组</button>
+    </div>
+    <div class="content">
+      <div class="panel">
+        <div class="panel-h"><b>模组</b><span class="meta">按状态排序</span></div>
+        <div class="list" id="listB"></div>
+      </div>
+      <aside class="panel pack">
+        <div class="pack">
+          <h3>打包预览<span class="pill ok">可生成</span></h3>
+          <div class="big">88<small>个模组</small></div>
+          <div class="kv"><span>缺失前置</span><b style="color:#B97B22">7 个</b></div>
+          <div class="kv"><span>不兼容版本</span><b style="color:#CF4F6F">3 个</b></div>
+          <div class="kv"><span>预计体积</span><b>214 MB</b></div>
+          <div class="btns"><button class="btn primary">生成整合包</button></div>
+        </div>
+      </aside>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 方案 C ================= -->
+<section class="stage" data-view="c" hidden>
+  <div class="appbar">
+    <div class="logo">
+      <span class="mark"><svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg></span>
+      ModPilot
+    </div>
+    <nav class="nav">
+      <button class="on">首页</button>
+      <button>整理</button>
+      <button>导览</button>
+      <button>对比</button>
+      <button>工具</button>
+    </nav>
+    <button class="env"><span class="dot"></span>Forge <b>1.20.1</b></button>
+  </div>
+  <div class="hub">
+    <h1>晚上好，今天要整理哪个包？</h1>
+    <p class="sub">文件只在本地读取。选一个入口，或者直接把 mods 文件夹拖进来。</p>
+    <div class="hubdrop">
+      <span class="ic"><svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v3h16v-3"/></svg></span>
+      <div><b>把 mods 文件夹拖到这里</b><p>也可以点右侧按钮选择文件夹，或只查一个 jar</p></div>
+      <button class="btn primary">选择文件夹</button>
+    </div>
+    <div class="hubgrid">
+      <button class="entry" data-goto="a">
+        <span class="ic" style="background:linear-gradient(135deg,#F0A0C2,#AE8CF2)">整</span>
+        <span><b>整理方案</b><p>选版本、补前置、打包成可直接安装的整合包</p><span class="stat">上次 88 / 95 可用</span></span>
+      </button>
+      <button class="entry" data-goto="a">
+        <span class="ic" style="background:linear-gradient(135deg,#8FC4F1,#8E96EF)">览</span>
+        <span><b>导览</b><p>看这个包有什么模组、各自干什么、属于哪类玩法</p><span class="stat">95 个模组</span></span>
+      </button>
+      <button class="entry" data-goto="a">
+        <span class="ic" style="background:linear-gradient(135deg,#EFC08B,#E59BBF)">比</span>
+        <span><b>对比</b><p>和另一个整合包比，缺什么、多什么，一目了然</p><span class="stat">还没有导入对比包</span></span>
+      </button>
+      <button class="entry" data-goto="a">
+        <span class="ic" style="background:linear-gradient(135deg,#8FD0B9,#82AEEB)">具</span>
+        <span><b>工具</b><p>资源包顺序、日志诊断这些低频但要用的东西</p><span class="stat">2 个小工具</span></span>
+      </button>
+    </div>
+    <div class="recent">
+      <h4>最近打开</h4>
+      <div class="item"><span class="ava" style="width:26px;height:26px;border-radius:7px;font-size:10px">乌</span><b>乌托邦 1.20.1</b><span style="color:var(--ink3)">昨天</span><span class="pill ok">可用 88</span></div>
+      <div class="item"><span class="ava v4" style="width:26px;height:26px;border-radius:7px;font-size:10px">森</span><b>森罗物语</b><span style="color:var(--ink3)">3 天前</span><span class="pill warn">缺 2 个前置</span></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 详情弹窗 ================= -->
+<div class="scrim" id="scrim" hidden>
+  <div class="modal" role="dialog" aria-modal="true" aria-label="模组详情">
+    <div class="mhead">
+      <span class="ava v3">K</span>
+      <div>
+        <h3>Kaleidoscope Tavern</h3>
+        <div class="ids"><span>kaleidoscope_tavern</span><span>·</span><span>1.2.0</span><span class="pill line">Forge</span><span class="pill line">1.20.1</span><span class="pill ok">已选</span></div>
+      </div>
+      <button class="x" id="closeDetail" aria-label="关闭">×</button>
+    </div>
+    <div class="mbody">
+      <div class="mfacts">
+        <div class="fact"><span>文件大小</span><b>12.4 MB</b></div>
+        <div class="fact"><span>配方定义</span><b>612</b></div>
+        <div class="fact"><span>分类</span><b>建筑装饰</b></div>
+        <div class="fact"><span>前置</span><b>1 必需 / 2 可选</b></div>
+      </div>
+
+      <div class="sec">
+        <h4>简介</h4>
+        <div class="intro-switch">
+          <button class="on" data-intro="zh">中文（机翻）</button>
+          <button data-intro="en">作者原文</button>
+        </div>
+        <div data-pane="zh">
+          <p>这个模组会在世界里加入几间可以喝酒、吃饭、听故事的小酒馆。村民会在里面打工，玩家可以用不同食材做出菜单上的菜；不同酒馆还有各自的常客和小事件。</p>
+          <p>酒馆的装修风格会随生物群系变化，你也可以自己改建。部分菜品需要配合其他农业模组才会出现。</p>
+          <div class="note">机翻示例，可能有误差；实际内容以作者原文为准。</div>
+        </div>
+        <div data-pane="en" hidden>
+          <p>This mod adds taverns where villagers gather to eat, drink and share rumors. Each tavern has its own menu, regulars and small events; players can cook dishes with ingredients from the mod.</p>
+          <div class="note">示意原文，非真实简介；真实内容从 jar 内 <b>mods.toml</b> 读取。</div>
+        </div>
+      </div>
+
+      <div class="sec">
+        <h4>配方</h4>
+        <div class="rec-box">
+          <b>612 个配方定义</b>，不是 612 个新方块。里面包含兼容配方、条件配方和切石机配方；代码动态注册的配方不会出现在这里。没有配方文件也不代表只能创造模式获得。
+        </div>
+      </div>
+
+      <div class="sec">
+        <h4>前置</h4>
+        <div class="dep"><span class="ava" style="width:26px;height:26px;border-radius:7px;font-size:10px">K</span><b>Kaleidoscope Core</b><span class="pill mute">必需</span><span class="pill ok">已选</span></div>
+        <div class="dep"><span class="ava v2" style="width:26px;height:26px;border-radius:7px;font-size:10px">J</span><b>JEI</b><span class="pill mute">可选兼容</span><span class="pill warn">未选</span></div>
+      </div>
+
+      <div class="mactions">
+        <button class="btn primary">去 Modrinth</button>
+        <button class="btn">爱发电搜这个模组</button>
+        <button class="btn">存下载页</button>
+        <button class="btn">检查更新</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  var ROWS = [
+    {n:'Create', id:'create', v:'0.5.1f', cat:'科技自动化', st:'ok', stt:'已选', av:'C', avc:''},
+    {n:'Kaleidoscope Tavern', id:'kaleidoscope_tavern', v:'1.2.0', cat:'建筑装饰', st:'warn', stt:'缺前置', av:'K', avc:'v3'},
+    {n:"Farmer's Delight", id:'farmersdelight', v:'1.2.4', cat:'农业食物', st:'bad', stt:'版本不适配', av:'F', avc:'v4'},
+    {n:'Just Enough Items', id:'jei', v:'15.2.0', cat:'界面优化', st:'ok', stt:'已选', av:'J', avc:'v2'},
+    {n:'FramedBlocks', id:'framedblocks', v:'9.3.1', cat:'建筑装饰', st:'ok', stt:'已选', av:'F', avc:'v3'},
+    {n:'GeckoLib', id:'geckolib', v:'4.4.2', cat:'前置库', st:'ok', stt:'已选', av:'G', avc:'v4'}
+  ];
+
+  function rowHtml(r){
+    return '<div class="row" data-open tabindex="0" role="button">' +
+      '<span class="ava ' + r.avc + '">' + r.av + '</span>' +
+      '<div style="min-width:0"><div class="rname"><b>' + r.n + '</b></div>' +
+      '<div class="rsub">' + r.id + ' · ' + r.v + ' · ' + r.cat + '</div></div>' +
+      '<div class="rright"><span class="pill ' + r.st + '">' + r.stt + '</span><span class="switch' + (r.st === 'bad' ? '' : ' on') + '" aria-hidden="true"></span></div>' +
+      '</div>';
+  }
+  ['listA','listB'].forEach(function(id){
+    var el = document.getElementById(id);
+    if (el) el.innerHTML = ROWS.map(rowHtml).join('');
+  });
+
+  // 方案切换
+  var segBtns = document.querySelectorAll('[data-variant]');
+  segBtns.forEach(function(b){
+    b.addEventListener('click', function(){
+      segBtns.forEach(function(x){ x.classList.toggle('on', x === b); });
+      var v = b.getAttribute('data-variant');
+      document.querySelectorAll('[data-view]').forEach(function(s){
+        s.hidden = s.getAttribute('data-view') !== v;
+      });
+    });
+  });
+
+  // 详情弹窗
+  var scrim = document.getElementById('scrim');
+  function openDetail(e){
+    if (e) e.stopPropagation();
+    scrim.hidden = false;
+  }
+  function closeDetail(){ scrim.hidden = true; }
+  document.getElementById('openDetail').addEventListener('click', openDetail);
+  document.getElementById('closeDetail').addEventListener('click', closeDetail);
+  scrim.addEventListener('click', function(e){ if (e.target === scrim) closeDetail(); });
+  document.addEventListener('keydown', function(e){ if (e.key === 'Escape') closeDetail(); });
+  document.addEventListener('click', function(e){
+    var row = e.target.closest ? e.target.closest('[data-open]') : null;
+    if (row) openDetail(e);
+    var goto = e.target.closest ? e.target.closest('[data-goto]') : null;
+    if (goto) {
+      var target = document.querySelector('[data-variant="' + goto.getAttribute('data-goto') + '"]');
+      if (target) target.click();
+    }
+  });
+
+  // 简介语言切换
+  document.querySelectorAll('[data-intro]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var lang = b.getAttribute('data-intro');
+      document.querySelectorAll('[data-intro]').forEach(function(x){ x.classList.toggle('on', x === b); });
+      document.querySelectorAll('[data-pane]').forEach(function(p){
+        p.hidden = p.getAttribute('data-pane') !== lang;
+      });
+    });
+  });
+  // 支持用 #a / #b / #c / #detail 直接打开对应方案
+  var hash = (location.hash || '').replace('#','');
+  if (hash === 'detail') {
+    openDetail();
+  } else if (hash === 'b' || hash === 'c') {
+    var targetBtn = document.querySelector('[data-variant="' + hash + '"]');
+    if (targetBtn) targetBtn.click();
+  }
+})();
+</script>
+</body>
+</html>
