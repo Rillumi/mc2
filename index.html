@@ -31,12 +31,14 @@
       <button type="button" data-loader="Forge" aria-pressed="true">Forge</button>
       <button type="button" data-loader="Fabric" aria-pressed="false">Fabric</button>
     </div>
-    <label class="mc-field">游戏版本
-      <input id="mcInput" value="1.20.1" inputmode="decimal" spellcheck="false" aria-label="Minecraft 游戏版本">
-    </label>
-    <label class="mc-field ld">加载器
-      <input id="loaderInput" value="47.4.0" spellcheck="false" aria-label="加载器版本，写进整合包清单">
-    </label>
+    <div class="rail-field">
+      <span class="rf-label">游戏版本</span>
+      <div id="mcPick"></div>
+    </div>
+    <div class="rail-field ld">
+      <span class="rf-label">加载器版本</span>
+      <div id="loaderPick"></div>
+    </div>
   </div>
 
   <div class="rail-foot">文件不上传 · 纯本地读取</div>
@@ -103,6 +105,9 @@
             <input id="orgQuery" placeholder="搜模组名 / modId" spellcheck="false" aria-label="搜索模组" autocomplete="off">
             <button type="button" class="sclear" id="orgClear" aria-label="清空搜索" hidden>×</button>
           </div>
+          <button type="button" class="btn line sm searchbtn" id="orgSearchBtn">
+            <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>搜索
+          </button>
           <button type="button" class="btn line sm" id="selectBtn" aria-pressed="false">选择模组</button>
           <button type="button" class="btn line sm" id="clearBtn">清空</button>
         </div>
@@ -145,6 +150,8 @@
 <script src="js/core/selector.js"></script>
 <script src="js/api/modrinth.js"></script>
 <script src="js/api/links.js"></script>
+<script src="js/api/linksdb.js"></script>
+<script src="js/api/versions.js"></script>
 <script src="js/api/translate.js"></script>
 <script src="js/core/updates.js"></script>
 <script src="js/core/logscan.js"></script>

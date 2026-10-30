@@ -10,3 +10,4 @@ Desktop.ini
 *.tmp
 *.bak
 node_modules/
+db.config.json

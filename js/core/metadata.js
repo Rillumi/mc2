@@ -160,25 +160,54 @@
     return { mods, deps, provides: [] };
   }
 
-  /* 从 jar 自带的语言文件里找中文名：assets/<namespace>/lang/zh_cn.json */
-  async function findZhName(z, ids) {
-    for (const ns of ids) {
-      if (!ns) continue;
-      const want = ('assets/' + String(ns).toLowerCase() + '/lang/zh_cn.json');
-      let hit = null;
-      z.map.forEach((_, n) => { if (!hit && n.toLowerCase() === want) hit = n; });
-      if (!hit) continue;
-      let lang = null;
-      try { lang = JSON.parse(await zip.readEntry(z, hit) || '{}'); } catch { lang = null; }
-      if (!lang || typeof lang !== 'object') continue;
+  /* 从 jar 自带的语言文件里找中文名：assets/<namespace>/lang/zh_cn.json（老版本是 .lang） */
+  function normNs(x) { return String(x || '').toLowerCase().replace(/[_-]/g, ''); }
 
+  async function readLangFile(z, hitPath) {
+    const raw = await zip.readEntry(z, hitPath);
+    if (!raw) return null;
+    if (/\.lang$/i.test(hitPath)) {
+      const obj = {};
+      String(raw).split(/\r?\n/).forEach(line => {
+        const t = line.trim();
+        if (!t || t.charAt(0) === '#') return;
+        const i = t.indexOf('=');
+        if (i < 0) return;
+        obj[t.slice(0, i).trim()] = t.slice(i + 1).trim();
+      });
+      return obj;
+    }
+    try { return JSON.parse(raw); } catch { return null; }
+  }
+
+  async function findZhName(z, ids) {
+    const want = (ids || []).filter(Boolean);
+    const wantNorm = want.map(normNs).filter(Boolean);
+    const files = [];
+    z.map.forEach((_, n) => {
+      const m = /^assets\/([^/]+)\/lang\/zh_cn\.(json|lang)$/i.exec(n);
+      if (m) files.push({ ns: m[1], path: n });
+    });
+    // 命名空间和 modId 一模一样的优先
+    files.sort((a, b) => (wantNorm.indexOf(normNs(a.ns)) >= 0 ? 0 : 1) - (wantNorm.indexOf(normNs(b.ns)) >= 0 ? 0 : 1));
+
+    for (const f of files) {
+      const ns = normNs(f.ns);
+      const related = wantNorm.some(w => w === ns ||
+        (w.length >= 5 && ns.length >= 5 && (w.indexOf(ns) === 0 || ns.indexOf(w) === 0)));
+      if (!related) continue;
+
+      const lang = await readLangFile(z, f.path);
+      if (!lang || typeof lang !== 'object') continue;
       const lower = {};
       Object.keys(lang).forEach(k => { lower[k.toLowerCase()] = lang[k]; });
-      const n = String(ns).toLowerCase();
+
+      const n = String(f.ns).toLowerCase();
       const cand = [
-        'mod.' + n + '.name', 'mod.' + n + '.displayname',
-        n + '.name', n + '.displayname',
-        'itemgroup.' + n, 'itemgroup.' + n + '.name'
+        'mod.' + n + '.name', 'mod.' + n + '.displayname', 'mod.' + n + '.title',
+        n + '.name', n + '.displayname', n + '.title',
+        'itemgroup.' + n, 'itemgroup.' + n + '.name',
+        'tooltip.' + n + '.name'
       ];
       for (const k of cand) {
         const v = lower[k];

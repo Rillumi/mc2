@@ -48,6 +48,16 @@
     detail: null,       // 打开详情抽屉的组 id
     descLang: 'zh',     // 简介显示：zh 机翻 / en 作者原文
     descTr: {},         // 组 id → { status, text, reason } 机翻结果
+    mr: {},             // 组 id → Modrinth 完整简介 { status, text, title, url, downloads }
+    bodyLang: 'zh',     // Modrinth 简介显示：zh 机翻 / en 原文
+    bodyTr: {},         // 组 id → Modrinth 简介的机翻结果
+    mcList: [],         // 游戏版本下拉候选
+    loaderList: [],     // 加载器版本下拉候选
+    verLoading: false,  // 版本列表是否在加载
+    db: { mode: 'local', ready: false, error: '', sites: [], counts: {} }, // 下载页仓库后端状态
+    siteFilter: 'all',  // 下载页仓库按站点筛选
+    logAutoTried: false,// 工具页是否已经试过自动读日志
+    logBusy: false,
     previewOpen: false, // 打包预览
     previewQuery: '',   // 预览里的搜索词
     picker: null,       // 当前展开的自绘下拉：'g:<id>' / 'd:<key>'

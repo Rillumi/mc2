@@ -80,5 +80,5 @@
     };
   }
 
-  MC.updates = { check, projectUrl };
+  MC.updates = { check, projectUrl, findProject };
 })(globalThis);

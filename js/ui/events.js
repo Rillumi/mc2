@@ -354,6 +354,81 @@
     touch();
   }
 
+  /* ---------- Modrinth 正文：打开详情时补一份完整介绍 ---------- */
+  function mdToText(md) {
+    return String(md || '')
+      .replace(/```[\s\S]*?```/g, ' ')
+      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/<[^>]+>/g, ' ')
+      .replace(/^#{1,6}\s+/gm, '')
+      .replace(/[*_`>~|]/g, '')
+      .replace(/[ \t]+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  }
+
+  async function ensureMrDesc(gid) {
+    const st = S();
+    if (!st.analysis || !gid || String(gid).indexOf('o:') === 0) return;
+    const prev = st.mr[gid];
+    if (prev && (prev.status === 'loading' || prev.status === 'ok' || prev.status === 'notfound')) return;
+    const g = st.analysis.groups.find(x => x.id === gid);
+    if (!g) return;
+    const row = chosenOf(st, g);
+    const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
+    if (!e) return;
+
+    st.mr[gid] = { status: 'loading' };
+    touch();
+    try {
+      const proj = await MC.updates.findProject(e);
+      if (!proj) {
+        st.mr[gid] = { status: 'notfound' };
+        touch();
+        return;
+      }
+      const full = await MC.api.modrinth.project(proj.id || proj.slug);
+      const text = mdToText(full && full.body);
+      if (!text) {
+        st.mr[gid] = { status: 'notfound' };
+        touch();
+        return;
+      }
+      st.mr[gid] = {
+        status: 'ok',
+        text: text.slice(0, 6000),
+        title: full.title || proj.title || '',
+        url: 'https://modrinth.com/mod/' + encodeURIComponent(full.slug || full.id || ''),
+        downloads: full.downloads || 0,
+        follows: full.followers || 0,
+        updated: full.updated || ''
+      };
+      touch();
+      if ((st.bodyLang || 'zh') === 'zh') ensureBodyTr(gid);
+    } catch (err) {
+      st.mr[gid] = { status: 'error', reason: (err && err.message) || '连不上 Modrinth' };
+      touch();
+    }
+  }
+
+  async function ensureBodyTr(gid) {
+    const st = S();
+    const m = st.mr[gid];
+    if (!m || m.status !== 'ok' || !m.text) return;
+    const prev = st.bodyTr[gid];
+    if (prev && (prev.status === 'loading' || prev.status === 'ok')) return;
+    st.bodyTr[gid] = { status: 'loading' };
+    touch();
+    let res;
+    try { res = await MC.translate.zh(m.text.slice(0, 3000)); }
+    catch (err) { res = { ok: false, reason: (err && err.message) || '翻译失败' }; }
+    st.bodyTr[gid] = res.ok
+      ? { status: 'ok', text: res.text }
+      : { status: 'error', reason: res.reason || '连不上翻译接口' };
+    touch();
+  }
+
   async function checkOneUpdate(groupId) {
     const st = S();
     if (!st.analysis) return;
@@ -598,10 +673,144 @@
     document.querySelectorAll('#segLoader button').forEach(b => {
       b.setAttribute('aria-pressed', String(b.dataset.loader === st.env.loader));
     });
-    const mcIn = document.getElementById('mcInput');
-    const ldIn = document.getElementById('loaderInput');
-    if (mcIn) mcIn.value = st.env.mc;
-    if (ldIn) ldIn.value = st.env.loaderVersion || '';
+  }
+
+  /* ---------- 环境下拉：版本列表 ---------- */
+  async function loadMcList() {
+    const st = S();
+    st.verLoading = true;
+    touch();
+    try {
+      const list = await MC.versions.mcVersions();
+      const cur = st.env.mc;
+      st.mcList = list.indexOf(cur) >= 0 ? list : [cur].concat(list);
+    } catch (err) {
+      st.mcList = [st.env.mc];
+    } finally {
+      st.verLoading = false;
+      touch();
+    }
+  }
+
+  async function loadLoaderList() {
+    const st = S();
+    st.verLoading = true;
+    touch();
+    try {
+      const list = await MC.versions.loaderVersions(st.env.loader, st.env.mc);
+      const cur = st.env.loaderVersion;
+      st.loaderList = (cur && list.indexOf(cur) < 0) ? [cur].concat(list) : list;
+    } catch (err) {
+      st.loaderList = [];
+    } finally {
+      st.verLoading = false;
+      touch();
+    }
+  }
+
+  /* ---------- 下载页仓库：MySQL / 本地兜底 ---------- */
+  function syncDbState() {
+    const d = MC.linksdb.state;
+    S().db = {
+      mode: d.mode, ready: d.ready, error: d.error,
+      sites: d.sites || [], counts: d.counts || {}, dbName: d.dbName || 'modpilot'
+    };
+    touch();
+  }
+
+  async function addLink(modId, modName, url, note) {
+    try {
+      const r = await MC.linksdb.add([{ modId, modName, url, note }]);
+      syncDbState();
+      toast(r.db ? '已存进 MySQL，换浏览器也还在' : '已存浏览器（数据库没连上）');
+    } catch (err) {
+      const st = S();
+      const id = modId || '未归属';
+      st.links[id] = (st.links[id] || []).concat({ url, note, at: Date.now() });
+      MC.store.saveLinks();
+      touch();
+      toast('数据库写入失败，先存浏览器：' + (err.message || ''));
+    }
+  }
+
+  async function removeLink(item) {
+    try {
+      await MC.linksdb.remove(item);
+      syncDbState();
+    } catch (err) {
+      toast('删除失败：' + (err.message || ''));
+    }
+  }
+
+  async function bulkLinks(ta) {
+    const st = S();
+    const lines = String(ta.value || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
+    if (!lines.length) return toast('先把要存的链接贴进来');
+
+    const known = [];
+    if (st.analysis) {
+      st.analysis.groups.forEach(g => {
+        const row = chosenOf(st, g);
+        if (!row) return;
+        const e = row.entry;
+        [e.id, e.name, e.nameZh].forEach(x => {
+          if (x) known.push({ key: String(x).toLowerCase(), id: e.id || g.displayId, name: e.nameZh || e.name || '' });
+        });
+      });
+    }
+
+    const items = [];
+    let bad = 0;
+    lines.forEach(line => {
+      const parts = line.split('|').map(x => x.trim());
+      let key = '';
+      let url = '';
+      let note = '';
+      if (parts.length >= 3) { key = parts[0]; url = parts[1]; note = parts.slice(2).join(' | '); }
+      else if (parts.length === 2) { url = parts[0]; note = parts[1]; }
+      else { url = parts[0]; }
+      if (!/^https?:\/\//i.test(url)) { bad++; return; }
+      let modId = '';
+      let modName = '';
+      if (key) {
+        const hit = known.find(k => k.key === key.toLowerCase());
+        if (hit) { modId = hit.id; modName = hit.name; }
+      }
+      items.push({ modId, modName, url, note });
+    });
+
+    if (!items.length) return toast('没有能存的链接（链接格式不对）');
+    try {
+      const r = await MC.linksdb.add(items);
+      syncDbState();
+      ta.value = '';
+      toast('批量导入：存了 ' + r.saved + ' 条' + (bad ? '，跳过 ' + bad + ' 条（链接格式不对）' : '') +
+        (r.db ? '' : '（数据库没连上，先存浏览器）'));
+    } catch (err) {
+      toast('批量写入失败：' + (err.message || ''));
+    }
+  }
+
+  /* ---------- 工具：自动读取 .minecraft 最新日志 ---------- */
+  async function autoLog() {
+    const st = S();
+    if (st.logBusy) return;
+    st.logBusy = true;
+    touch();
+    try {
+      const res = await fetch('/api/logs?kind=latest');
+      const d = await res.json();
+      if (!d.ok) { toast(d.reason || '没读到日志'); return; }
+      const r = MC.logscan.scan(String(d.text || ''), d.name);
+      st.logs = { name: d.name, path: d.path, at: d.at, findings: r.findings, lines: r.lines, errors: r.errors };
+      touch();
+      toast('已读取 ' + d.name + '：' + (r.findings.length ? r.findings.length + ' 类问题' : '没匹配到已知问题'));
+    } catch (err) {
+      toast('读不到日志：' + (err.message || '本地服务没开？'));
+    } finally {
+      st.logBusy = false;
+      touch();
+    }
   }
 
   /* ---------- 动作分发 ---------- */
@@ -633,6 +842,10 @@
           st.tab = el.dataset.tab;
           st.picker = null;
           touch();
+          if (st.tab === 'tools' && !st.logs.name && !st.logAutoTried) {
+            st.logAutoTried = true;
+            autoLog();
+          }
         }
         return true;
 
@@ -675,6 +888,15 @@
         touch();
         return true;
 
+      case 'autolog':
+        autoLog();
+        return true;
+
+      case 'siteset':
+        st.siteFilter = el.dataset.site || 'all';
+        touch();
+        return true;
+
       case 'pick-log': {
         const inp = document.getElementById('logInput');
         if (inp) inp.click();
@@ -712,6 +934,7 @@
           st.picker = null;
           touch();
           if ((st.descLang || 'zh') === 'zh') ensureDesc(group);
+          ensureMrDesc(group);
         }
         return true;
 
@@ -724,6 +947,19 @@
           const prev = st.descTr[gid];
           if (prev && prev.status === 'error') delete st.descTr[gid];
           ensureDesc(gid);
+        }
+        return true;
+      }
+
+      case 'bodylang': {
+        const lang = el.dataset.lang === 'en' ? 'en' : 'zh';
+        st.bodyLang = lang;
+        touch();
+        const gid = st.detail;
+        if (lang === 'zh' && gid) {
+          const prev = st.bodyTr[gid];
+          if (prev && prev.status === 'error') delete st.bodyTr[gid];
+          ensureBodyTr(gid);
         }
         return true;
       }
@@ -765,7 +1001,22 @@
         const pk = el.dataset.pick;
         const value = el.dataset.value;
         st.picker = null;
-        if (pk.indexOf('g:') === 0) {
+        if (pk === 'env:mc') {
+          if (value && value !== st.env.mc) {
+            st.env.mc = value;
+            st.updates = {};
+            st.updateBusy = false;
+            st.updateError = '';
+            MC.store.saveEnv();
+            touch();
+            analyzeAndResolve(true);
+            loadLoaderList();
+          }
+        } else if (pk === 'env:ld') {
+          st.env.loaderVersion = value;
+          MC.store.saveEnv();
+          touch();
+        } else if (pk.indexOf('g:') === 0) {
           st.selection[pk.slice(2)] = value;
         } else if (pk.indexOf('d:') === 0) {
           const dep = findDep(pk.slice(2));
@@ -881,74 +1132,27 @@
         return true;
 
       case 'linkadd': {
-        const id = el.dataset.id;
-        const url = (document.getElementById('linkUrl') || {}).value || '';
-        const note = (document.getElementById('linkNote') || {}).value || '';
-        const clean = url.trim();
-        if (!/^https?:\/\//i.test(clean)) return toast('链接要以 http:// 或 https:// 开头');
-        st.links[id] = (st.links[id] || []).concat({
-          url: clean, note: note.trim(), at: Date.now()
-        });
-        MC.store.saveLinks();
-        touch();
-        toast('已存到本机，下次打开还在');
+        const id = el.dataset.id || '';
+        const name = el.dataset.name || '';
+        const url = ((document.getElementById('linkUrl') || {}).value || '').trim();
+        const note = ((document.getElementById('linkNote') || {}).value || '').trim();
+        if (!/^https?:\/\//i.test(url)) return toast('链接要以 http:// 或 https:// 开头');
+        addLink(id, name, url, note);
         return true;
       }
 
       case 'linkdel': {
-        const id = el.dataset.id;
-        const url = el.dataset.url;
-        st.links[id] = (st.links[id] || []).filter(l => l.url !== url);
-        if (!st.links[id].length) delete st.links[id];
-        MC.store.saveLinks();
-        touch();
+        removeLink({
+          id: Number(el.dataset.row) || 0,
+          modId: el.dataset.mod || '',
+          url: el.dataset.url || ''
+        });
         return true;
       }
 
       case 'linkbulk': {
         const ta = document.getElementById('linkBulk');
-        if (!ta) return true;
-        const lines = String(ta.value || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-        if (!lines.length) return toast('先把要存的链接贴进来'), true;
-
-        const known = [];
-        if (st.analysis) {
-          st.analysis.groups.forEach(g => {
-            const row = chosenOf(st, g);
-            if (!row) return;
-            const e = row.entry;
-            [e.id, e.name, e.nameZh].forEach(x => {
-              if (x) known.push({ key: String(x).toLowerCase(), id: e.id || g.displayId });
-            });
-          });
-        }
-
-        let ok = 0;
-        let bad = 0;
-        lines.forEach(line => {
-          const parts = line.split('|').map(x => x.trim());
-          let key = '';
-          let url = '';
-          let note = '';
-          if (parts.length >= 3) { key = parts[0]; url = parts[1]; note = parts.slice(2).join(' | '); }
-          else if (parts.length === 2) { url = parts[0]; note = parts[1]; }
-          else { url = parts[0]; }
-          if (!/^https?:\/\//i.test(url)) { bad++; return; }
-          let id = '未归属';
-          if (key) {
-            const hit = known.find(k => k.key === key.toLowerCase());
-            if (hit) id = hit.id;
-          }
-          st.links[id] = (st.links[id] || []).concat({ url, note, at: Date.now() });
-          ok++;
-        });
-
-        if (ok) {
-          MC.store.saveLinks();
-          ta.value = '';
-          touch();
-        }
-        toast('批量导入：存了 ' + ok + ' 条' + (bad ? '，跳过 ' + bad + ' 条（链接格式不对）' : ''));
+        if (ta) bulkLinks(ta);
         return true;
       }
     }
@@ -1017,6 +1221,15 @@
       tabs.addEventListener('click', e => {
         const btn = e.target.closest('button[data-tab]');
         if (btn) handleAct('tab', btn);
+      });
+    }
+
+    /* 左侧栏：游戏版本 / 加载器版本下拉 */
+    const rail = document.querySelector('.rail');
+    if (rail) {
+      rail.addEventListener('click', e => {
+        const el = e.target.closest('[data-act]');
+        if (el) handleAct(el.dataset.act, el);
       });
     }
 
@@ -1138,35 +1351,7 @@
         syncEnvInputs();
         touch();
         analyzeAndResolve(true);
-      });
-    }
-
-    const mcIn = document.getElementById('mcInput');
-    if (mcIn) {
-      mcIn.addEventListener('change', () => {
-        const v = mcIn.value.trim();
-        if (!/^\d+\.\d+(\.\d+)?$/.test(v)) {
-          toast('游戏版本写成 1.20.1 这种格式');
-          mcIn.value = S().env.mc;
-          return;
-        }
-        if (v === S().env.mc) return;
-        S().env.mc = v;
-        S().updates = {};
-        S().updateBusy = false;
-        S().updateError = '';
-        MC.store.saveEnv();
-        touch();
-        analyzeAndResolve(true);
-      });
-    }
-
-    const ldIn = document.getElementById('loaderInput');
-    if (ldIn) {
-      ldIn.addEventListener('change', () => {
-        S().env.loaderVersion = ldIn.value.trim();
-        MC.store.saveEnv();
-        touch();
+        loadLoaderList();
       });
     }
 
@@ -1205,6 +1390,15 @@
         S().organizeQuery = '';
         touch();
         if (orgQuery) orgQuery.focus();
+      });
+    }
+
+    const orgSearchBtn = document.getElementById('orgSearchBtn');
+    if (orgSearchBtn) {
+      orgSearchBtn.addEventListener('click', () => {
+        const q = document.getElementById('orgQuery');
+        S().organizeQuery = q ? q.value.trim() : '';
+        touch();
       });
     }
 
@@ -1330,6 +1524,9 @@
     });
 
     syncEnvInputs();
+    loadMcList();
+    loadLoaderList();
+    MC.linksdb.boot().then(syncDbState).catch(() => syncDbState());
   }
 
   MC.ui = { init, importFiles, analyzeAndResolve, buildPack, toast, saveBlob, syncEnvInputs };

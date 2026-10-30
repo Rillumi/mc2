@@ -653,6 +653,52 @@
       tabs + body + '<div class="descnote">' + esc(note) + '</div>';
   }
 
+  /* ---------- Modrinth 完整简介 ---------- */
+  function mrSection(s, gid, e) {
+    const m = (s.mr || {})[gid];
+    const head = '<div class="dsec-label">Modrinth 简介<span class="dsrc">来源：Modrinth 项目正文</span></div>';
+    if (!m || m.status === 'loading') {
+      return head + '<div class="hint">正在从 Modrinth 拉作者写的完整介绍（比 jar 里那段长）…</div>';
+    }
+    if (m.status === 'notfound') {
+      return head + '<div class="hint">Modrinth 上没找到这个项目（可能只在 CurseForge 或爱发电发布），补不了正文。</div>';
+    }
+    if (m.status === 'error') {
+      return head + '<div class="hint">读取失败：' + esc(m.reason || '网络问题') + '。不影响本地整理。</div>';
+    }
+
+    const lang = s.bodyLang || 'zh';
+    const tr = (s.bodyTr || {})[gid];
+    const tabs = '<div class="desc-tabs">' +
+      '<button type="button" data-act="bodylang" data-lang="zh" aria-pressed="' + (lang === 'zh') + '">中文（机翻）</button>' +
+      '<button type="button" data-act="bodylang" data-lang="en" aria-pressed="' + (lang === 'en') + '">英文原文</button>' +
+      '</div>';
+
+    let body = '';
+    let note = '';
+    if (lang === 'en' || !tr || tr.status !== 'ok') {
+      body = '<div class="descbox raw">' + esc(m.text || '（空）') + '</div>';
+      if (lang === 'zh') note = tr && tr.status === 'error'
+        ? '机翻没成功（' + (tr.reason || '网络问题') + '），先看英文。'
+        : '正在机翻…（长文要分几段翻译，稍等一会儿）';
+      else note = '这是 Modrinth 上的英文原文。';
+    } else {
+      body = '<div class="descbox">' + esc(tr.text) + '</div>';
+      note = '机翻只作参考；想看原句点「英文原文」。';
+    }
+
+    const stats = [];
+    if (m.downloads) stats.push('下载 ' + Number(m.downloads).toLocaleString());
+    if (m.follows) stats.push('关注 ' + Number(m.follows).toLocaleString());
+    if (m.updated) stats.push('更新于 ' + String(m.updated).slice(0, 10));
+
+    return head +
+      '<div class="mrhead">' +
+        (m.url ? '<a class="btn line xs" href="' + esc(m.url) + '" target="_blank" rel="noopener">打开 Modrinth 项目页</a>' : '') +
+        (stats.length ? '<span class="hint">' + esc(m.title || '') + ' · ' + esc(stats.join(' · ')) + '</span>' : '') +
+      '</div>' + tabs + body + '<div class="descnote">' + esc(note) + '</div>';
+  }
+
   function detailHtml(s) {
     const a = s.analysis;
     if (String(s.detail || '').indexOf('o:') === 0) return otherDetailHtml(s);
@@ -690,17 +736,21 @@
     const links = '<div class="dsec-label">我存的下载页（' + savedLinks.length + '）</div>' +
       '<div class="linkbox">' +
       savedLinks.map(l =>
-        '<div class="lrow"><span class="tag">' + siteTag(l.url) + '</span>' +
+        '<div class="lrow"><span class="tag">' + esc(siteTag(l.url, l.site)) + '</span>' +
         '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' +
         esc(l.note || l.url) + '</a>' +
-        '<button type="button" class="icon-btn sm" data-act="linkdel" data-id="' + esc(e.id) +
-        '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
+        '<button type="button" class="icon-btn sm" data-act="linkdel" data-row="' + esc(l.id || 0) +
+        '" data-mod="' + esc(e.id) + '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
       '<div class="ladd">' +
       '<input id="linkUrl" type="url" placeholder="Modrinth / CurseForge / 爱发电 / 网盘链接">' +
       '<input id="linkNote" placeholder="备注（可选）">' +
-      '<button type="button" class="btn line xs" data-act="linkadd" data-id="' + esc(e.id) + '">存下</button>' +
+      '<button type="button" class="btn line xs" data-act="linkadd" data-id="' + esc(e.id) +
+      '" data-name="' + esc(e.name || '') + '">存下</button>' +
       '</div>' +
-      '<div class="hint">只存在这台电脑的浏览器里，下次打开还在。要一次存很多个，去「工具 → 下载页仓库」批量导入。</div>' +
+      '<div class="hint">' + (s.db && s.db.mode === 'db'
+        ? '存在本机 MySQL 里，换浏览器也还在，按站点自动分类。'
+        : '数据库没连上，先存在浏览器里；填好 db.config.json 后重启会自动搬进 MySQL。') +
+      '要一次存很多个，去「工具 → 下载页仓库」批量导入。</div>' +
       '<div class="actions"><button type="button" class="btn line xs" data-act="gotools">打开批量导入</button></div>' +
       '</div>';
 
@@ -717,6 +767,7 @@
         '<div class="dmeta"><b>' + esc(e.fileName || '—') + '</b><span>' + fmtSize(e.size) + ' · modId ' +
         esc(e.id || '—') + '</span><span>MC 要求：' + esc(e.mcRange || e.mc || '未声明') + '</span></div>' +
         descSection(s, group.id, e) +
+        mrSection(s, group.id, e) +
         recipeHtml(e) +
         (chosen ? updateSection(s, group.id, e) : '') +
         (rows.length > 1 ? '<div class="dsec-label">这个模组有 ' + rows.length + ' 份，进包的是</div>' +
@@ -900,6 +951,9 @@
     }).join('');
   }
 
+  let lastTab = null;
+  let animTimer = 0;
+
   function renderViews(s) {
     const map = { organize: 'organizeView', guide: 'guideView', diff: 'diffView', tools: 'toolsView' };
     let shown = null;
@@ -918,6 +972,18 @@
       void shown.offsetWidth;
       shown.style.animation = '';
     }
+    // 整页统一的果冻进场：只在真正换页时触发，边打字边筛不会一直晃
+    if (shown && lastTab !== s.tab) {
+      const wrapEl = document.querySelector('main.wrap');
+      if (wrapEl) {
+        clearTimeout(animTimer);
+        wrapEl.classList.remove('anim');
+        void wrapEl.offsetWidth;
+        wrapEl.classList.add('anim');
+        animTimer = setTimeout(() => wrapEl.classList.remove('anim'), 760);
+      }
+    }
+    lastTab = s.tab;
   }
 
   function chosenOf(s, g) {
@@ -1140,11 +1206,17 @@
 
   function logCard(s) {
     const logs = s.logs || { findings: [] };
+    const auto = '<div class="actions logauto">' +
+      '<button type="button" class="btn grad sm" data-act="autolog"' + (s.logBusy ? ' disabled' : '') + '>' +
+      (s.logBusy ? '正在读取…' : '自动读取最新日志') + '</button>' +
+      '<span class="hint">读 .minecraft/logs/latest.log（或最新的 crash-report），不用自己拖。读不到再手动拖。</span></div>';
+
     if (!logs.name) {
       return '<div class="vpanel toolcard"><div class="vhead"><h3>日志诊断</h3></div>' +
         '<div class="minidrop" id="logDrop" data-drop="log" data-act="pick-log" role="button" tabindex="0">' +
         '<b>拖入 latest.log 或 crash-report</b>' +
         '<span>按行扫一遍，把「缺前置 / 重复 ID / Mixin 失败 / 找不到类」挑出来。</span></div>' +
+        auto +
         '<div class="vfoot">日志只在本地读，不会上传；这里只做粗筛，不能替代看原文。</div></div>';
     }
 
@@ -1159,16 +1231,26 @@
 
     return '<div class="vpanel toolcard"><div class="vhead"><h3>日志诊断</h3>' +
       '<span class="adnote">' + esc(logs.name) + ' · ' + logs.lines + ' 行 · ' + logs.errors + ' 个 ERROR</span>' +
+      '<button type="button" class="btn line sm" data-act="autolog"' + (s.logBusy ? ' disabled' : '') + '>' +
+      (s.logBusy ? '读取中…' : '重新自动读取') + '</button>' +
       '<button type="button" class="btn line sm" data-act="pick-log">换一个日志</button>' +
       '<button type="button" class="btn line sm" data-act="logclear">清空</button></div>' +
-      '<div class="vbody"><div class="loglist">' + list + '</div></div></div>';
+      '<div class="vbody"><div class="loglist">' + list + '</div></div>' +
+      '<div class="vfoot">' + esc(logs.path || '手动导入的日志') + '</div></div>';
   }
 
   /* ---------- 工具：下载页仓库 ---------- */
   function allLinks(s) {
     const out = [];
-    Object.keys(s.links || {}).forEach(id => {
-      (s.links[id] || []).forEach(l => out.push({ id, url: l.url, note: l.note || '', at: l.at || 0 }));
+    Object.keys(s.links || {}).forEach(modId => {
+      (s.links[modId] || []).forEach(l => out.push({
+        modId: modId === '未归属' ? '' : modId,
+        rowId: l.id || 0,
+        url: l.url,
+        note: l.note || '',
+        site: l.site || '',
+        at: l.at || 0
+      }));
     });
     return out.sort((a, b) => b.at - a.at);
   }
@@ -1187,33 +1269,53 @@
   }
 
   function linkCard(s) {
+    const db = s.db || { mode: 'local', ready: false, error: '' };
+    const sites = (db.sites && db.sites.length) ? db.sites : MC.linksdb.FALLBACK_SITES;
     const list = allLinks(s);
     const ids = Object.keys(s.links || {}).length;
+    const counts = {};
+    list.forEach(l => { const k = l.site || 'other'; counts[k] = (counts[k] || 0) + 1; });
+    const filter = s.siteFilter || 'all';
+    const shown = filter === 'all' ? list : list.filter(l => (l.site || 'other') === filter);
     const whom = (id) => {
       const e = entryById(s, id);
-      return e ? (e.nameZh || e.name || e.id) : id;
+      return e ? (e.nameZh || e.name || e.id) : (id || '未归属');
     };
 
+    const badge = db.mode === 'db'
+      ? '<span class="dbbadge"><i></i>已连 MySQL · ' + esc(db.dbName || 'modpilot') + '</span>'
+      : '<span class="dbbadge off"><i></i>数据库未连接，先存浏览器</span>';
+
+    const chips = '<div class="sitechips">' +
+      [['all', '全部', list.length]].concat(sites.map(x => [x.key, x.label, counts[x.key] || 0]))
+        .filter(x => x[0] === 'all' || x[2])
+        .map(x => '<button type="button" data-act="siteset" data-site="' + esc(x[0]) +
+          '" aria-pressed="' + (filter === x[0]) + '">' + esc(x[1]) +
+          '<span class="n">' + x[2] + '</span></button>').join('') + '</div>';
+
+    const tip = db.mode === 'db'
+      ? '<div class="rpnum-note">存在本机 MySQL 的 modpilot.links 表里，换浏览器、清缓存都还在；按站点自动分类。'
+      : '<div class="rpnum-note">数据库没连上' + (db.error ? '（' + esc(db.error) + '）' : '') +
+        '，链接先存在浏览器里。填好项目目录下的 db.config.json（MySQL 账号密码），重启 启动.bat 就会自动切到数据库。</div>';
+
     return '<div class="vpanel toolcard" style="margin-top:16px">' +
-      '<div class="vhead"><h3>下载页仓库</h3>' +
+      '<div class="vhead"><h3>下载页仓库</h3>' + badge +
       '<span class="adnote">' + list.length + ' 条 · ' + ids + ' 个模组</span></div>' +
-      '<div class="vbody">' +
-      '<div class="rpnum-note">存在这台电脑的浏览器里（localStorage），不是数据库；换浏览器或清缓存会丢。每条挂在模组下面，详情弹窗里也能单独加。' +
-      '导出的整合包不会带这些链接。</div>' +
-      (list.length
-        ? '<div class="linklist">' + list.slice(0, 80).map(l =>
-          '<div class="linkitem"><span class="tag">' + siteTag(l.url) + '</span>' +
-          '<span class="lm">' + esc(whom(l.id)) + '</span>' +
+      '<div class="vbody">' + tip + chips +
+      (shown.length
+        ? '<div class="linklist">' + shown.slice(0, 80).map(l =>
+          '<div class="linkitem"><span class="tag">' + esc(siteTag(l.url, l.site)) + '</span>' +
+          '<span class="lm">' + esc(whom(l.modId)) + '</span>' +
           '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.note || l.url) + '</a>' +
-          '<button type="button" class="icon-btn sm" data-act="linkdel" data-id="' + esc(l.id) +
-          '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
-          (list.length > 80 ? '<div class="hint">只显示最近 80 条</div>' : '') + '</div>'
-        : '<div class="hint">还没有存过链接。</div>') +
+          '<button type="button" class="icon-btn sm" data-act="linkdel" data-row="' + esc(l.rowId) +
+          '" data-mod="' + esc(l.modId) + '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
+          (shown.length > 80 ? '<div class="hint">只显示最近 80 条</div>' : '') + '</div>'
+        : '<div class="hint">' + (list.length ? '这个站点下还没有存过链接。' : '还没有存过链接。') + '</div>') +
       '<div class="bulkbox">' +
       '<div class="bulk-label">批量导入 <small>一行一个，粘完点下面的按钮就行</small></div>' +
       '<textarea id="linkBulk" spellcheck="false" aria-label="批量导入下载页" placeholder="每行一条，用 | 分隔&#10;模组ID或名字 | 链接 | 备注&#10;例：jei | https://www.curseforge.com/minecraft/mc-mods/jei | CF 页面&#10;也可以只写：链接 | 备注（会存成「未归属」）"></textarea>' +
       '<div class="bulkrow"><button type="button" class="btn grad" data-act="linkbulk">批量存进仓库</button>' +
-      '<span class="hint">名字对不上会存成「未归属」，之后也能在详情里补。</span></div>' +
+      '<span class="hint">站点（爱发电 / Modrinth / CurseForge / 网盘 / 作者网站…）按链接自动分类。</span></div>' +
       '</div>' +
       '</div></div>';
   }
@@ -1255,14 +1357,17 @@
       '</div>';
   }
 
-  function siteTag(url) {
+  function siteTag(url, site) {
+    if (site) {
+      try { return MC.linksdb.siteLabel(site); } catch (err) { /* 用下面的兜底 */ }
+    }
     const u = String(url || '').toLowerCase();
-    if (u.indexOf('afdian') >= 0) return '爱发电';
+    if (u.indexOf('afdian') >= 0 || u.indexOf('ifdian') >= 0) return '爱发电';
     if (u.indexOf('modrinth') >= 0) return 'Modrinth';
     if (u.indexOf('curseforge') >= 0) return 'CurseForge';
-    if (/(pan\.baidu|lanzou|123pan|aliyundrive|quark|115\.com)/.test(u)) return '网盘';
+    if (/(pan\.baidu|lanzou|123pan|aliyundrive|alipan|quark|115\.com|mediafire|mega\.nz|drive\.google)/.test(u)) return '网盘';
     if (/(github\.com|gitee\.com)/.test(u)) return '仓库';
-    return '链接';
+    return '作者网站';
   }
 
   function friendlyReason(reason) {
@@ -1335,10 +1440,28 @@
     btn.textContent = s.selectMode ? '完成选择' : '选择模组';
   }
 
+  /* ---------- 左侧栏：游戏版本 / 加载器版本下拉 ---------- */
+  function renderEnv(s) {
+    const mcEl = document.getElementById('mcPick');
+    if (mcEl) {
+      const list = (s.mcList && s.mcList.length) ? s.mcList : [s.env.mc];
+      const items = list.map(v => ({ value: v, current: s.env.mc, text: v }));
+      mcEl.innerHTML = picker(s, 'env:mc', s.env.mc || (s.verLoading ? '加载版本…' : '选择版本'), items, 'rail-picker');
+    }
+    const ldEl = document.getElementById('loaderPick');
+    if (ldEl) {
+      const cur = s.env.loaderVersion || '';
+      const items = [{ value: '', current: cur, text: '自动（不指定）' }]
+        .concat((s.loaderList || []).map(v => ({ value: v, current: cur, text: v })));
+      ldEl.innerHTML = picker(s, 'env:ld', cur || (s.verLoading ? '加载版本…' : '自动（不指定）'), items, 'rail-picker');
+    }
+  }
+
   function all(s) {
     renderDrop(s);
     renderStats(s);
     renderTabs(s);
+    renderEnv(s);
     renderViews(s);
     if (s.tab === 'organize') {
       renderFilters(s);

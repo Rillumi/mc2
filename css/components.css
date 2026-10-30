@@ -906,3 +906,64 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .linkitem:hover { background: var(--card-hover); }
 .linkitem .lm { font-size: 11px; color: var(--ink-3); flex: 0 0 auto; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .linkitem a { flex: 1; min-width: 0; font-size: 12px; color: var(--violet-deep); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ===== 搜索按钮 ===== */
+.searchbtn { display: inline-flex; align-items: center; gap: 6px; }
+.searchbtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }
+
+/* ===== 统一的果冻进场（只在新页面/新数据出现时加 .anim） ===== */
+@keyframes cardIn {
+  0% { opacity: 0; transform: translateY(16px) scale(.986); }
+  55% { opacity: 1; transform: translateY(-2px) scale(1.004); }
+  100% { opacity: 1; transform: none; }
+}
+.anim .hero,
+.anim .stats > *,
+.anim .panel,
+.anim .pack,
+.anim .view > .vpanel,
+.anim .toolgrid > * {
+  animation: cardIn .5s cubic-bezier(.22, 1.2, .32, 1) both;
+}
+.anim .stats > *:nth-child(2) { animation-delay: .045s; }
+.anim .stats > *:nth-child(3) { animation-delay: .09s; }
+.anim .stats > *:nth-child(4) { animation-delay: .135s; }
+.anim .panel { animation-delay: .06s; }
+.anim .pack { animation-delay: .12s; }
+.anim .view > .vpanel:nth-child(2) { animation-delay: .06s; }
+.anim .view > .vpanel:nth-child(3) { animation-delay: .12s; }
+.anim .toolgrid > *:nth-child(2) { animation-delay: .07s; }
+
+.stat { transition: transform .24s cubic-bezier(.2, 1.3, .35, 1), box-shadow .24s; }
+.stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }
+
+/* ===== 下载页仓库：数据库状态 + 站点筛选 ===== */
+.dbbadge {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-size: 11px; padding: 4px 10px; border-radius: 999px;
+  background: #F0FBF4; color: #2E8A57; border: 1px solid #CDEEDA;
+}
+.dbbadge.off { background: #FFF6E8; color: #B0781C; border-color: #F3E1BF; }
+.dbbadge i { width: 6px; height: 6px; border-radius: 50%; background: currentColor; flex: 0 0 auto; }
+.sitechips { display: flex; gap: 6px; flex-wrap: wrap; margin: 4px 0 10px; }
+.sitechips button {
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2);
+  font-size: 11.5px; padding: 5px 10px; border-radius: 999px;
+  transition: transform .18s cubic-bezier(.2, 1.3, .35, 1), background .18s, border-color .18s, color .18s;
+}
+.sitechips button:active { transform: scale(.95); }
+.sitechips button[aria-pressed="true"] {
+  background: var(--grad-soft); border-color: #F2D6E6; color: var(--pink-deep); font-weight: 600;
+}
+.sitechips .n { font-size: 10.5px; color: var(--ink-3); margin-left: 4px; }
+.sitechips button[aria-pressed="true"] .n { color: var(--pink-deep); }
+
+/* ===== 详情里的 Modrinth 正文 / 自动读日志 ===== */
+.mrhead { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; margin: 0 0 8px; }
+.mrhead .hint { margin: 0; }
+.logauto { margin: 4px 0 0; }
+
+@media (prefers-reduced-motion: reduce) {
+  .anim .hero, .anim .stats > *, .anim .panel, .anim .pack,
+  .anim .view > .vpanel, .anim .toolgrid > * { animation: none; }
+}
