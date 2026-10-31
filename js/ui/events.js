@@ -8,6 +8,7 @@
   let gen = 0; // 环境切换后，作废旧的在途请求
   const FT = MC.flowTools; // 日志 / 资源包顺序（js/ui/flow/tools.js）
   const FE = MC.flowEnv; // 环境 / 版本列表 / 分页（js/ui/flow/env.js）
+  const FC = MC.flowCommon; // 选中行 / 项目缓存 / 正文纯文本（js/ui/flow/common.js）
 
   /* ---------- 把文件读成条目（整理页 / 对比页共用） ---------- */
   async function buildEntries(files, note) {
@@ -368,19 +369,7 @@
     await Promise.all([worker(), worker(), worker()]);
   }
 
-  /* ---------- 导览：检查更新 ---------- */
-  function chosenOf(st, g) {
-    const rows = MC.selector.sortRows(g.usableRows || [], st.env);
-    return rows.find(r => r.uid === st.selection[g.id]) || rows[0] || null;
-  }
-
   /* ---------- 批量预取 Modrinth 项目资料 ---------- */
-  function packUrl(p) {
-    if (!p) return '';
-    return 'https://modrinth.com/' + (p.project_type === 'resourcepack' ? 'resourcepack' :
-      p.project_type === 'shader' ? 'shader' : 'mod') + '/' + encodeURIComponent(p.slug || p.id);
-  }
-
   async function prefetchProjects() {
     const st = S();
     if (!st.mods.length) return;
@@ -444,7 +433,7 @@
       const id = String(e.id).toLowerCase();
       if (seen[id]) return;
       seen[id] = true;
-      const fromMr = MC.catalog.fromProject(projectForEntry(st, e, g));
+      const fromMr = MC.catalog.fromProject(FC.projectForEntry(st, e, g));
       if (fromMr) {
         e.cats = fromMr.cats;
         push.push({ id, cats: fromMr.cats.join(','), primary: fromMr.primary, source: 'modrinth' });
@@ -476,13 +465,13 @@
     const wanted = [];
     const seen = {};
     (st.analysis.groups || []).forEach(g => {
-      const row = chosenOf(st, g);
+      const row = FC.chosenOf(st, g);
       const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
       if (!e || e.nameZh) return;
       const id = String(e.id || '').trim();
       if (!id || seen[id]) return;
       seen[id] = true;
-      const p = projectForEntry(st, e, g);
+      const p = FC.projectForEntry(st, e, g);
       wanted.push({
         id,
         title: String(e.name || (p && p.title) || ''),
@@ -543,13 +532,13 @@
       const project = pid ? (st.projects || {})[pid] : null;
       return {
         uid: o.uid, fileName: o.fileName, size: o.size,
-        assets: o.assets || [], project, url: packUrl(project),
+        assets: o.assets || [], project, url: FC.packUrl(project),
         description: o.description || '', packFormat: o.packFormat || 0
       };
     });
     const mods = [];
     (st.analysis.groups || []).forEach(g => {
-      const row = chosenOf(st, g);
+      const row = FC.chosenOf(st, g);
       if (!row) return;
       const pid = row.entry.sha1 ? (st.hashProject || {})[row.entry.sha1] : '';
       const project = pid ? (st.projects || {})[pid] : null;
@@ -570,7 +559,7 @@
     if (!st.analysis || !gid) return;
     const g = st.analysis.groups.find(x => x.id === gid);
     if (!g) return;
-    const row = chosenOf(st, g);
+    const row = FC.chosenOf(st, g);
     const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
     if (!e || !e.description) return;
     const prev = st.descTr[gid];
@@ -590,30 +579,6 @@
   }
 
   /* ---------- Modrinth 正文：打开详情时补一份完整介绍 ---------- */
-  function mdToText(md) {
-    return String(md || '')
-      .replace(/```[\s\S]*?```/g, ' ')
-      .replace(/!\[[^\]]*\]\([^)]*\)/g, ' ')
-      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
-      .replace(/<[^>]+>/g, ' ')
-      .replace(/^#{1,6}\s+/gm, '')
-      .replace(/[*_`>~|]/g, '')
-      .replace(/[ \t]+\n/g, '\n')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-  }
-
-  /** 这个条目（或同组任意版本）已经预取到项目资料了吗 */
-  function projectForEntry(st, e, g) {
-    const byHash = h => h ? (st.projects || {})[(st.hashProject || {})[h]] : null;
-    if (e && byHash(e.sha1)) return byHash(e.sha1);
-    for (const r of ((g && g.rows) || [])) {
-      const p = r.entry && byHash(r.entry.sha1);
-      if (p) return p;
-    }
-    return null;
-  }
-
   async function ensureMrDesc(gid) {
     const st = S();
     if (!st.analysis || !gid || String(gid).indexOf('o:') === 0) return;
@@ -621,20 +586,20 @@
     if (prev && (prev.status === 'loading' || prev.status === 'ok' || prev.status === 'notfound')) return;
     const g = st.analysis.groups.find(x => x.id === gid);
     if (!g) return;
-    const row = chosenOf(st, g);
+    const row = FC.chosenOf(st, g);
     const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
     if (!e) return;
 
     // 读取时已经批量拿回来了：直接用缓存，不再发请求
-    const cached = projectForEntry(st, e, g);
+    const cached = FC.projectForEntry(st, e, g);
     if (cached && cached.body) {
-      const text = mdToText(cached.body);
+      const text = FC.mdToText(cached.body);
       if (text) {
         st.mr[gid] = {
           status: 'ok',
           text: text.slice(0, 6000),
           title: cached.title || '',
-          url: packUrl(cached),
+          url: FC.packUrl(cached),
           downloads: cached.downloads || 0,
           follows: cached.followers || 0,
           updated: cached.updated || ''
@@ -655,7 +620,7 @@
         return;
       }
       const full = await MC.api.modrinth.project(proj.id || proj.slug);
-      const text = mdToText(full && full.body);
+      const text = FC.mdToText(full && full.body);
       if (!text) {
         st.mr[gid] = { status: 'notfound' };
         touch();
@@ -700,7 +665,7 @@
     if (!st.analysis) return;
     const g = st.analysis.groups.find(x => x.id === groupId);
     if (!g) return;
-    const row = chosenOf(st, g);
+    const row = FC.chosenOf(st, g);
     if (!row) return;
     const my = gen;
     st.updates[groupId] = { status: 'checking' };
@@ -713,14 +678,10 @@
     }
     if (my !== gen) return;
     st.updates[groupId] = res;
-    if (res.status === 'error' && isNetworkError(res.reason)) {
+    if (res.status === 'error' && FC.isNetworkError(res.reason)) {
       st.updateError = '连不上 Modrinth，可能是网络或代理问题。';
     }
     touch();
-  }
-
-  function isNetworkError(reason) {
-    return /Failed to fetch|NetworkError|Load failed|ERR_|timeout|aborted/i.test(String(reason || ''));
   }
 
   async function checkAllUpdates() {
@@ -736,7 +697,7 @@
     groups.forEach(g => { st.updates[g.id] = { status: 'checking' }; });
     touch();
 
-    const targets = groups.map(g => ({ g, row: chosenOf(st, g) }));
+    const targets = groups.map(g => ({ g, row: FC.chosenOf(st, g) }));
 
     /* 一次性把能算哈希的 jar 交给 Modrinth：/version_files/update 一个请求查一堆，
        比逐个按 slug 查快得多；改名过的 jar 哈希不变，也照样能认出来。 */
@@ -815,7 +776,7 @@
     st.updateBusy = false;
     st.updateDone = st.updateTotal;
     if (batchError) {
-      st.updateError = isNetworkError(batchError.message)
+      st.updateError = FC.isNetworkError(batchError.message)
         ? '连不上 Modrinth，可能是网络或代理问题。'
         : '批量查更新失败：' + (batchError.message || '未知错误');
     }
@@ -834,7 +795,7 @@
     const st = S();
     if (!st.analysis) return toast('先导入 mods 文件夹');
     const items = st.analysis.groups.map(g => {
-      const row = chosenOf(st, g);
+      const row = FC.chosenOf(st, g);
       return row ? { groupId: g.id, entry: row.entry } : null;
     }).filter(Boolean);
     const md = MC.catalog.markdown(items, { env: st.env, updates: st.updates });
@@ -1065,7 +1026,7 @@
     const known = [];
     if (st.analysis) {
       st.analysis.groups.forEach(g => {
-        const row = chosenOf(st, g);
+        const row = FC.chosenOf(st, g);
         if (!row) return;
         const e = row.entry;
         [e.id, e.name, e.nameZh].forEach(x => {
@@ -1157,7 +1118,7 @@
     checkAllUpdates, checkOneUpdate, exportGuide, findConnector,
     refreshAfdian, addLink, removeLink, bulkLinks,
     movePack: FT.movePack, exportPackOrder: FT.exportPackOrder, exportPackOptions: FT.exportPackOptions, buildPack,
-    chosenOf, projectForEntry, applyZhNames,
+    chosenOf: FC.chosenOf, projectForEntry: FC.projectForEntry, applyZhNames,
     ensureDesc, ensureMrDesc, ensureBodyTr,
     matchDep, chooseCandidate, runAdapt, addAdapt, removeAdapt, retryAll,
     handleAct, importFiles, importDiff, importLogs: FT.importLogs, syncDbState
