@@ -787,32 +787,54 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .foldhead small { margin-left: auto; font-size: 11px; color: var(--ink-3); }
 .foldhead:focus-visible { outline: none; box-shadow: var(--focus); }
 
-/* 工具 */
-.toolgrid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+/* 工具：卡片整行堆叠，不再左右各半（长列表不再挤在半个屏里） */
+.toolstack { display: grid; gap: 16px; }
 .toolcard .vhead { padding: 14px 18px; }
 .toolcard .vbody { padding: 12px 14px 16px; }
 .toolcard .vfoot { padding: 12px 18px 14px; }
 .toolcard .minidrop { margin: 14px 18px; }
 .rpnum-note { font-size: 11.5px; color: var(--ink-3); line-height: 1.7; margin-bottom: 8px; }
+.rplogic {
+  display: flex; align-items: baseline; gap: 8px;
+  margin: 0 0 10px; padding: 8px 11px; border-radius: 10px;
+  font-size: 11.5px; line-height: 1.7; color: var(--ink-3);
+  background: #FBFAFE; border: 1px solid var(--line);
+}
+.rplogic b { flex: 0 0 auto; font-size: 11px; color: var(--violet-deep); }
 .rplist { display: grid; gap: 2px; }
-.rprow { display: flex; align-items: center; gap: 9px; padding: 8px 9px; border-radius: 11px; }
+.rprow { display: flex; align-items: flex-start; gap: 11px; padding: 10px; border-radius: 12px; }
 .rprow:hover { background: var(--card-hover); }
 .rpnum {
-  flex: 0 0 22px; height: 22px; border-radius: 50%;
+  flex: 0 0 22px; height: 22px; border-radius: 50%; margin-top: 1px;
   display: grid; place-items: center; font-size: 10.5px; font-weight: 600;
   color: var(--violet-deep); background: var(--grad-soft);
 }
-.rprow .t { flex: 1; min-width: 0; }
-.rprow .t b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rprow .t small { display: block; font-size: 10.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.rpacts { display: flex; gap: 4px; flex: 0 0 auto; }
-.rprow .t .ript { display: block; font-size: 10.5px; color: var(--violet-deep); line-height: 1.55; margin-top: 2px; white-space: normal; }
-.rptips, .rpconf, .rpsame {
+.rpbody { flex: 1; min-width: 0; }
+.rpname { font-size: 12.5px; font-weight: 600; line-height: 1.5; color: var(--ink); word-break: break-word; }
+.rpname .tag { margin-left: 6px; font-weight: 400; vertical-align: 1px; }
+.rpmeta { font-size: 10.5px; color: var(--ink-3); margin-top: 3px; }
+/* 描述完整显示两行，超长才省略，不再单行截断 */
+.rpdesc {
+  font-size: 11.5px; color: var(--ink-2); line-height: 1.65; margin-top: 5px;
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+.ript { font-size: 10.5px; color: var(--violet-deep); line-height: 1.6; margin-top: 5px; }
+.ript span {
+  display: inline-block; margin-right: 5px; padding: 1px 5px; border-radius: 5px;
+  font-size: 9.5px; background: var(--grad-soft); border: 1px solid rgba(124, 99, 232, .18);
+}
+.rpacts { flex: 0 0 auto; display: flex; align-items: center; gap: 6px; }
+.rpbtns { display: flex; gap: 3px; }
+.icon-btn:disabled { opacity: .38; cursor: not-allowed; }
+.rpbtns .icon-btn { width: 26px; height: 26px; border: 1px solid var(--line-2); font-size: 13px; color: var(--ink-2); }
+.rptips, .rpconf, .rpsame, .rpdups {
   margin: 10px 0 2px; padding: 10px 12px; border-radius: 12px;
   font-size: 11.5px; line-height: 1.65; color: var(--ink-2);
   background: var(--grad-soft); border: 1px solid rgba(124, 99, 232, .18);
 }
-.rptips b, .rpconf b, .rpsame b { display: block; color: var(--violet-deep); margin-bottom: 3px; }
+.rptips b, .rpconf b, .rpsame b, .rpdups b { display: block; color: var(--violet-deep); margin-bottom: 3px; }
+.rpdups { background: #FBFAFE; border-color: var(--line); }
+.rpdups > b { color: var(--ink-2); }
 .rpconf { background: rgba(255, 209, 102, .13); border-color: rgba(226, 168, 44, .3); }
 .rpconf > b, .rpsame > b { color: #B4791B; }
 .rpconf.ok { background: rgba(90, 200, 150, .1); border-color: rgba(90, 200, 150, .3); }
@@ -843,7 +865,7 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .upacts { margin-top: 8px; }
 
 @media (max-width: 960px) {
-  .toolgrid { grid-template-columns: 1fr; }
+  .toolstack { gap: 14px; }
 }
 @media (max-width: 520px) {
   .tabs button { padding: 7px 10px; }
@@ -910,6 +932,8 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
   .pager { padding: 10px 8px 12px; }
   .pginfo { flex-basis: 100%; }
   .pgtools { flex-basis: 100%; }
+  .rprow { padding: 9px 6px; gap: 8px; }
+  .rpacts { flex-direction: column; align-items: flex-end; gap: 4px; }
 }
 
 /* ===== 列表工具条：搜索框 + 操作 ===== */
@@ -1027,7 +1051,7 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .anim .panel,
 .anim .pack,
 .anim .view > .vpanel,
-.anim .toolgrid > * {
+.anim .toolstack > * {
   animation: cardIn .5s cubic-bezier(.22, 1.2, .32, 1) both;
 }
 .anim .stats > *:nth-child(2) { animation-delay: .045s; }
@@ -1037,7 +1061,7 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .anim .pack { animation-delay: .12s; }
 .anim .view > .vpanel:nth-child(2) { animation-delay: .06s; }
 .anim .view > .vpanel:nth-child(3) { animation-delay: .12s; }
-.anim .toolgrid > *:nth-child(2) { animation-delay: .07s; }
+.anim .toolstack > *:nth-child(2) { animation-delay: .07s; }
 
 .stat { transition: transform .24s cubic-bezier(.2, 1.3, .35, 1), box-shadow .24s; }
 .stat:hover { transform: translateY(-2px); box-shadow: var(--shadow-md); }

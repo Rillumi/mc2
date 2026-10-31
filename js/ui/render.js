@@ -1233,7 +1233,10 @@
 
   /* ---------- 工具 ---------- */
   function orderedPacks(s) {
-    const list = ((s.analysis && s.analysis.others) || []).filter(o => o.kind === 'resourcepack');
+    const adv = s.packAdvice || {};
+    const list = Array.isArray(adv.packs)
+      ? adv.packs
+      : ((s.analysis && s.analysis.others) || []).filter(o => o.kind === 'resourcepack');
     const pos = {};
     (s.rpOrder || []).forEach((uid, i) => { pos[uid] = i; });
     return list.slice().sort((a, b) => {
@@ -1243,6 +1246,34 @@
     });
   }
 
+  function rpRow(s, o, index, total) {
+    const adv = s.packAdvice || {};
+    const tips = (adv.byUid && adv.byUid[o.uid] && adv.byUid[o.uid].tips) || [];
+    const meta = [
+      o.packFormat ? '格式 ' + o.packFormat : '',
+      fmtSize(o.size),
+      o.assets && o.assets.length ? '覆盖 ' + o.assets.length.toLocaleString() + ' 个文件' : ''
+    ].filter(Boolean).join(' · ');
+    return '<div class="rprow">' +
+      '<span class="rpnum">' + (index + 1) + '</span>' +
+      '<div class="rpbody">' +
+      '<div class="rpname">' + esc(o.fileName) +
+      (o.project ? '<span class="tag src">Modrinth</span>' : '') + '</div>' +
+      '<div class="rpmeta">' + esc(meta) + '</div>' +
+      (o.description ? '<div class="rpdesc">' + esc(o.description) + '</div>' : '') +
+      tips.map(t => '<div class="ript"><span>作者原话</span>' + esc(t) + '</div>').join('') +
+      '</div>' +
+      '<div class="rpacts">' +
+      '<div class="rpbtns">' +
+      '<button type="button" class="icon-btn sm" data-act="rp-up" data-uid="' + esc(o.uid) + '"' +
+      (index === 0 ? ' disabled' : '') + ' aria-label="上移">↑</button>' +
+      '<button type="button" class="icon-btn sm" data-act="rp-down" data-uid="' + esc(o.uid) + '"' +
+      (index === total - 1 ? ' disabled' : '') + ' aria-label="下移">↓</button>' +
+      '</div>' +
+      (o.project && o.url ? '<a class="btn line xs" href="' + esc(o.url) + '" target="_blank" rel="noopener">项目页</a>' : '') +
+      '</div></div>';
+  }
+
   function rpCard(s) {
     const packs = orderedPacks(s);
     if (!packs.length) {
@@ -1250,28 +1281,46 @@
         '<div class="vbody"><div class="hint">当前这份里没有资源包。拖入带材质包的文件夹后，这里会按优先级列出它们，并导出顺序文件。</div></div></div>';
     }
     const adv = s.packAdvice || {};
-    const byUid = adv.byUid || {};
     const nameOf = uid => {
       const p = packs.find(x => x.uid === uid);
       return p ? p.fileName : '（不在本次清单里）';
     };
-    const rows = packs.map((o, i) => {
-      const tips = (byUid[o.uid] && byUid[o.uid].tips) || [];
-      return '<div class="rprow"><span class="rpnum">' + (i + 1) + '</span>' +
-      '<div class="t"><b>' + esc(o.fileName) + '</b><small>' + fmtSize(o.size) + (o.description ? ' · ' + esc(o.description) : '') + '</small>' +
-      tips.map(t => '<small class="ript">作者原话：' + esc(t) + '</small>').join('') +
-      '</div>' +
-      '<div class="rpacts">' +
-      '<button type="button" class="btn line xs" data-act="rp-up" data-uid="' + esc(o.uid) + '"' + (i === 0 ? ' disabled' : '') + '>上移</button>' +
-      '<button type="button" class="btn line xs" data-act="rp-down" data-uid="' + esc(o.uid) + '"' + (i === packs.length - 1 ? ' disabled' : '') + '>下移</button>' +
-      '</div></div>';
-    }).join('');
 
-    const orderNote = (adv.order || []).length
-      ? '<div class="rptips"><b>已按作者的说明调整顺序</b>' + adv.order.map(r =>
-        '<div class="riptline">【' + esc(nameOf(r.above)) + '】要排在【' + esc(nameOf(r.below)) + '】上面' +
+    const pg = MC.pager.slice('packs', packs.length);
+    const pagePacks = packs.slice(pg.start, pg.end);
+    const pagerHtml = MC.pager.html('packs', pg, { anchor: '#rpList', unit: '个资源包' });
+    const rows = pagePacks.map((o, i) => rpRow(s, o, pg.start + i, packs.length)).join('');
+
+    const rules = adv.order || [];
+    const logic = '<div class="rplogic">' +
+      '<b>排序依据</b>' +
+      '<span>' +
+      (rules.length
+        ? '先用 Modrinth 正文里作者写明的上下关系（' + rules.length + ' 条）排出先后，没写到的保持扫描顺序。'
+        : '没有从 Modrinth 正文找到排序说明，当前按扫描到的文件顺序排列；你可以按自己的需要上下调。') +
+      '两个包改到同一个文件时，只有上面的生效。' +
+      '</span></div>';
+
+    const ignored = adv.ignored || [];
+    const ignoredNote = ignored.length
+      ? '<div class="rpconf"><b>规则互相冲突 ' + ignored.length + ' 条</b>' +
+        ignored.map(r => '<div class="riptline">【' + esc(nameOf(r.above)) + '】要排在【' + esc(nameOf(r.below)) +
+          '】上面，但和另一条规则对不上，这里没有硬调。</div>').join('') + '</div>'
+      : '';
+
+    const orderNote = rules.length
+      ? '<div class="rptips"><b>已按作者说明排序</b>' + rules.map(r =>
+        '<div class="riptline">【' + esc(nameOf(r.above)) + '】在【' + esc(nameOf(r.below)) + '】之上' +
         (r.url ? ' <a href="' + esc(r.url) + '" target="_blank" rel="noreferrer">来源</a>' : '') +
         '</div>').join('') + '</div>'
+      : '';
+
+    const dups = adv.dups || [];
+    const dupsNote = dups.length
+      ? '<div class="rpdups"><b>同款资源包的其它版本已隐藏</b>' + dups.map(d =>
+        '<div class="riptline">保留【' + esc(d.keep.fileName) + '】；隐藏 ' +
+        d.others.map(o => '【' + esc(o.fileName) + '】').join('、') +
+        '。同款只留一个版本，免得自己和自己抢文件。</div>').join('') + '</div>'
       : '';
 
     const conf = (adv.conflicts || []).length
@@ -1289,10 +1338,12 @@
       : '';
 
     return '<div class="vpanel toolcard"><div class="vhead"><h3>资源包顺序</h3>' +
+      '<span class="adnote">' + packs.length + ' 个' + (dups.length ? ' · 合并 ' + dups.length + ' 组同款' : '') + '</span>' +
       '<button type="button" class="btn line sm" data-act="rpexport-order">导出顺序清单</button>' +
       '<button type="button" class="btn line sm" data-act="rpexport-options">导出 options.txt 片段</button></div>' +
-      '<div class="vbody"><div class="rpnum-note">越靠上，优先级越高；两个包改同一个文件时，只有上面的生效。</div>' +
-      orderNote + '<div class="rplist">' + rows + '</div>' + conf + same + '</div></div>';
+      '<div class="vbody"><div class="rpnum-note">越靠上，游戏里优先级越高；两个包改同一个文件时，只有上面的生效。</div>' +
+      logic + orderNote + '<div class="rplist" id="rpList">' + rows + '</div>' + pagerHtml +
+      dupsNote + ignoredNote + conf + same + '</div></div>';
   }
 
   function logCard(s) {
@@ -1382,7 +1433,7 @@
         '</div>';
     }).join('');
 
-    return '<div class="vpanel toolcard" style="margin-top:16px">' +
+    return '<div class="vpanel toolcard">' +
       '<div class="vhead"><h3>我发电过的爱发电作者</h3>' +
       '<span class="adnote">' + list.length + ' 位 · ' + esc(status) + '</span></div>' +
       '<div class="vbody">' +
@@ -1430,7 +1481,7 @@
     const pageItems = shown.slice(pg.start, pg.end);
     const pagerHtml = MC.pager.html('links', pg, { anchor: '#linkList', unit: '条' });
 
-    return '<div class="vpanel toolcard" style="margin-top:16px">' +
+    return '<div class="vpanel toolcard">' +
       '<div class="vhead"><h3>下载页仓库</h3>' + badge +
       '<span class="adnote">' + list.length + ' 条 · ' + ids + ' 个模组</span></div>' +
       '<div class="vbody">' + tip + chips +
@@ -1455,7 +1506,7 @@
   function renderTools(s) {
     const el = document.getElementById('toolsView');
     if (!el) return;
-    el.innerHTML = '<div class="toolgrid">' + rpCard(s) + logCard(s) + '</div>' + afdianCard(s) + linkCard(s);
+    el.innerHTML = '<div class="toolstack">' + rpCard(s) + logCard(s) + afdianCard(s) + linkCard(s) + '</div>';
   }
 
   /* ---------- 详情里的小节 ---------- */

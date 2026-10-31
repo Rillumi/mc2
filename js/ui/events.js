@@ -555,7 +555,8 @@
       const project = pid ? (st.projects || {})[pid] : null;
       return {
         uid: o.uid, fileName: o.fileName, size: o.size,
-        assets: o.assets || [], project, url: packUrl(project)
+        assets: o.assets || [], project, url: packUrl(project),
+        description: o.description || '', packFormat: o.packFormat || 0
       };
     });
     const mods = [];
@@ -572,9 +573,7 @@
     });
     const advice = MC.packs.analyze(packs, mods);
     st.packAdvice = advice;
-    if (advice.order.length && packs.length) {
-      st.rpOrder = MC.packs.applyOrder(packs, advice.order);
-    }
+    if (advice.sorted && advice.sorted.length) st.rpOrder = advice.sorted;
   }
 
   /* ---------- 简介机翻：打开详情时自动翻一次 ---------- */

@@ -31,6 +31,51 @@
       .filter(Boolean).map(norm).filter(k => k.length >= 5);
   }
 
+  /* 同一个资源包的多个版本：有 Modrinth 项目就按项目归组，没有就按去掉版本号的文件名 */
+  function stripVer(name) {
+    return String(name || '')
+      .replace(/(?:^|[-_ ])(?:v|ver|version)?\s*\d+(?:[._]\d+)*(?:[-_ ]*(?:release|beta|alpha)\d*)?$/i, '')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
+  function packKey(p) {
+    const pid = p.project && p.project.id;
+    if (pid) return 'p:' + pid;
+    let base = stripVer(baseName(p.fileName)).toLowerCase();
+    base = base.replace(/[_\-]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (!base) base = String(p.fileName || '').toLowerCase();
+    return 'n:' + base;
+  }
+
+  function formatOf(p) {
+    return Number(p.packFormat) || 0;
+  }
+
+  /** 每个资源包只留一个版本：优先格式更高（更新），其次体积更大 */
+  function dedupe(packs) {
+    const groups = new Map();
+    (packs || []).forEach(p => {
+      const k = packKey(p);
+      if (!groups.has(k)) groups.set(k, []);
+      groups.get(k).push(p);
+    });
+    const keep = [];
+    const dups = [];
+    groups.forEach(list => {
+      if (list.length === 1) { keep.push(list[0]); return; }
+      const pick = list.slice().sort((a, b) =>
+        formatOf(b) - formatOf(a) || (b.size || 0) - (a.size || 0)
+      )[0];
+      keep.push(pick);
+      dups.push({ keep: pick, others: list.filter(x => x !== pick) });
+    });
+    const pos = new Map((packs || []).map((p, i) => [p.uid, i]));
+    keep.sort((a, b) => pos.get(a.uid) - pos.get(b.uid));
+    dups.sort((a, b) => pos.get(a.keep.uid) - pos.get(b.keep.uid));
+    return { packs: keep, dups };
+  }
+
   /** 一句话里提到的是哪个已加载资源包（Better Horses ⊂ Better Horses x Fresh Animations，取更短的） */
   function resolveName(text, packs) {
     const n = norm(text);
@@ -63,10 +108,11 @@
    * @param packs [{uid, fileName, size, assets, project, url}]
    * @param mods  [{uid, id, name, groupId, project}]
    */
-  function analyze(packs, mods) {
+  function analyze(packsAll, mods) {
     const order = [];
     const tips = [];
     const byUid = {};
+    const { packs, dups } = dedupe(packsAll);
 
     packs.forEach(p => {
       const sents = orderSentences(p.project && p.project.body);
@@ -145,22 +191,60 @@
       });
     });
 
-    return { order, tips, conflicts, sameProject, byUid };
+    const sorted = sortByRules(packs, order);
+    return {
+      order, tips, conflicts, sameProject, byUid, packs, dups,
+      sorted: sorted.order, applied: sorted.applied, ignored: sorted.ignored
+    };
   }
 
-  /** 按作者说明纠正顺序：写在前面的必须排在后面之前 */
-  function applyOrder(packs, rules) {
-    const uids = packs.map(p => p.uid);
+  /**
+   * 按作者说明排优先级：拓扑排序，同层保持原文件顺序；
+   * 规则之间互相矛盾（成环）时不硬移，把冲突的规则标出来交给用户判断。
+   */
+  function sortByRules(packs, rules) {
+    const ids = packs.map(p => p.uid);
+    const pos = new Map(ids.map((id, i) => [id, i]));
+    const edges = new Map();   // above → [below]
+    const indeg = new Map(ids.map(id => [id, 0]));
+
     (rules || []).forEach(r => {
-      let a = uids.indexOf(r.above);
-      let b = uids.indexOf(r.below);
-      if (a < 0 || b < 0 || a < b) return;
-      uids.splice(a, 1);
-      b = uids.indexOf(r.below);
-      uids.splice(b >= 0 ? b : uids.length, 0, r.above);
+      if (!pos.has(r.above) || !pos.has(r.below) || r.above === r.below) return;
+      if (!edges.has(r.above)) edges.set(r.above, []);
+      const list = edges.get(r.above);
+      if (list.indexOf(r.below) >= 0) return;   // 同一对关系重复出现
+      list.push(r.below);
+      indeg.set(r.below, indeg.get(r.below) + 1);
     });
-    return uids;
+
+    const out = [];
+    const done = new Set();
+    while (out.length < ids.length) {
+      let pick = -1;
+      for (let i = 0; i < ids.length; i++) {
+        const id = ids[i];
+        if (!done.has(id) && indeg.get(id) === 0) { pick = i; break; }
+      }
+      if (pick < 0) break;                      // 剩下的在环里
+      const id = ids[pick];
+      done.add(id);
+      out.push(id);
+      (edges.get(id) || []).forEach(b => indeg.set(b, indeg.get(b) - 1));
+    }
+    // 成环的点：保持原文件顺序追加
+    ids.forEach(id => { if (!done.has(id)) out.push(id); });
+
+    // 按最终顺序回看：没被满足的规则就是和别的规则打架了
+    const finalPos = new Map(out.map((id, i) => [id, i]));
+    const applied = [];
+    const ignored = [];
+    (rules || []).forEach(r => {
+      if (!finalPos.has(r.above) || !finalPos.has(r.below)) return;
+      if (finalPos.get(r.above) < finalPos.get(r.below)) applied.push(r);
+      else ignored.push(r);
+    });
+    return { order: out, applied, ignored };
   }
 
-  MC.packs = { analyze, applyOrder, orderSentences, resolveName };
+  MC.packs = { analyze, sortByRules, dedupe, orderSentences, resolveName };
 })(globalThis);
