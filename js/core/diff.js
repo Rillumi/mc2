@@ -5,7 +5,8 @@
   const MC = (root.MC = root.MC || {});
 
   function keyOf(e) {
-    return String((e && (e.id || e.fileName)) || '').toLowerCase();
+    const id = MC.identity.normalizeId(e && e.id);
+    return id || MC.identity.fileBase(e && e.fileName);
   }
 
   function index(mods) {
@@ -21,12 +22,6 @@
 
   function pickName(e) {
     return e.name || e.id || e.fileName;
-  }
-
-  /** 整合包清单（CurseForge）只有名字，没有 modId，用规范化名字兜底配对 */
-  function nameKey(e) {
-    return String((e && (e.name || e.fileName)) || '')
-      .toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
   }
 
   function compare(current, other) {
@@ -53,16 +48,16 @@
       record(k, a, b);
     });
 
-    const B2 = new Map();
+    /* 整合包清单（CurseForge）常常只有名字，没有 modId：
+       用 identity 的规范化名字 / 文件名兜底配对，避免同一个模组被误判成两份 */
+    const restB = [];
     B.forEach((b, k) => {
-      if (usedB.has(k)) return;
-      const nk = nameKey(b);
-      if (nk && nk.length >= 4 && !B2.has(nk)) B2.set(nk, { k, b });
+      if (!usedB.has(k)) restB.push({ k, b });
     });
+    const fallback = [MC.identity.LEVELS.NAME, MC.identity.LEVELS.FUZZY];
     A.forEach((a, k) => {
       if (matchedA.has(k)) return;
-      const nk = nameKey(a);
-      const hit = nk && B2.get(nk);
+      const hit = restB.find(x => !usedB.has(x.k) && MC.identity.same(a, x.b, fallback));
       if (!hit) return;
       matchedA.add(k);
       usedB.add(hit.k);

@@ -173,12 +173,16 @@
   function entryById(s, id) {
     const a = s.analysis;
     if (!a) return null;
-    const want = String(id || '').toLowerCase();
+    const probe = { id, name: id };
+    const levels = [MC.identity.LEVELS.MOD, MC.identity.LEVELS.NAME];
+    const wantZh = MC.identity.normalizeName(id);
     for (const g of a.groups) {
       const row = chosenOf(s, g);
       if (!row) continue;
       const e = row.entry;
-      if ([e.id, e.name, e.nameZh].some(x => String(x || '').toLowerCase() === want)) return e;
+      if (MC.identity.same(probe, e, levels)) return e;
+      // identity 的名字只取第一个字段，中文名单独再比一次
+      if (wantZh && e.nameZh && MC.identity.normalizeName(e.nameZh) === wantZh) return e;
     }
     return null;
   }
