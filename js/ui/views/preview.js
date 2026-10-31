@@ -6,11 +6,12 @@
   const { esc, tile, icon, IC, fmtSize, adaptAdded } = R;
 
   function packItemHtml(group, s) {
+    const hl = t => MC.search.highlight(t, s.previewQuery);
     const rows = MC.selector.sortRows(group.usableRows, s.env);
     const chosen = rows.find(r => r.uid === s.selection[group.id]) || rows[0];
     const e = chosen ? chosen.entry : group.rows[0].entry;
     return '<div class="pitem">' + tile(e.nameZh || e.name || group.displayId, true) +
-      '<div class="t"><b>' + esc(e.nameZh || e.name || group.displayId) + '</b><small>' + esc(e.version || '版本未知') +
+      '<div class="t"><b>' + hl(e.nameZh || e.name || group.displayId) + '</b><small>' + esc(e.version || '版本未知') +
       ' · ' + fmtSize(e.size) + '</small></div>' +
       '<button type="button" class="btn line xs" data-act="exremove" data-group="' + esc(group.id) + '">移除</button>' +
       '</div>';
@@ -27,15 +28,24 @@
     const excluded = MC.selector.excludedGroups(s, a);
     const bad = a.groups.filter(g => !g.usableRows.length && !adaptedGroups[g.id]);
     const others = a.others || [];
-    const q = String(s.previewQuery || '').trim().toLowerCase();
+    const q = MC.search.normalizeQuery(s.previewQuery);
+    const hl = t => MC.search.highlight(t, s.previewQuery);
 
-    const match = name => !q || String(name).toLowerCase().indexOf(q) >= 0;
-    const localGroups = a.groups.filter(g => (s.excluded[g.id] ? false : g.usableRows.length) && match(g.displayId));
-    const addedShown = added.filter(d => match(d.project.title || d.modId));
-    const adaptedShown = adapted.filter(x => match(x.project.title || x.id));
-    const excludedShown = excluded.filter(g => match(g.displayId));
-    const badShown = bad.filter(g => match(g.displayId));
-    const othersShown = others.filter(o => match(o.fileName));
+    const match = fields => MC.search.matches(fields, q);
+    const entryOf = g => {
+      const row = MC.selector.sortRows(g.usableRows, s.env).find(r => r.uid === s.selection[g.id]);
+      return (row || g.rows[0]).entry;
+    };
+    const localGroups = a.groups.filter(g => {
+      if (s.excluded[g.id] || !g.usableRows.length) return false;
+      const e = entryOf(g);
+      return match([g.displayId, e.name, e.nameZh, e.id, e.fileName]);
+    });
+    const addedShown = added.filter(d => match([(d.project && d.project.title) || d.modId]));
+    const adaptedShown = adapted.filter(x => match([(x.project && x.project.title) || x.id]));
+    const excludedShown = excluded.filter(g => match([g.displayId]));
+    const badShown = bad.filter(g => match([g.displayId, g.rows[0].entry.name, g.rows[0].entry.nameZh, g.rows[0].entry.id]));
+    const othersShown = others.filter(o => match([o.fileName]));
 
     const depSize = added.concat(adapted).reduce((n, d) => {
       const f = d.version.files && d.version.files[0];
@@ -52,13 +62,13 @@
     const localBody = '<div class="plist">' + localGroups.map(g => packItemHtml(g, s)).join('') + '</div>';
     const depBody = '<div class="plist">' + addedShown.map(d =>
       '<div class="pitem">' + tile(d.project.title || d.modId, true) +
-      '<div class="t"><b>' + esc(d.project.title || d.modId) + '</b><small>' + esc(d.version.version_number) +
+      '<div class="t"><b>' + hl(d.project.title || d.modId) + '</b><small>' + esc(d.version.version_number) +
       ' · ' + fmtSize((d.version.files && d.version.files[0] && d.version.files[0].size) || 0) + ' · 自动补的前置</small></div>' +
       '<button type="button" class="btn line xs" data-act="depunadd" data-key="' + esc(d.key) + '">移除</button>' +
       '</div>').join('') + '</div>';
     const adaptBody = '<div class="plist">' + adaptedShown.map(x =>
       '<div class="pitem">' + tile(x.project.title || x.id, true) +
-      '<div class="t"><b>' + esc(x.project.title || x.id) + '</b><small>' + esc(x.version.version_number) +
+      '<div class="t"><b>' + hl(x.project.title || x.id) + '</b><small>' + esc(x.version.version_number) +
       ' · ' + fmtSize((x.version.files && x.version.files[0] && x.version.files[0].size) || 0) +
       ' · 替换掉本地不兼容的那份</small></div>' +
       '<button type="button" class="btn line xs" data-act="adaptremove" data-key="' + esc(x.key) + '">撤销</button>' +
@@ -69,19 +79,19 @@
         return x.added && (x.excludedGroups || []).some(o => o.id === g.id);
       });
       return '<div class="pitem">' + tile(g.displayId, true) +
-        '<div class="t"><b>' + esc(g.displayId) + '</b><small>' +
+        '<div class="t"><b>' + hl(g.displayId) + '</b><small>' +
         (swapped ? '已换成适配版本，旧版不进包' : '你手动排除了，不进包') + '</small></div>' +
         '<button type="button" class="btn line xs" data-act="exinclude" data-group="' + esc(g.id) + '">恢复</button>' +
         '</div>';
     }).join('') + '</div>';
     const badBody = '<div class="plist">' + badShown.map(g =>
       '<div class="pitem muted">' + tile(g.rows[0].entry.nameZh || g.rows[0].entry.name || g.displayId, true) +
-      '<div class="t"><b>' + esc(g.rows[0].entry.nameZh || g.rows[0].entry.name || g.displayId) + '</b><small>' +
+      '<div class="t"><b>' + hl(g.rows[0].entry.nameZh || g.rows[0].entry.name || g.displayId) + '</b><small>' +
       esc((g.rows[0].issues[0] && g.rows[0].issues[0].text) || '不可用') + '</small></div>' +
       '<span class="tag bad">不进包</span></div>').join('') + '</div>';
     const otherBody = '<div class="plist">' + othersShown.map(o =>
       '<div class="pitem muted">' + tile(o.fileName, true) +
-      '<div class="t"><b>' + esc(o.fileName) + '</b><small>' +
+      '<div class="t"><b>' + hl(o.fileName) + '</b><small>' +
       (o.kind === 'shader' ? '光影包' : o.kind === 'resourcepack' ? '资源包 / 材质包' : '不是模组') +
       ' · ' + fmtSize(o.size) + ' · 不放进 mods</small></div></div>').join('') + '</div>';
 

@@ -8,6 +8,25 @@
   const touch = C.touch;
 
   function init() {
+    /* 搜索框边打边筛：停下 150ms 才重绘；按钮 / 回车立即执行 */
+    const timers = {};
+    const later = (key, fn) => {
+      clearTimeout(timers[key]);
+      timers[key] = setTimeout(() => {
+        delete timers[key];
+        fn();
+      }, 150);
+    };
+    const now = (key, fn) => {
+      clearTimeout(timers[key]);
+      delete timers[key];
+      fn();
+    };
+    const cancel = key => {
+      clearTimeout(timers[key]);
+      delete timers[key];
+    };
+
     const drop = document.getElementById('drop');
     const input = document.getElementById('fileInput');
     const singleInput = document.getElementById('singleInput');
@@ -100,6 +119,15 @@
     /* 导览 */
     const guideView = document.getElementById('guideView');
     if (guideView) {
+      const commitGuide = () => {
+        touch();
+        const again = document.getElementById('guideQuery');
+        if (again) {
+          again.focus();
+          const n = again.value.length;
+          again.setSelectionRange(n, n);
+        }
+      };
       guideView.addEventListener('click', e => {
         const el = e.target.closest('[data-act]');
         if (el) C.handleAct(el.dataset.act, el);
@@ -109,15 +137,14 @@
         if (!inp) return;
         S().guideQuery = inp.value;
         MC.pager.reset('guide');
-        touch();
-        const again = document.getElementById('guideQuery');
-        if (again) {
-          again.focus();
-          const n = again.value.length;
-          again.setSelectionRange(n, n);
-        }
+        later('guide', commitGuide);
       });
       guideView.addEventListener('keydown', e => {
+        if (e.target.closest && e.target.closest('#guideQuery') && e.key === 'Enter') {
+          e.preventDefault();
+          now('guide', commitGuide);
+          return;
+        }
         if (e.key !== 'Enter' && e.key !== ' ') return;
         const card = e.target.closest('.gcard');
         if (!card) return;
@@ -243,16 +270,27 @@
 
     const orgQuery = document.getElementById('orgQuery');
     const orgClear = document.getElementById('orgClear');
+    const commitOrg = () => {
+      if (orgQuery) S().organizeQuery = orgQuery.value.trim();
+      MC.pager.reset('organize');
+      touch();
+    };
     if (orgQuery) {
       orgQuery.addEventListener('input', () => {
         if (orgClear) orgClear.hidden = !orgQuery.value;
         S().organizeQuery = orgQuery.value;
         MC.pager.reset('organize');
-        touch();
+        later('organize', () => touch());
       });
       orgQuery.addEventListener('keydown', e => {
+        if (e.key === 'Enter') {
+          e.preventDefault();
+          now('organize', commitOrg);
+          return;
+        }
         if (e.key === 'Escape') {
           e.stopPropagation();
+          cancel('organize');
           orgQuery.value = '';
           if (orgClear) orgClear.hidden = true;
           S().organizeQuery = '';
@@ -263,6 +301,7 @@
     }
     if (orgClear) {
       orgClear.addEventListener('click', () => {
+        cancel('organize');
         if (orgQuery) orgQuery.value = '';
         orgClear.hidden = true;
         S().organizeQuery = '';
@@ -274,12 +313,7 @@
 
     const orgSearchBtn = document.getElementById('orgSearchBtn');
     if (orgSearchBtn) {
-      orgSearchBtn.addEventListener('click', () => {
-        const q = document.getElementById('orgQuery');
-        S().organizeQuery = q ? q.value.trim() : '';
-        MC.pager.reset('organize');
-        touch();
-      });
+      orgSearchBtn.addEventListener('click', () => now('organize', commitOrg));
     }
 
     const selectBtn = document.getElementById('selectBtn');
@@ -381,10 +415,7 @@
         const el = e.target.closest('[data-act]');
         if (el) C.handleAct(el.dataset.act, el);
       });
-      overlay.addEventListener('input', e => {
-        const inp = e.target.closest('#previewQuery');
-        if (!inp) return;
-        S().previewQuery = inp.value;
+      const commitPreview = () => {
         touch();
         const again = document.getElementById('previewQuery');
         if (again) {
@@ -392,8 +423,19 @@
           const n = again.value.length;
           again.setSelectionRange(n, n);
         }
+      };
+      overlay.addEventListener('input', e => {
+        const inp = e.target.closest('#previewQuery');
+        if (!inp) return;
+        S().previewQuery = inp.value;
+        later('preview', commitPreview);
       });
       overlay.addEventListener('keydown', e => {
+        if (e.target.closest && e.target.closest('#previewQuery') && e.key === 'Enter') {
+          e.preventDefault();
+          now('preview', commitPreview);
+          return;
+        }
         if (e.key === 'Escape') { e.preventDefault(); C.handleAct('close', overlay); }
       });
     }

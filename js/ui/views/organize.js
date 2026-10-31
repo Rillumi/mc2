@@ -171,6 +171,7 @@
 
   /* ---------- 模组行 ---------- */
   function rowHtml(s, group) {
+    const hl = t => MC.search.highlight(t, s.organizeQuery);
     const rows = MC.selector.sortRows(group.usableRows, s.env);
     const chosen = rows.find(r => r.uid === s.selection[group.id]) || rows[0];
     const selectMode = s.selectMode;
@@ -189,8 +190,8 @@
       return '<div class="rowwrap">' +
         '<div class="row dead" data-act="detail" data-group="' + esc(group.id) + '" role="button" tabindex="0">' +
         tile(first.entry.nameZh || first.entry.name || group.displayId) +
-        '<div class="main"><div class="name">' + esc(first.entry.nameZh || first.entry.name || group.displayId) +
-        (first.entry.nameZh && first.entry.name ? '<i class="alias">' + esc(first.entry.name) + '</i>' : '') +
+        '<div class="main"><div class="name">' + hl(first.entry.nameZh || first.entry.name || group.displayId) +
+        (first.entry.nameZh && first.entry.name ? '<i class="alias">' + hl(first.entry.name) + '</i>' : '') +
         ' <i>' + esc(first.entry.version || '') + '</i></div>' +
         '<div class="sub"><span class="tag bad">' + esc(reason) + '</span>' +
         (first.connectorFix
@@ -213,7 +214,7 @@
     if (s.filter === 'dup') tags.push('<span class="tag ok">已合并保留 1 份</span>');
     if (chosen.viaConnector) tags.push('<span class="tag src" title="Fabric 模组，通过 Sinytra Connector 在 Forge 上运行">经 Connector 兼容</span>');
     tags.push('<span class="tag filetag" data-act="copy-file" data-file="' + esc(e.filePath || e.fileName || '') +
-      '" title="点击复制路径，去文件夹里搜这个文件">' + esc(e.fileName || '') + '</span>');
+      '" title="点击复制路径，去文件夹里搜这个文件">' + hl(e.fileName || '') + '</span>');
 
     const items = rows.map(r => ({
       value: r.uid,
@@ -226,8 +227,8 @@
     return '<div class="row' + (s.excluded[group.id] ? ' off' : '') + '" data-act="detail" data-group="' + esc(group.id) + '"' +
       ' role="button" tabindex="0" title="' + esc(e.fileName || '') + '">' +
       check + tile(e.nameZh || e.name || group.displayId) +
-      '<div class="main"><div class="name">' + esc(e.nameZh || e.name || group.displayId) +
-      (e.nameZh && e.name ? '<i class="alias">' + esc(e.name) + '</i>' : '') +
+      '<div class="main"><div class="name">' + hl(e.nameZh || e.name || group.displayId) +
+      (e.nameZh && e.name ? '<i class="alias">' + hl(e.name) + '</i>' : '') +
       ' <i>' + esc(e.version || '') + '</i></div>' +
       '<div class="sub">' + tags.join('') +
       (s.excluded[group.id] ? '<span class="tag bad">已排除</span>' : '') + '</div></div>' +
@@ -305,12 +306,12 @@
     if (s.filter === 'bad') { groups = groups.filter(g => g.usableRows.length === 0); label = '不兼容 · 已自动排除'; }
     if (s.filter === 'dup') { groups = groups.filter(g => g.sizes > 1); label = '同一模组多份 · 每组只留 1 份'; }
 
-    const q = String(s.organizeQuery || '').trim().toLowerCase();
+    const q = MC.search.normalizeQuery(s.organizeQuery);
     if (q) {
       groups = groups.filter(g => {
         const row = chosenOf(s, g) || g.rows[0];
         const e = row.entry || {};
-        return [g.displayId, e.name, e.nameZh, e.id, e.fileName].join(' ').toLowerCase().indexOf(q) >= 0;
+        return MC.search.matches([g.displayId, e.name, e.nameZh, e.id, e.fileName], q);
       });
     }
 
