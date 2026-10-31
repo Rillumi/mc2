@@ -7,6 +7,7 @@
   const { toast, saveBlob, copyText, walkEntry, collectDrop, sha1Hex, esc } = MC.uiBase;
   let gen = 0; // 环境切换后，作废旧的在途请求
   const FT = MC.flowTools; // 日志 / 资源包顺序（js/ui/flow/tools.js）
+  const FE = MC.flowEnv; // 环境 / 版本列表 / 分页（js/ui/flow/env.js）
 
   /* ---------- 把文件读成条目（整理页 / 对比页共用） ---------- */
   async function buildEntries(files, note) {
@@ -1009,47 +1010,6 @@
     }
   }
 
-  /* ---------- 环境输入 ---------- */
-  function syncEnvInputs() {
-    const st = S();
-    document.querySelectorAll('#segLoader button').forEach(b => {
-      b.setAttribute('aria-pressed', String(b.dataset.loader === st.env.loader));
-    });
-  }
-
-  /* ---------- 环境下拉：版本列表 ---------- */
-  async function loadMcList() {
-    const st = S();
-    st.verLoading = true;
-    touch();
-    try {
-      const list = await MC.versions.mcVersions();
-      const cur = st.env.mc;
-      st.mcList = list.indexOf(cur) >= 0 ? list : [cur].concat(list);
-    } catch (err) {
-      st.mcList = [st.env.mc];
-    } finally {
-      st.verLoading = false;
-      touch();
-    }
-  }
-
-  async function loadLoaderList() {
-    const st = S();
-    st.verLoading = true;
-    touch();
-    try {
-      const list = await MC.versions.loaderVersions(st.env.loader, st.env.mc);
-      const cur = st.env.loaderVersion;
-      st.loaderList = (cur && list.indexOf(cur) < 0) ? [cur].concat(list) : list;
-    } catch (err) {
-      st.loaderList = [];
-    } finally {
-      st.verLoading = false;
-      touch();
-    }
-  }
-
   /* ---------- 爱发电：更新我发电过的作者名单 ---------- */
   async function refreshAfdian() {
     const st = S();
@@ -1187,54 +1147,13 @@
   }
 
   /* ---------- 动作分发 ---------- */
-  function findDep(key) {
-    return S().deps.find(d => d.key === key);
-  }
-
-  function toggleExclude(groupId) {
-    const st = S();
-    if (st.excluded[groupId]) delete st.excluded[groupId];
-    else st.excluded[groupId] = true;
-    touch();
-  }
-
-  /* ---------- 分页 ---------- */
-  function pagerGo(wrap, page) {
-    if (!wrap) return;
-    const st = S();
-    const key = wrap.dataset.pgkey;
-    const pages = Math.max(1, Number(wrap.dataset.pgpages) || 1);
-    const cur = Number(wrap.dataset.pgpage) || 1;
-    let p = Math.floor(Number(page) || 1);
-    if (p < 1) p = 1;
-    if (p > pages) p = pages;
-    if (p === cur) return;
-    if (!st.pg) st.pg = {};
-    st.pg[key] = p;
-    const anchor = wrap.dataset.pganchor;
-    touch();
-    const target = anchor ? document.querySelector(anchor) : null;
-    if (target) {
-      const y = target.getBoundingClientRect().top + window.pageYOffset - 14;
-      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
-    }
-  }
-
-  function pagerFromEl(el) {
-    const wrap = el.closest('.pager');
-    if (!wrap) return;
-    const cur = Number(wrap.dataset.pgpage) || 1;
-    const to = el.dataset.pg;
-    pagerGo(wrap, to === 'prev' ? cur - 1 : to === 'next' ? cur + 1 : Number(to));
-  }
-
   /* 动作模块（js/ui/actions/）和绑定层（bind.js）加载时从这里取用内部函数 */
   MC.actionCtx = {
     S, touch, toast, copyText,
     getGen: () => gen,
     bumpGen: () => { gen++; },
-    findDep, toggleExclude, pagerGo, pagerFromEl,
-    autoLog: FT.autoLog, analyzeAndResolve, loadLoaderList, loadMcList, syncEnvInputs,
+    findDep: FE.findDep, toggleExclude: FE.toggleExclude, pagerGo: FE.pagerGo, pagerFromEl: FE.pagerFromEl,
+    autoLog: FT.autoLog, analyzeAndResolve, loadLoaderList: FE.loadLoaderList, loadMcList: FE.loadMcList, syncEnvInputs: FE.syncEnvInputs,
     checkAllUpdates, checkOneUpdate, exportGuide, findConnector,
     refreshAfdian, addLink, removeLink, bulkLinks,
     movePack: FT.movePack, exportPackOrder: FT.exportPackOrder, exportPackOptions: FT.exportPackOptions, buildPack,
@@ -1252,5 +1171,5 @@
     return true;
   }
 
-  MC.ui = { importFiles, analyzeAndResolve, buildPack, toast, saveBlob, syncEnvInputs };
+  MC.ui = { importFiles, analyzeAndResolve, buildPack, toast, saveBlob, syncEnvInputs: FE.syncEnvInputs };
 })(globalThis);
