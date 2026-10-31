@@ -3,6 +3,11 @@
   'use strict';
   const MC = (root.MC = root.MC || {});
 
+  /* 环境切换后，用代数作废旧的在途请求 */
+  let gen = 0;
+  const getGen = () => gen;
+  const bumpGen = () => ++gen;
+
   /** 一组模组里当前选中的版本行（默认第一个可用） */
   function chosenOf(st, g) {
     const rows = MC.selector.sortRows(g.usableRows || [], st.env);
@@ -44,5 +49,5 @@
     return /Failed to fetch|NetworkError|Load failed|ERR_|timeout|aborted/i.test(String(reason || ''));
   }
 
-  MC.flowCommon = { chosenOf, projectForEntry, packUrl, mdToText, isNetworkError };
+  MC.flowCommon = { chosenOf, projectForEntry, packUrl, mdToText, isNetworkError, getGen, bumpGen };
 })(globalThis);

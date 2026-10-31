@@ -5,7 +5,6 @@
   const S = () => MC.store.state;
   const touch = () => MC.store.touch();
   const { toast, saveBlob, copyText, walkEntry, collectDrop, sha1Hex, esc } = MC.uiBase;
-  let gen = 0; // 环境切换后，作废旧的在途请求
   const FT = MC.flowTools; // 日志 / 资源包顺序（js/ui/flow/tools.js）
   const FE = MC.flowEnv; // 环境 / 版本列表 / 分页（js/ui/flow/env.js）
   const FC = MC.flowCommon; // 选中行 / 项目缓存 / 正文纯文本（js/ui/flow/common.js）
@@ -162,7 +161,7 @@
   /* ---------- 分析 + 缺前置自动匹配 ---------- */
   async function analyzeAndResolve(resetDeps) {
     const st = S();
-    const my = ++gen;
+    const my = FC.bumpGen();
     const analysis = MC.analyzer.analyze(st.mods, st.env, { includeOptional: st.includeOptional });
     st.analysis = analysis;
     MC.selector.assign(st, analysis);
@@ -184,18 +183,18 @@
     if (pending.length) {
       // 前置的 modId 大多就是 slug：先用一次批量项目请求全部命中，再并发补版本
       await preResolveDeps(pending);
-      if (my !== gen) return;
+      if (my !== FC.getGen()) return;
       let cursor = 0;
       const worker = async () => {
         while (cursor < pending.length) {
-          if (my !== gen) return;
+          if (my !== FC.getGen()) return;
           const dep = pending[cursor++];
           await matchDep(dep, null, my);
         }
       };
       await Promise.all([worker(), worker(), worker()]);
     }
-    if (my !== gen) return;
+    if (my !== FC.getGen()) return;
     analyzePacks(st);
     touch();
   }
@@ -240,7 +239,7 @@
         range: dep.range,
         searchWord: word || ''
       });
-      if (my && my !== gen) return;
+      if (my && my !== FC.getGen()) return;
       dep.via = res.via || '';
       dep.candidates = res.candidates || [];
       if (res.ok) {
@@ -257,7 +256,7 @@
         dep.status = 'none';
       }
     } catch (err) {
-      if (my && my !== gen) return;
+      if (my && my !== FC.getGen()) return;
       dep.status = 'error';
       dep.reason = err && err.message ? err.message : String(err);
     }
@@ -305,7 +304,7 @@
 
   async function runAdapt(key, target, range) {
     const st = S();
-    const my = gen;
+    const my = FC.getGen();
     const ad = { key, status: 'loading', added: false, reason: '' };
     Object.assign(ad, target);
     st.adapt[key] = ad;
@@ -315,7 +314,7 @@
         { id: target.id, modId: target.title || target.id, searchWord: '' },
         { env: st.env, range: range || '' }
       );
-      if (my !== gen || st.adapt[key] !== ad) return;
+      if (my !== FC.getGen() || st.adapt[key] !== ad) return;
       if (res.ok) {
         ad.project = res.project;
         ad.versions = res.versions;
@@ -327,7 +326,7 @@
         ad.reason = res.reason || '没找到适配版本';
       }
     } catch (err) {
-      if (my !== gen || st.adapt[key] !== ad) return;
+      if (my !== FC.getGen() || st.adapt[key] !== ad) return;
       ad.status = 'none';
       ad.reason = err && err.message ? err.message : String(err);
     }
@@ -355,14 +354,14 @@
   }
 
   async function retryAll() {
-    const my = gen;
+    const my = FC.getGen();
     const list = S().deps.filter(d => !(d.status === 'ok' && d.version));
     if (!list.length) return toast('没有需要重试的');
     toast('重新匹配 ' + list.length + ' 个…');
     let cursor = 0;
     const worker = async () => {
       while (cursor < list.length) {
-        if (my !== gen) return;
+        if (my !== FC.getGen()) return;
         const dep = list[cursor++];
         await matchDep(dep, null, my);
       }
@@ -374,7 +373,7 @@
   async function prefetchProjects() {
     const st = S();
     if (!st.mods.length) return;
-    const my = gen;
+    const my = FC.getGen();
     const hashes = Array.from(new Set(st.mods.filter(e => e.sha1).map(e => e.sha1)));
     if (!hashes.length) return;
     st.prefetching = true;
@@ -382,7 +381,7 @@
     try {
       // 一次请求：所有 jar / 资源包的哈希 → 所属项目 id（包括未在 Modrinth 上的会缺席）
       const map = await MC.api.modrinth.versionFiles(hashes);
-      if (my !== gen) return;
+      if (my !== FC.getGen()) return;
       const pidByHash = {};
       const pids = [];
       Object.keys(map || {}).forEach(h => {
@@ -397,7 +396,7 @@
       if (pids.length) {
         // 再按项目 id 批量拿标题、简介、正文（资源包顺序说明就在正文里）
         const list = await MC.api.modrinth.projectsByIds(pids);
-        if (my !== gen) return;
+        if (my !== FC.getGen()) return;
         const next = Object.assign({}, st.projects || {});
         list.forEach(p => { next[p.id] = p; });
         st.projects = next;
@@ -405,7 +404,7 @@
     } catch (err) {
       /* 预取失败不影响本地整理，详情页打开时还会再试一次 */
     } finally {
-      if (my === gen) {
+      if (my === FC.getGen()) {
         st.prefetching = false;
         analyzePacks(st);
         applyCats(st);
@@ -668,7 +667,7 @@
     if (!g) return;
     const row = FC.chosenOf(st, g);
     if (!row) return;
-    const my = gen;
+    const my = FC.getGen();
     st.updates[groupId] = { status: 'checking' };
     touch();
     let res;
@@ -677,7 +676,7 @@
     } catch (err) {
       res = { status: 'error', reason: err && err.message ? err.message : String(err) };
     }
-    if (my !== gen) return;
+    if (my !== FC.getGen()) return;
     st.updates[groupId] = res;
     if (res.status === 'error' && FC.isNetworkError(res.reason)) {
       st.updateError = '连不上 Modrinth，可能是网络或代理问题。';
@@ -690,7 +689,7 @@
     if (st.updateBusy) return;
     const groups = st.analysis ? st.analysis.groups.slice() : [];
     if (!groups.length) return toast('先把 mods 文件夹拖进来');
-    const my = gen;
+    const my = FC.getGen();
     st.updateBusy = true;
     st.updateDone = 0;
     st.updateTotal = groups.length;
@@ -710,7 +709,7 @@
     const chunkSize = 80;
     try {
       for (let i = 0; i < hashed.length; i += chunkSize) {
-        if (my !== gen) return;
+        if (my !== FC.getGen()) return;
         const chunk = hashed.slice(i, i + chunkSize);
         const data = await MC.api.modrinth.versionFilesUpdate(
           chunk.map(t => t.row.entry.sha1), st.env
@@ -722,7 +721,7 @@
     } catch (err) {
       batchError = err;
     }
-    if (my !== gen) return;
+    if (my !== FC.getGen()) return;
 
     let newer = 0;
     let notFound = 0;
@@ -756,7 +755,7 @@
       let cursor = 0;
       const worker = async () => {
         while (cursor < retry.length) {
-          if (my !== gen) return;
+          if (my !== FC.getGen()) return;
           const t = retry[cursor++];
           let res;
           try {
@@ -764,7 +763,7 @@
           } catch (err) {
             res = { status: 'error', reason: err && err.message ? err.message : String(err) };
           }
-          if (my !== gen) return;
+          if (my !== FC.getGen()) return;
           st.updates[t.g.id] = res;
           st.updateDone++;
           touch();
@@ -773,7 +772,7 @@
       await Promise.all([worker(), worker()]);
     }
 
-    if (my !== gen) return;
+    if (my !== FC.getGen()) return;
     st.updateBusy = false;
     st.updateDone = st.updateTotal;
     if (batchError) {
@@ -976,8 +975,8 @@
   /* 动作模块（js/ui/actions/）和绑定层（bind.js）加载时从这里取用内部函数 */
   MC.actionCtx = {
     S, touch, toast, copyText,
-    getGen: () => gen,
-    bumpGen: () => { gen++; },
+    getGen: FC.getGen,
+    bumpGen: FC.bumpGen,
     findDep: FE.findDep, toggleExclude: FE.toggleExclude, pagerGo: FE.pagerGo, pagerFromEl: FE.pagerFromEl,
     autoLog: FT.autoLog, analyzeAndResolve, loadLoaderList: FE.loadLoaderList, loadMcList: FE.loadMcList, syncEnvInputs: FE.syncEnvInputs,
     checkAllUpdates, checkOneUpdate, exportGuide, findConnector: FE.findConnector,
