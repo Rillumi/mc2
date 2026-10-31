@@ -439,6 +439,163 @@ async function mcmodSearch(title, keys) {
   throw lastError;
 }
 
+/* ================= 爱发电（我支持过的作者 → 主页 / 发电帖） =================
+   爱发电没有公开文档，接口是从 AfdianToMarkdown 里扒出来的：
+   /api/user/get-sponsoring 拿「TA 发电的」列表，/api/post/get-list 拿每位作者的发电帖。
+   需要浏览器登录后的 auth_token，存在 data/afdian.json（不会提交到 git）。 */
+const AFDIAN_FILE = path.join(DATA_DIR, 'afdian.json');
+const AFDIAN_UA = ZH_UA;
+const afdianSleep = ms => new Promise(r => setTimeout(r, ms));
+let afdianMem = null;
+let afdianJob = { running: false, startedAt: 0, done: 0, total: 0, posts: 0, note: '', error: '', updatedAt: 0 };
+
+function afdianFile() {
+  if (afdianMem) return afdianMem;
+  afdianMem = { token: '', userId: '', updatedAt: 0, creators: [] };
+  try {
+    const obj = JSON.parse(fs.readFileSync(AFDIAN_FILE, 'utf8'));
+    if (obj && typeof obj === 'object') {
+      afdianMem.token = String(obj.token || '');
+      afdianMem.userId = String(obj.userId || '');
+      afdianMem.updatedAt = Number(obj.updatedAt || 0);
+      afdianMem.creators = Array.isArray(obj.creators) ? obj.creators : [];
+    }
+  } catch (err) { /* 还没抓过 */ }
+  return afdianMem;
+}
+
+function afdianWrite() {
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(AFDIAN_FILE, JSON.stringify(afdianFile(), null, 1), 'utf8');
+  } catch (err) { console.log('  爱发电缓存写入失败：' + err.message); }
+}
+
+function afdianToken() {
+  return String(process.env.AFDIAN_TOKEN || afdianFile().token || '').trim();
+}
+
+async function afdianApi(pathname, token) {
+  let lastError = null;
+  for (let i = 0; i < 3; i++) {
+    try {
+      const res = await fetch('https://afdian.com' + pathname, {
+        headers: { 'User-Agent': AFDIAN_UA, Cookie: 'auth_token=' + token, Accept: 'application/json' },
+        signal: AbortSignal.timeout(20000)
+      });
+      if (!res.ok) throw new Error('爱发电返回 ' + res.status);
+      const j = await res.json();
+      if (!j || j.ec !== 200) throw new Error((j && j.em) || '爱发电接口失败');
+      return j.data || {};
+    } catch (err) {
+      lastError = err;
+      if (i < 2) await afdianSleep(800 + i * 500);
+    }
+  }
+  throw lastError;
+}
+
+function afdianCleanPost(p) {
+  const text = String((p && p.content) || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+  return {
+    id: String((p && p.post_id) || ''),
+    title: String((p && p.title) || '').replace(/<[^>]*>/g, '').replace(/\s+/g, ' ').trim(),
+    excerpt: text.slice(0, 160),
+    type: (p && p.type) || 0,
+    created: (p && p.create_time) || 0,
+    url: 'https://afdian.com/p/' + String((p && p.post_id) || '')
+  };
+}
+
+async function afdianRefresh() {
+  if (afdianJob.running) return false;
+  const token = afdianToken();
+  if (!token) throw new Error('还没有爱发电登录令牌，把 auth_token 写进 data/afdian.json 的 token 字段');
+  afdianJob = { running: true, startedAt: Date.now(), done: 0, total: 0, posts: 0, note: '正在读取你发电过的作者…', error: '', updatedAt: afdianFile().updatedAt || 0 };
+
+  (async () => {
+    try {
+      const me = await afdianApi('/api/my/profile', token);
+      const uid = String((me.user && me.user.user_id) || afdianFile().userId || '');
+      if (!uid) throw new Error('读不到你的爱发电 user_id');
+      const creators = [];
+      const seen = {};
+      // 注意：这个接口的分页参数经常被忽略，翻到重复页就停，按 user_id 去重
+      for (let page = 1; page <= 30; page++) {
+        const data = await afdianApi('/api/user/get-sponsoring?user_id=' + uid + '&page=' + page, token);
+        const list = data.sponsoring || [];
+        if (!list.length) break;
+        let fresh = 0;
+        for (const it of list) {
+          const u = it.user || {};
+          const c = u.creator || {};
+          const id = String(u.user_id || '');
+          if (!id || seen[id]) continue;
+          seen[id] = 1;
+          fresh++;
+          creators.push({
+            userId: id,
+            name: String(u.name || ''),
+            slug: String(u.url_slug || ''),
+            doing: String(c.doing || '').slice(0, 120),
+            detail: String(c.detail || '').replace(/\s+/g, ' ').slice(0, 600),
+            avatar: String(u.avatar || ''),
+            home: 'https://afdian.com/u/' + id,
+            posts: []
+          });
+        }
+        if (!fresh) break;
+        afdianJob.note = '已找到 ' + creators.length + ' 位作者，正在翻发电帖…';
+        await afdianSleep(350);
+      }
+
+      afdianJob.total = creators.length;
+      for (const c of creators) {
+        if (!c.userId) continue;
+        const seenPost = {};
+        for (let page = 1; page <= 3; page++) {
+          let data;
+          try { data = await afdianApi('/api/post/get-list?user_id=' + c.userId + '&page=' + page, token); }
+          catch (err) { break; }
+          const list = data.list || [];
+          let items = 0;
+          list.forEach(p => {
+            const id = String((p && p.post_id) || '');
+            if (!id || seenPost[id]) return;
+            seenPost[id] = 1;
+            items++;
+            const post = afdianCleanPost(p);
+            // 没赞助过的帖子标题/正文都是空的，留下也匹配不上，直接跳过
+            if (!post.title) return;
+            c.posts.push(post);
+            afdianJob.posts++;
+          });
+          if (!items || !data.has_more) break;
+          await afdianSleep(300);
+        }
+        afdianJob.done++;
+        await afdianSleep(280);
+      }
+
+      const mem = afdianFile();
+      mem.token = token;
+      mem.userId = uid;
+      mem.updatedAt = Date.now();
+      mem.creators = creators;
+      afdianJob.updatedAt = mem.updatedAt;
+      afdianJob.running = false;
+      afdianJob.note = '已更新 ' + creators.length + ' 位作者、' + afdianJob.posts + ' 条发电帖';
+      afdianWrite();
+    } catch (err) {
+      afdianJob.running = false;
+      afdianJob.error = err.message || '爱发电读取失败';
+      afdianJob.note = '更新失败：' + afdianJob.error;
+    }
+  })();
+
+  return true;
+}
+
 /* ================= HTTP ================= */
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -501,6 +658,31 @@ const server = http.createServer(async (req, res) => {
         const body = await bodyJson(req);
         if (body.id) await pool.query('DELETE FROM links WHERE id = ?', [Number(body.id)]);
         return sendJson(res, 200, { ok: true });
+      }
+
+      /* 爱发电：已缓存的作者 + 发电帖（不含 token） */
+      if (urlPath === '/api/afdian' && req.method === 'GET') {
+        const d = afdianFile();
+        return sendJson(res, 200, {
+          ok: true,
+          updatedAt: d.updatedAt || 0,
+          count: (d.creators || []).length,
+          creators: d.creators || []
+        });
+      }
+
+      /* 重新抓一遍「我发电的」+ 每位作者的发电帖（后台跑，前端轮询状态） */
+      if (urlPath === '/api/afdian/refresh' && req.method === 'POST') {
+        try {
+          const started = await afdianRefresh();
+          return sendJson(res, 200, { ok: true, started });
+        } catch (err) {
+          return sendJson(res, 200, { ok: false, reason: err.message });
+        }
+      }
+
+      if (urlPath === '/api/afdian/status' && req.method === 'GET') {
+        return sendJson(res, 200, Object.assign({ ok: true }, afdianJob));
       }
 
       /* 中文名库：items = [{ id, title, slug }]，返回 { names: { id: { zh, en, abbr, url } } }

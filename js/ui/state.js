@@ -60,6 +60,7 @@
     loaderList: [],     // 加载器版本下拉候选
     verLoading: false,  // 版本列表是否在加载
     db: { mode: 'local', ready: false, error: '', sites: [], counts: {} }, // 下载页仓库后端状态
+    afdian: { ready: false, at: 0, count: 0, creators: [], busy: false, note: '', error: '', job: null }, // 我发电过的爱发电作者
     siteFilter: 'all',  // 下载页仓库按站点筛选
     logAutoTried: false,// 工具页是否已经试过自动读日志
     logBusy: false,

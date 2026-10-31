@@ -665,6 +665,7 @@
       (isPack ? ' · pack_format ' + esc(o.packFormat || '未知') : '') + '</span></div>' +
       (o.description ? '<div class="descbox">' + esc(o.description) + '</div>' : '') +
       body +
+      afdianSection({ name: o.fileName, id: (o.fileName || '').replace(/\.(zip|jar)$/i, '') }) +
       '</div>' +
       '<div class="sheet-foot"><button type="button" class="btn grad" data-act="close">看完了</button></div>' +
       '</div>';
@@ -824,7 +825,7 @@
         (chosen ? updateSection(s, group.id, e) : '') +
         (rows.length > 1 ? '<div class="dsec-label">这个模组有 ' + rows.length + ' 份，进包的是</div>' +
           picker(s, 'g:' + group.id, MC.selector.label(chosen.entry), items, 'row-picker detail-picker') : '') +
-        bad + depList + links + (chosen ? sourceSection(s, e) : '') + (chosen ? compatSection(s, e) : '') + note +
+        bad + depList + links + (chosen ? afdianSection(e) : '') + (chosen ? sourceSection(s, e) : '') + (chosen ? compatSection(s, e) : '') + note +
       '</div>' +
       '<div class="sheet-foot">' +
         '<button type="button" class="btn line" data-act="toggle-exclude" data-group="' + esc(group.id) + '">' +
@@ -1349,6 +1350,43 @@
     return null;
   }
 
+  function afdianCard(s) {
+    const a = s.afdian || { ready: false, at: 0, creators: [], busy: false, note: '', error: '' };
+    const list = a.creators || [];
+    const when = a.at ? new Date(a.at).toLocaleString('zh-CN', { hour12: false }) : '还没更新过';
+    const status = a.busy
+      ? (a.note || '正在更新…')
+      : a.error
+        ? a.error
+        : a.ready
+          ? '更新于 ' + when
+          : '本地服务没启动，暂时读不到名单';
+    const rows = list.map(c => {
+      const n = (c.posts || []).length;
+      return '<div class="afdrow">' +
+        (c.avatar ? '<img class="afdava" src="' + esc(c.avatar) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '') +
+        '<div class="afdt"><a class="afdname" href="' + esc(c.home) + '" target="_blank" rel="noopener">' +
+        esc(c.name || '未命名作者') + '</a>' +
+        (c.doing ? '<small>' + esc(c.doing) + '</small>' : '') + '</div>' +
+        '<span class="hint">' + n + ' 条发电帖</span>' +
+        '<a class="btn line xs" href="' + esc(c.home) + '" target="_blank" rel="noopener">主页</a>' +
+        '</div>';
+    }).join('');
+
+    return '<div class="vpanel toolcard" style="margin-top:16px">' +
+      '<div class="vhead"><h3>我发电过的爱发电作者</h3>' +
+      '<span class="adnote">' + list.length + ' 位 · ' + esc(status) + '</span></div>' +
+      '<div class="vbody">' +
+      '<div class="hint">名单来自你爱发电主页的「TA 发电的」，只保存公开主页、作者简介和帖子标题，不存金额。' +
+      '模组详情里如果名字对得上，会直接出现「作者主页」按钮。</div>' +
+      (rows || '<div class="hint">还没有数据。点下面的按钮抓一次；需要 data/afdian.json 里放登录后的 auth_token。</div>') +
+      '<div class="actions" style="margin-top:8px">' +
+      '<button type="button" class="btn grad sm" data-act="afdianrefresh"' + (a.busy ? ' disabled' : '') + '>' +
+      (a.busy ? '更新中…' : '更新爱发电') + '</button>' +
+      '<span class="hint">抓一次大约十几秒，会顺便拉到每位作者最近的发电帖。</span></div>' +
+      '</div></div>';
+  }
+
   function linkCard(s) {
     const db = s.db || { mode: 'local', ready: false, error: '' };
     const sites = (db.sites && db.sites.length) ? db.sites : MC.linksdb.FALLBACK_SITES;
@@ -1404,7 +1442,7 @@
   function renderTools(s) {
     const el = document.getElementById('toolsView');
     if (!el) return;
-    el.innerHTML = '<div class="toolgrid">' + rpCard(s) + logCard(s) + '</div>' + linkCard(s);
+    el.innerHTML = '<div class="toolgrid">' + rpCard(s) + logCard(s) + '</div>' + afdianCard(s) + linkCard(s);
   }
 
   /* ---------- 详情里的小节 ---------- */
@@ -1461,6 +1499,29 @@
     return esc(r || '网络问题');
   }
 
+  /* ---------- 爱发电：匹配到的作者主页 / 相关发电帖 ---------- */
+  function afdianSection(e) {
+    let hits = [];
+    try { hits = MC.afdian.find(e, 3); } catch (err) { hits = []; }
+    if (!hits.length) return '';
+    const rows = hits.map(h => {
+      const c = h.creator;
+      return '<div class="afdrow">' +
+        '<span class="tag">爱发电</span>' +
+        (c.avatar ? '<img class="afdava" src="' + esc(c.avatar) + '" alt="" loading="lazy" onerror="this.style.display=\'none\'">' : '') +
+        '<div class="afdt">' +
+        '<a class="afdname" href="' + esc(c.home) + '" target="_blank" rel="noopener">' + esc(c.name || '作者主页') + '</a>' +
+        (c.doing ? '<small>' + esc(c.doing) + '</small>' : '') +
+        (h.post ? '<a class="afdpost" href="' + esc(h.post.url) + '" target="_blank" rel="noopener">相关发电帖：' +
+          esc(h.post.title || '打开帖子') + '</a>' : '') +
+        '</div>' +
+        '<a class="btn line xs" href="' + esc(c.home) + '" target="_blank" rel="noopener">作者主页</a>' +
+        '</div>';
+    }).join('');
+    return '<div class="dsec-label">爱发电<span class="dsrc">你发电过的作者</span></div>' + rows +
+      '<div class="hint">按模组名/中文名匹配到的作者；公开主页可以直接打开，付费内容还是要在爱发电里解锁。</div>';
+  }
+
   function sourceSection(s, e) {
     const q = String(e.name || e.id || '');
     if (!q) return '';
@@ -1471,7 +1532,7 @@
       '<a class="btn line sm" href="' + esc(af) + '" target="_blank" rel="noopener">爱发电搜「' + esc(q) + '」</a>' +
       '<a class="btn line sm" href="' + esc(bing) + '" target="_blank" rel="noopener">Bing 搜下载页</a>' +
       '</div>' +
-      '<div class="hint">爱发电没有公开接口，只能跳到它的站内搜索。很多作者的发电页会写网盘和提取码；找到后把链接和备注存到下面的「我存的下载页」，下次就不用重找。</div>';
+      '<div class="hint">你发电过的作者会出现在上面的「爱发电」小节，名字对得上就能直接跳作者主页；没匹配到的再用站内搜索。很多作者的发电页会写网盘和提取码；找到后把链接和备注存到下面的「我存的下载页」，下次就不用重找。</div>';
   }
 
   function compatSection(s, e) {

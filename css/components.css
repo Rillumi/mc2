@@ -957,6 +957,24 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .linkitem .lm { font-size: 11px; color: var(--ink-3); flex: 0 0 auto; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .linkitem a { flex: 1; min-width: 0; font-size: 12px; color: var(--violet-deep); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 
+/* 爱发电：作者主页 + 相关帖子 */
+.afdrow {
+  display: flex; align-items: center; gap: 9px;
+  background: #fff; border: 1px solid var(--line); border-radius: 11px;
+  padding: 8px 10px; margin-bottom: 6px;
+}
+.afdava { width: 26px; height: 26px; border-radius: 50%; flex: 0 0 auto; object-fit: cover; background: var(--line); }
+.afdt { flex: 1; min-width: 0; display: grid; gap: 2px; }
+.afdname { font-size: 12.5px; font-weight: 650; color: var(--ink); }
+.afdname:hover { color: var(--violet-deep); }
+.afdt small { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.afdpost {
+  font-size: 11px; color: var(--violet-deep); overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap;
+}
+.afdpost:hover { text-decoration: underline; }
+.afdrow .btn { flex: 0 0 auto; }
+
 /* ===== 搜索按钮 ===== */
 .searchbtn { display: inline-flex; align-items: center; gap: 6px; }
 .searchbtn svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2; }

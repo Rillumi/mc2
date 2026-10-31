@@ -1126,6 +1126,19 @@
     }
   }
 
+  /* ---------- 爱发电：更新我发电过的作者名单 ---------- */
+  async function refreshAfdian() {
+    const st = S();
+    if (st.afdian && st.afdian.busy) return;
+    try {
+      await MC.afdian.refresh();
+      toast('爱发电名单已更新');
+    } catch (err) {
+      toast('爱发电更新失败：' + (err.message || err));
+    }
+    touch();
+  }
+
   /* ---------- 下载页仓库：MySQL / 本地兜底 ---------- */
   function syncDbState() {
     const d = MC.linksdb.state;
@@ -1618,6 +1631,10 @@
         if (ta) bulkLinks(ta);
         return true;
       }
+
+      case 'afdianrefresh':
+        refreshAfdian();
+        return true;
     }
     return false;
   }
@@ -2016,6 +2033,7 @@
     loadMcList();
     loadLoaderList();
     MC.linksdb.boot().then(syncDbState).catch(() => syncDbState());
+    if (MC.afdian) MC.afdian.boot().catch(() => {});
   }
 
   MC.ui = { init, importFiles, analyzeAndResolve, buildPack, toast, saveBlob, syncEnvInputs };
