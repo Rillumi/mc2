@@ -85,6 +85,20 @@
 }
 .libacts { display: flex; gap: 6px; margin-left: auto; }
 
+/* 我的库弹窗：小尺寸，只放文件夹列表 */
+.sheet.libsheet { width: min(560px, 100%); height: auto; max-height: min(78vh, 640px); }
+.libbody { padding-top: 18px; }
+.liblist { display: flex; flex-direction: column; gap: 8px; }
+.librow {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+}
+.librow-main { flex: 1 1 220px; min-width: 0; }
+.librow-main b { display: block; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.librow-main small { display: block; margin-top: 2px; font-size: 11px; color: var(--ink-3); }
+.librow-acts { display: flex; gap: 6px; margin-left: auto; }
+.lib-empty { padding: 26px 10px; text-align: center; color: var(--ink-3); font-size: 12px; }
+
 /* 概览 */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
 .stat {

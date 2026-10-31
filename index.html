@@ -80,8 +80,8 @@
             <small id="libMeta"></small>
           </div>
           <div class="libacts">
-            <button type="button" class="btn soft sm" id="libRescan">一键重扫</button>
-            <button type="button" class="btn line sm" id="libForget">移除</button>
+            <button type="button" class="btn soft sm" id="libRescan">重扫</button>
+            <button type="button" class="btn line sm" id="libOpen">我的库</button>
           </div>
         </div>
         <div class="pills">
@@ -150,6 +150,30 @@
 </div>
 
 <div class="overlay" id="overlay" hidden></div>
+<div class="overlay" id="libModal" hidden>
+  <div class="scrim" data-close="lib"></div>
+  <div class="sheet libsheet" role="dialog" aria-modal="true" aria-labelledby="libModalTitle">
+    <header class="sheet-head">
+      <div class="sheet-title">
+        <div>
+          <b id="libModalTitle">我的库</b>
+          <small>记住的 mods 文件夹，点「重扫」直接读取</small>
+        </div>
+      </div>
+      <button type="button" class="icon-btn" id="libClose" aria-label="关闭">
+        <svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </header>
+    <div class="sheet-body libbody">
+      <div class="liblist" id="libList"></div>
+    </div>
+    <footer class="sheet-foot">
+      <button type="button" class="btn line sm" id="libAdd">＋ 添加文件夹</button>
+      <button type="button" class="btn soft sm" id="libDone">完成</button>
+    </footer>
+  </div>
+</div>
+
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="js/core/zip-reader.js"></script>
