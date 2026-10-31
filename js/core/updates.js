@@ -21,8 +21,10 @@
     return list;
   }
 
-  function norm(s) {
-    return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
+  /* 搜索结果只认同一个模组：slug 等于本地 modId，或标题按统一判重完全一致 */
+  const SEARCH_LEVELS = [MC.identity.LEVELS.MOD, MC.identity.LEVELS.NAME];
+  function sameHit(entry, hit) {
+    return MC.identity.same(entry, { id: hit.slug, name: hit.title }, SEARCH_LEVELS);
   }
 
   async function findProject(entry) {
@@ -33,13 +35,12 @@
       } catch (err) { /* 继续试下一个写法 */ }
     }
 
-    // 兜底：按名字搜一次，只认标题完全一致的，避免把别的模组当成同一个
+    // 兜底：按名字搜一次，只认同一个模组的，避免把别的模组当成同一个
     const name = String((entry && entry.name) || '').trim();
     if (!name) return null;
     try {
       const hits = await MC.api.modrinth.search(name, { limit: 5, facets: [['project_type:mod']] });
-      const want = norm(name);
-      const hit = (hits || []).find(h => norm(h.title) === want);
+      const hit = (hits || []).find(h => sameHit(entry, h));
       if (hit) return { id: hit.project_id, slug: hit.slug, title: hit.title };
     } catch (err) { /* 搜不到就算了 */ }
     return null;

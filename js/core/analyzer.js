@@ -56,12 +56,27 @@
     return !r || r === '*' ? '' : r;
   }
 
+  /* 依赖声明里只有 modId，所以前置判重只认 MOD 级（含 jar 里 provides 声明的其他 id） */
+  const DEP_LEVELS = [MC.identity.LEVELS.MOD];
+
+  /** 本地有哪些条目提供了这个依赖：先按归一化 ID 查表，再按统一判重扫一遍 allIds */
+  function providerList(d, providers) {
+    const out = (providers.get(normDep(d.modId)) || []).slice();
+    const probe = { id: d.modId };
+    providers.forEach(list => list.forEach(e => {
+      if (out.some(x => x.uid === e.uid)) return;
+      const ids = (e.allIds && e.allIds.length) ? e.allIds : [e.id];
+      if (ids.some(raw => MC.identity.same(probe, { id: raw }, DEP_LEVELS))) out.push(e);
+    }));
+    return out;
+  }
+
   /** 一个依赖在本地是否被满足：env / local / version / missing */
   function depStatus(d, providers) {
     const id = normDep(d.modId);
     const base = { modId: d.modId, range: rangeOf(d), mandatory: d.mandatory !== false, key: id };
     if (ENV_IDS.has(id)) return Object.assign(base, { state: 'env' });
-    const list = providers.get(id);
+    const list = providerList(d, providers);
     if (!list || !list.length) return Object.assign(base, { state: 'missing' });
     const range = base.range;
     if (!range) return Object.assign(base, { state: 'local', by: list[0].name, version: list[0].version });
