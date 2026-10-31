@@ -346,6 +346,8 @@
     if (group.sizes > 1) tags.push('<span class="tag">同 ID ' + group.sizes + ' 份</span>');
     if (s.filter === 'dup') tags.push('<span class="tag ok">已合并保留 1 份</span>');
     if (chosen.viaConnector) tags.push('<span class="tag src" title="Fabric 模组，通过 Sinytra Connector 在 Forge 上运行">经 Connector 兼容</span>');
+    tags.push('<span class="tag filetag" data-act="copy-file" data-file="' + esc(e.filePath || e.fileName || '') +
+      '" title="点击复制路径，去文件夹里搜这个文件">' + esc(e.fileName || '') + '</span>');
 
     const items = rows.map(r => ({
       value: r.uid,
@@ -824,7 +826,10 @@
       '<div class="sheet-body">' +
         '<div class="dsec-label">文件</div>' +
         '<div class="dmeta"><b>' + esc(e.fileName || '—') + '</b><span>' + fmtSize(e.size) + ' · modId ' +
-        esc(e.id || '—') + '</span><span>MC 要求：' + esc(e.mcRange || e.mc || '未声明') + '</span></div>' +
+        esc(e.id || '—') + '</span><span>MC 要求：' + esc(e.mcRange || e.mc || '未声明') + '</span>' +
+        '<div class="fpath-row"><span class="fpath">' + esc(e.filePath || e.fileName || '—') + '</span>' +
+        '<button type="button" class="btn line xs" data-act="copy-file" data-file="' +
+        esc(e.filePath || e.fileName || '') + '">复制路径</button></div></div>' +
         descSection(s, group.id, e) +
         mrSection(s, group.id, e) +
         recipeHtml(e) +

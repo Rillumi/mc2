@@ -27,12 +27,43 @@
     setTimeout(() => URL.revokeObjectURL(a.href), 5000);
   }
 
+  /* 复制文件路径：浏览器打不开资源管理器，只能把路径递到剪贴板 */
+  function copyText(text) {
+    if (!text) return;
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(text).then(
+        () => toast('已复制：' + text),
+        () => toast('复制失败，手动记一下：' + text)
+      );
+      return;
+    }
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.select();
+    try { document.execCommand('copy'); toast('已复制：' + text); }
+    catch (err) { toast('复制失败，手动记一下：' + text); }
+    ta.remove();
+  }
+
   /* ---------- 拖入文件夹 ---------- */
   function walkEntry(entry, out) {
     return new Promise(resolve => {
       if (!entry) return resolve();
       if (entry.isFile) {
-        entry.file(f => { out.push(f); resolve(); }, () => resolve());
+        entry.file(f => {
+          try {
+            // 记住它在文件夹里的相对路径，详情里能直接对上文件名
+            Object.defineProperty(f, 'modpilotPath', {
+              value: (entry.fullPath || ('/' + f.name)).replace(/^\/+/, ''),
+              configurable: true
+            });
+          } catch (err) { /* 某些浏览器不让加属性，就算了 */ }
+          out.push(f);
+          resolve();
+        }, () => resolve());
         return;
       }
       if (entry.isDirectory) {
@@ -120,6 +151,7 @@
         const entry = {
           uid: 'u' + Date.now().toString(36) + '-' + i + '-' + Math.random().toString(36).slice(2, 6),
           file, fileName: file.name, rel: file.webkitRelativePath || '',
+          filePath: file.modpilotPath || file.webkitRelativePath || file.name,
           size: file.size,
           kind: 'mod',
           id: '', name: file.name.replace(/\.(jar|zip)$/i, ''), version: '',
@@ -1433,6 +1465,10 @@
         if (inp) inp.click();
         return true;
       }
+
+      case 'copy-file':
+        copyText(el.dataset.file || '');
+        return true;
 
       case 'guidecat':
         st.guideCat = el.dataset.cat || 'all';

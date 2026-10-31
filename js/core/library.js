@@ -137,22 +137,30 @@
 
   async function readFiles(dir) {
     const out = [];
-    const walk = async d => {
+    const walk = async (d, prefix) => {
       const it = d.entries();
       while (true) {
         const step = await it.next();
         if (step.done) break;
         const name = step.value[0];
         const h = step.value[1];
+        const path = prefix ? prefix + '/' + name : name;
         if (h.kind === 'file') {
           if (!/\.(jar|zip)$/i.test(name)) continue;
-          try { out.push(await h.getFile()); } catch (err) { /* 单个文件读不了就跳过 */ }
+          try {
+            const f = await h.getFile();
+            try {
+              // 方便详情里显示「这个模组对应哪个文件」
+              Object.defineProperty(f, 'modpilotPath', { value: path, configurable: true });
+            } catch (err) { /* 忽略 */ }
+            out.push(f);
+          } catch (err) { /* 单个文件读不了就跳过 */ }
         } else if (h.kind === 'directory') {
-          await walk(h);
+          await walk(h, path);
         }
       }
     };
-    await walk(dir);
+    await walk(dir, '');
     return out;
   }
 
