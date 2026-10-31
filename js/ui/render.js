@@ -1237,19 +1237,50 @@
       return '<div class="vpanel toolcard"><div class="vhead"><h3>资源包顺序</h3></div>' +
         '<div class="vbody"><div class="hint">当前这份里没有资源包。拖入带材质包的文件夹后，这里会按优先级列出它们，并导出顺序文件。</div></div></div>';
     }
-    const rows = packs.map((o, i) =>
-      '<div class="rprow"><span class="rpnum">' + (i + 1) + '</span>' +
-      '<div class="t"><b>' + esc(o.fileName) + '</b><small>' + fmtSize(o.size) + (o.description ? ' · ' + esc(o.description) : '') + '</small></div>' +
+    const adv = s.packAdvice || {};
+    const byUid = adv.byUid || {};
+    const nameOf = uid => {
+      const p = packs.find(x => x.uid === uid);
+      return p ? p.fileName : '（不在本次清单里）';
+    };
+    const rows = packs.map((o, i) => {
+      const tips = (byUid[o.uid] && byUid[o.uid].tips) || [];
+      return '<div class="rprow"><span class="rpnum">' + (i + 1) + '</span>' +
+      '<div class="t"><b>' + esc(o.fileName) + '</b><small>' + fmtSize(o.size) + (o.description ? ' · ' + esc(o.description) : '') + '</small>' +
+      tips.map(t => '<small class="ript">作者原话：' + esc(t) + '</small>').join('') +
+      '</div>' +
       '<div class="rpacts">' +
       '<button type="button" class="btn line xs" data-act="rp-up" data-uid="' + esc(o.uid) + '"' + (i === 0 ? ' disabled' : '') + '>上移</button>' +
       '<button type="button" class="btn line xs" data-act="rp-down" data-uid="' + esc(o.uid) + '"' + (i === packs.length - 1 ? ' disabled' : '') + '>下移</button>' +
-      '</div></div>').join('');
+      '</div></div>';
+    }).join('');
+
+    const orderNote = (adv.order || []).length
+      ? '<div class="rptips"><b>已按作者的说明调整顺序</b>' + adv.order.map(r =>
+        '<div class="riptline">【' + esc(nameOf(r.above)) + '】要排在【' + esc(nameOf(r.below)) + '】上面' +
+        (r.url ? ' <a href="' + esc(r.url) + '" target="_blank" rel="noreferrer">来源</a>' : '') +
+        '</div>').join('') + '</div>'
+      : '';
+
+    const conf = (adv.conflicts || []).length
+      ? '<div class="rpconf"><b>同文件冲突 ' + adv.conflicts.length + ' 对</b>' +
+        adv.conflicts.slice(0, 8).map(c =>
+          '<div class="riptline">' + esc(nameOf(c.a)) + ' 与 ' + esc(nameOf(c.b)) + ' 都改了 ' +
+          c.count + ' 个文件，例如 <code>' + esc(c.samples[0] || '') + '</code>。上面的会盖住下面的。</div>').join('') +
+        '</div>'
+      : '<div class="rpconf ok"><b>没有发现资源包互相覆盖的文件</b><span class="hint">按文件路径逐条比对过，各改各的就不会冲突。</span></div>';
+
+    const same = (adv.sameProject || []).length
+      ? '<div class="rpsame"><b>可能装重了</b>' + adv.sameProject.map(x =>
+        '<div class="riptline">模组「' + esc(x.modName) + '」和资源包「' + esc(x.packName) + '」是同一个 Modrinth 项目，通常只需要装其中一个。</div>').join('') +
+        '</div>'
+      : '';
 
     return '<div class="vpanel toolcard"><div class="vhead"><h3>资源包顺序</h3>' +
       '<button type="button" class="btn line sm" data-act="rpexport-order">导出顺序清单</button>' +
       '<button type="button" class="btn line sm" data-act="rpexport-options">导出 options.txt 片段</button></div>' +
       '<div class="vbody"><div class="rpnum-note">越靠上，优先级越高；两个包改同一个文件时，只有上面的生效。</div>' +
-      '<div class="rplist">' + rows + '</div></div></div>';
+      orderNote + '<div class="rplist">' + rows + '</div>' + conf + same + '</div></div>';
   }
 
   function logCard(s) {

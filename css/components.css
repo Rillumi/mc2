@@ -767,6 +767,21 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .rprow .t b { display: block; font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rprow .t small { display: block; font-size: 10.5px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rpacts { display: flex; gap: 4px; flex: 0 0 auto; }
+.rprow .t .ript { display: block; font-size: 10.5px; color: var(--violet-deep); line-height: 1.55; margin-top: 2px; white-space: normal; }
+.rptips, .rpconf, .rpsame {
+  margin: 10px 0 2px; padding: 10px 12px; border-radius: 12px;
+  font-size: 11.5px; line-height: 1.65; color: var(--ink-2);
+  background: var(--grad-soft); border: 1px solid rgba(124, 99, 232, .18);
+}
+.rptips b, .rpconf b, .rpsame b { display: block; color: var(--violet-deep); margin-bottom: 3px; }
+.rpconf { background: rgba(255, 209, 102, .13); border-color: rgba(226, 168, 44, .3); }
+.rpconf > b, .rpsame > b { color: #B4791B; }
+.rpconf.ok { background: rgba(90, 200, 150, .1); border-color: rgba(90, 200, 150, .3); }
+.rpconf.ok > b { color: #2E8B63; }
+.rpsame { background: rgba(255, 120, 140, .1); border-color: rgba(230, 90, 120, .28); }
+.rpsame > b { color: #C24A68; }
+.riptline { margin-top: 3px; }
+.riptline code { font-size: 10.5px; padding: 1px 4px; border-radius: 5px; background: rgba(0, 0, 0, .05); word-break: break-all; }
 
 .loglist { display: grid; gap: 8px; }
 .logf { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; background: #fff; }

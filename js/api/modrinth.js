@@ -112,6 +112,56 @@
     throw lastError || new Error('Modrinth 请求失败');
   }
 
+  /** 批量：哈希 → 版本对象。不按加载器/版本过滤，所以资源包、光影也能查出所属项目 */
+  async function versionFiles(hashes) {
+    const uniq = Array.from(new Set((hashes || []).filter(Boolean)));
+    if (!uniq.length) return {};
+    let lastError = null;
+    for (let i = 0; i < 3; i++) {
+      await gate();
+      try {
+        const res = await fetch(BASE + '/version_files', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({ hashes: uniq, algorithm: 'sha1' })
+        });
+        if (res.status === 429) {
+          const after = Number(res.headers.get('Retry-After'));
+          await sleep(after > 0 ? Math.min(after * 1000, 10000) : 2200);
+          continue;
+        }
+        if (!res.ok) throw new Error('Modrinth 返回 ' + res.status);
+        return await res.json();
+      } catch (err) {
+        lastError = err;
+        if (i < 2) await sleep(700);
+      }
+    }
+    throw lastError || new Error('Modrinth 请求失败');
+  }
+
+  /** 批量：项目 id / slug → 项目详情（含正文 body），每批最多 40 个 */
+  async function projectsByIds(ids) {
+    const uniq = Array.from(new Set((ids || []).filter(Boolean).map(String)));
+    const out = [];
+    for (let i = 0; i < uniq.length; i += 40) {
+      const chunk = uniq.slice(i, i + 40);
+      let list = null;
+      let lastError = null;
+      for (let t = 0; t < 3 && !list; t++) {
+        try {
+          list = await get('/projects?ids=' + encodeURIComponent(JSON.stringify(chunk)));
+        } catch (err) {
+          lastError = err;
+          if (t < 2) await sleep(700);
+        }
+      }
+      if (!list && lastError) throw lastError;
+      (list || []).forEach(p => out.push(p));
+    }
+    return out;
+  }
+
   /** 在符合环境的版本里，按依赖给出的版本区间挑一个；挑不到就取最新的正式版 */
   function pickVersion(list, range) {
     if (!list || !list.length) return null;
@@ -133,5 +183,5 @@
   }
 
   MC.api = MC.api || {};
-  MC.api.modrinth = { get, project, search, versions, versionFilesUpdate, pickVersion, download, loaderSlug };
+  MC.api.modrinth = { get, project, search, versions, versionFilesUpdate, versionFiles, projectsByIds, pickVersion, download, loaderSlug };
 })(globalThis);

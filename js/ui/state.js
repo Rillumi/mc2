@@ -50,6 +50,10 @@
     descLang: 'zh',     // 简介显示：zh 机翻 / en 作者原文
     descTr: {},         // 组 id → { status, text, reason } 机翻结果
     mr: {},             // 组 id → Modrinth 完整简介 { status, text, title, url, downloads }
+    projects: {},       // projectId → Modrinth 项目详情（扫描后批量预取，详情页秒开）
+    hashProject: {},    // sha1 → projectId
+    prefetching: false, // 是否正在批量拉项目资料
+    packAdvice: null,   // 资源包：{ order, tips, conflicts, sameProject, byUid }
     bodyLang: 'zh',     // Modrinth 简介显示：zh 机翻 / en 原文
     bodyTr: {},         // 组 id → Modrinth 简介的机翻结果
     mcList: [],         // 游戏版本下拉候选

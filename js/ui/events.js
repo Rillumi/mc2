@@ -124,6 +124,9 @@
             entry.sha1 = await sha1Hex(buf);
             // mods.toml 里写的版本常常是摆设（1.0.0），真实版本在文件名里
             entry.version = MC.metadata.resolveVersion(entry.version, file.name, entry.name);
+          } else if (res.kind === 'resourcepack') {
+            // 资源包也算哈希：才能认出它和哪个模组是同一个 Modrinth 项目
+            entry.sha1 = await sha1Hex(buf);
           }
         } catch (err) {
           entry.error = '读不出来：' + (err && err.message ? err.message : err);
@@ -193,6 +196,8 @@
     const notMod = built.notMod;
     st.progress = '';
     await analyzeAndResolve(true);
+    // 读取完就把每个项目的资料（简介 / 正文 / 图标）批量拉回来，详情页不用再等网络
+    prefetchProjects();
 
     if (notMod) {
       st.showOthers = true;
@@ -225,11 +230,51 @@
     }
     touch();
 
-    for (const dep of st.deps) {
+    const pending = st.deps.filter(d => !(d.status === 'ok' && d.version));
+    if (pending.length) {
+      // 前置的 modId 大多就是 slug：先用一次批量项目请求全部命中，再并发补版本
+      await preResolveDeps(pending);
       if (my !== gen) return;
-      if (dep.status === 'ok' && dep.version) continue;
-      await matchDep(dep, null, my);
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < pending.length) {
+          if (my !== gen) return;
+          const dep = pending[cursor++];
+          await matchDep(dep, null, my);
+        }
+      };
+      await Promise.all([worker(), worker(), worker()]);
     }
+    if (my !== gen) return;
+    analyzePacks(st);
+    touch();
+  }
+
+  /** 把一堆前置的 id / modId / 别名 / 记住的 slug 合成一次 /projects?ids= 批量请求 */
+  async function preResolveDeps(deps) {
+    const map = MC.resolver.loadMap();
+    const keys = [];
+    const lookup = dep => {
+      const cached = map[dep.id] && map[dep.id].slug;
+      const alias = MC.resolver.ALIASES[String(dep.id || '').toLowerCase()] ||
+        MC.resolver.ALIASES[String(dep.modId || '').toLowerCase()];
+      return [cached, alias, dep.id, dep.modId].filter(Boolean);
+    };
+    deps.forEach(dep => lookup(dep).forEach(k => {
+      const low = String(k).toLowerCase();
+      if (keys.indexOf(low) < 0) keys.push(low);
+    }));
+    if (!keys.length) return;
+    let projects = [];
+    try { projects = await MC.api.modrinth.projectsByIds(keys); } catch (err) { return; }
+    const by = new Map();
+    projects.forEach(p => {
+      [p.slug, p.id].filter(Boolean).forEach(k => by.set(String(k).toLowerCase(), p));
+    });
+    deps.forEach(dep => {
+      const hit = lookup(dep).map(k => by.get(String(k).toLowerCase())).find(Boolean);
+      if (hit) dep.prematch = { id: hit.id, slug: hit.slug, title: hit.title };
+    });
   }
 
   async function matchDep(dep, word, my) {
@@ -376,6 +421,86 @@
     return rows.find(r => r.uid === st.selection[g.id]) || rows[0] || null;
   }
 
+  /* ---------- 批量预取 Modrinth 项目资料 ---------- */
+  function packUrl(p) {
+    if (!p) return '';
+    return 'https://modrinth.com/' + (p.project_type === 'resourcepack' ? 'resourcepack' :
+      p.project_type === 'shader' ? 'shader' : 'mod') + '/' + encodeURIComponent(p.slug || p.id);
+  }
+
+  async function prefetchProjects() {
+    const st = S();
+    if (!st.mods.length) return;
+    const my = gen;
+    const hashes = Array.from(new Set(st.mods.filter(e => e.sha1).map(e => e.sha1)));
+    if (!hashes.length) return;
+    st.prefetching = true;
+    touch();
+    try {
+      // 一次请求：所有 jar / 资源包的哈希 → 所属项目 id（包括未在 Modrinth 上的会缺席）
+      const map = await MC.api.modrinth.versionFiles(hashes);
+      if (my !== gen) return;
+      const pidByHash = {};
+      const pids = [];
+      Object.keys(map || {}).forEach(h => {
+        const v = map[h];
+        const pid = v && v.project_id;
+        if (!pid) return;
+        pidByHash[h] = pid;
+        if (pids.indexOf(pid) < 0) pids.push(pid);
+      });
+      const old = st.hashProject || {};
+      st.hashProject = Object.assign({}, old, pidByHash);
+      if (pids.length) {
+        // 再按项目 id 批量拿标题、简介、正文（资源包顺序说明就在正文里）
+        const list = await MC.api.modrinth.projectsByIds(pids);
+        if (my !== gen) return;
+        const next = Object.assign({}, st.projects || {});
+        list.forEach(p => { next[p.id] = p; });
+        st.projects = next;
+      }
+    } catch (err) {
+      /* 预取失败不影响本地整理，详情页打开时还会再试一次 */
+    } finally {
+      if (my === gen) {
+        st.prefetching = false;
+        analyzePacks(st);
+        touch();
+      }
+    }
+  }
+
+  /** 资源包：作者建议顺序 / 同路径冲突 / 和模组是同一个项目 */
+  function analyzePacks(st) {
+    if (!st.analysis || !MC.packs) return;
+    const others = st.analysis.others || [];
+    const packs = others.filter(o => o.kind === 'resourcepack').map(o => {
+      const pid = o.sha1 ? (st.hashProject || {})[o.sha1] : '';
+      const project = pid ? (st.projects || {})[pid] : null;
+      return {
+        uid: o.uid, fileName: o.fileName, size: o.size,
+        assets: o.assets || [], project, url: packUrl(project)
+      };
+    });
+    const mods = [];
+    (st.analysis.groups || []).forEach(g => {
+      const row = chosenOf(st, g);
+      if (!row) return;
+      const pid = row.entry.sha1 ? (st.hashProject || {})[row.entry.sha1] : '';
+      const project = pid ? (st.projects || {})[pid] : null;
+      if (project) mods.push({
+        uid: row.uid, id: row.entry.id, name: row.entry.name,
+        version: row.entry.version, sha1: row.entry.sha1,
+        project, groupId: g.id
+      });
+    });
+    const advice = MC.packs.analyze(packs, mods);
+    st.packAdvice = advice;
+    if (advice.order.length && packs.length) {
+      st.rpOrder = MC.packs.applyOrder(packs, advice.order);
+    }
+  }
+
   /* ---------- 简介机翻：打开详情时自动翻一次 ---------- */
   async function ensureDesc(gid) {
     const st = S();
@@ -415,6 +540,17 @@
       .trim();
   }
 
+  /** 这个条目（或同组任意版本）已经预取到项目资料了吗 */
+  function projectForEntry(st, e, g) {
+    const byHash = h => h ? (st.projects || {})[(st.hashProject || {})[h]] : null;
+    if (e && byHash(e.sha1)) return byHash(e.sha1);
+    for (const r of ((g && g.rows) || [])) {
+      const p = r.entry && byHash(r.entry.sha1);
+      if (p) return p;
+    }
+    return null;
+  }
+
   async function ensureMrDesc(gid) {
     const st = S();
     if (!st.analysis || !gid || String(gid).indexOf('o:') === 0) return;
@@ -425,6 +561,26 @@
     const row = chosenOf(st, g);
     const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
     if (!e) return;
+
+    // 读取时已经批量拿回来了：直接用缓存，不再发请求
+    const cached = projectForEntry(st, e, g);
+    if (cached && cached.body) {
+      const text = mdToText(cached.body);
+      if (text) {
+        st.mr[gid] = {
+          status: 'ok',
+          text: text.slice(0, 6000),
+          title: cached.title || '',
+          url: packUrl(cached),
+          downloads: cached.downloads || 0,
+          follows: cached.followers || 0,
+          updated: cached.updated || ''
+        };
+        touch();
+        if ((st.bodyLang || 'zh') === 'zh') ensureBodyTr(gid);
+        return;
+      }
+    }
 
     st.mr[gid] = { status: 'loading' };
     touch();
@@ -624,6 +780,90 @@
   }
 
   /* ---------- 对比：导入另一个包 ---------- */
+  /** 拖进来的是整合包 .zip：把里面 mods/*.jar 解出来一起对比 */
+  async function expandModpack(files) {
+    const st = S();
+    const out = [];
+    for (const file of files) {
+      if (!/\.zip$/i.test(file.name)) continue;
+      let z;
+      try { z = MC.zip.parseCentral(await file.arrayBuffer()); } catch (err) { continue; }
+      const jarNames = [];
+      z.map.forEach((_, n) => { if (/^mods\/[^/]+\.jar$/i.test(n)) jarNames.push(n); });
+
+      if (!jarNames.length) {
+        // .mrpack 本身不含 jar，只有 modrinth.index.json 清单
+        if (z.map.has('modrinth.index.json')) {
+          try {
+            const idx = JSON.parse(await MC.zip.readEntry(z, 'modrinth.index.json') || '{}');
+            (idx.files || []).forEach(f => {
+              const path = String(f.path || '');
+              if (!/^mods\//i.test(path)) return;
+              const name = path.split('/').pop();
+              out.push(newDiffEntry(name, path, 0, out.length));
+            });
+          } catch (err) { /* 清单坏了就跳过 */ }
+          continue;
+        }
+        // CurseForge 整合包：manifest.json + modlist.html，名字只能从 modlist 里读
+        if (z.map.has('modlist.html')) {
+          try {
+            const html = await MC.zip.readEntry(z, 'modlist.html') || '';
+            const re = /<a\s+href="([^"]+)"[^>]*>([^<]+)<\/a>/gi;
+            let m;
+            while ((m = re.exec(html))) {
+              const name = m[2].replace(/\s*\(by[^)]*\)\s*$/i, '').trim();
+              if (!name) continue;
+              const pid = (m[1].match(/\/projects\/(\d+)/) || [])[1] || '';
+              const entry = newDiffEntry(name.replace(/\s+/g, '_') + '.jar', 'mods/' + name, 0, out.length);
+              entry.name = name;
+              entry.id = pid ? 'cf' + pid : name.toLowerCase();
+              out.push(entry);
+            }
+          } catch (err) { /* modlist 坏了就跳过 */ }
+          continue;
+        }
+        continue;
+      }
+
+      st.scan = { note: '正在解开整合包', done: 0, total: jarNames.length, name: file.name };
+      touch();
+      for (let i = 0; i < jarNames.length; i++) {
+        const name = jarNames[i];
+        st.scan.done = i;
+        st.scan.name = name;
+        if (i % 10 === 0) { touch(); await new Promise(r => setTimeout(r, 0)); }
+        try {
+          const bytes = await MC.zip.readEntryBytes(z, name);
+          if (!bytes) continue;
+          const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+          const res = await MC.metadata.inspect(buf);
+          const fileName = name.split('/').pop();
+          const entry = newDiffEntry(fileName, name, bytes.length, out.length);
+          if (res.info) Object.assign(entry, res.info);
+          if (entry.kind === 'mod') {
+            entry.version = MC.metadata.resolveVersion(entry.version, fileName, entry.name);
+          }
+          out.push(entry);
+        } catch (err) { /* 单个 jar 坏了不影响其他 */ }
+        st.scan.done = i + 1;
+      }
+      st.scan = null;
+      touch();
+    }
+    return out;
+  }
+
+  function newDiffEntry(fileName, rel, size, i) {
+    return {
+      uid: 'x' + Date.now().toString(36) + '-' + i + '-' + Math.random().toString(36).slice(2, 5),
+      file: null, fileName, rel, size, kind: 'mod',
+      id: '', name: fileName.replace(/\.(jar|zip)$/i, ''), version: '',
+      loader: '', loaders: [], mc: '', mcRange: '',
+      allIds: [], deps: [], optionalDeps: [], recipes: 0, error: null, sha1: ''
+    };
+  }
+
   async function importDiff(files) {
     const st = S();
     const list = Array.from(files || []).filter(f => /\.(jar|zip)$/i.test(f.name));
@@ -633,16 +873,22 @@
       return toast('没找到 .jar / .zip 文件');
     }
     const built = await buildEntries(list, '正在读取另一个包');
+    const nested = await expandModpack(list);
     st.progress = '';
     st.diff = {
-      mods: built.entries.filter(e => (e.kind || 'mod') === 'mod'),
+      mods: built.entries.filter(e => (e.kind || 'mod') === 'mod').concat(nested.filter(e => (e.kind || 'mod') === 'mod')),
       others: built.entries.filter(e => e.kind === 'resourcepack' || e.kind === 'shader'),
       at: Date.now()
     };
+    st.scan = null;
     touch();
     const packs = st.diff.others.length;
-    if (!st.diff.mods.length && !packs) return toast('这个文件夹里没有模组');
-    toast('已导入另一个包：' + st.diff.mods.length + ' 个模组' + (packs ? ' / ' + packs + ' 个资源包、光影' : ''));
+    if (!st.diff.mods.length && !packs) {
+      return toast('这个压缩包里没找到模组；整合包需要把 mods 文件夹一起打进去');
+    }
+    toast('已导入另一个包：' + st.diff.mods.length + ' 个模组' +
+      (packs ? ' / ' + packs + ' 个资源包、光影' : '') +
+      (nested.length ? '（其中 ' + nested.length + ' 个从整合包内解出）' : ''));
   }
 
   /* ---------- 工具：日志粗筛 ---------- */
@@ -1600,6 +1846,12 @@
         st.updateError = '';
         st.diff = { mods: [], at: 0 };
         st.rpOrder = [];
+        st.projects = {};
+        st.hashProject = {};
+        st.packAdvice = null;
+        st.mr = {};
+        st.descTr = {};
+        st.bodyTr = {};
         st.logs = { name: '', findings: [], lines: 0, errors: 0 };
         st.detail = null;
         st.previewOpen = false;

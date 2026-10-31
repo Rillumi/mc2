@@ -92,6 +92,13 @@
     let candidates = [];
 
     if (!override) {
+      // 批量预解析已经命中的，直接复用，省掉一次 /project 请求
+      if (dep.prematch && dep.prematch.id) {
+        project = dep.prematch;
+        via = '批量命中';
+      }
+    }
+    if (!project && !override) {
       const cached = loadMap()[dep.id];
       if (cached && cached.slug) {
         project = await API.project(cached.slug);
