@@ -8,6 +8,109 @@
   const FM = MC.flowMeta;
   const FA = MC.flowAnalysis;
 
+  const packZips = new WeakMap();
+
+  /** 整套清空，进入文件夹模式（重扫 / 拖入整合包都走这里） */
+  function resetAll(st) {
+    st.mode = 'folder';
+    st.mods = [];
+    st.analysis = null;
+    st.selection = {};
+    st.excluded = {};
+    st.deps = [];
+    st.adapt = {};
+    st.connector = null;
+    st.detail = null;
+    st.filter = 'all';
+    st.rpOrder = [];
+    st.rpPair = {};
+    st.updates = {};
+  }
+
+  /** 这个文件是整合包吗（.mrpack 或带 mods/ 清单的 .zip），是就返回类型 */
+  async function packType(file) {
+    if (!/\.(zip|mrpack)$/i.test(file.name)) return '';
+    let z = packZips.get(file);
+    if (!z) {
+      try { z = MC.zip.parseCentral(await file.arrayBuffer()); } catch (err) { return ''; }
+      packZips.set(file, z);
+    }
+    return MC.modpack.detect(z.map);
+  }
+
+  /** 从字节补齐条目信息：整理页的 jar 和整合包里解出的 jar 共用 */
+  async function inspectInto(entry, buf) {
+    const res = await MC.metadata.inspect(buf);
+    entry.kind = res.kind;
+    if (res.info) Object.assign(entry, res.info);
+    else if (res.kind === 'mod') entry.error = '没有找到模组元数据';
+    if (res.kind === 'mod' || res.kind === 'resourcepack') entry.sha1 = await sha1Hex(buf);
+    if (res.kind === 'mod') {
+      // mods.toml 里写的版本常常是摆设（1.0.0），真实版本在文件名里
+      entry.version = MC.metadata.resolveVersion(entry.version, entry.fileName, entry.name);
+    }
+    if (!entry.mc) entry.mc = MC.metadata.inferMcFromName(entry.fileName);
+    if (!entry.id) entry.id = entry.fileName.replace(/\.(jar|zip)$/i, '').toLowerCase();
+    return res;
+  }
+
+  /** 扫一个整合包：解出 mods/*.jar，顺便读清单里的加载器 / MC 版本 */
+  async function scanPack(file) {
+    const st = S();
+    let z = packZips.get(file);
+    if (!z) {
+      try { z = MC.zip.parseCentral(await file.arrayBuffer()); } catch (err) { return null; }
+    }
+    const type = MC.modpack.detect(z.map);
+    if (!type) return null;
+
+    const pack = { name: file.name, type, title: '', env: {}, online: 0, entries: [], empty: false };
+    if (type === 'mrpack') {
+      try {
+        const idx = JSON.parse(await MC.zip.readEntry(z, 'modrinth.index.json') || '{}');
+        pack.env = MC.modpack.envFromMrpack(idx);
+        pack.title = idx.name || '';
+        pack.online = (idx.files || []).filter(f => /^mods\//i.test(String(f.path || ''))).length;
+      } catch (err) { /* 清单坏了也照样解 jar */ }
+    } else if (type === 'curseforge') {
+      try {
+        const mf = JSON.parse(await MC.zip.readEntry(z, 'manifest.json') || '{}');
+        pack.env = MC.modpack.envFromCurse(mf);
+        pack.title = mf.title || mf.name || '';
+        pack.online = (mf.files || []).length;
+      } catch (err) { /* 忽略 */ }
+    }
+
+    const jars = MC.modpack.jarPaths(z.map);
+    if (!jars.length) {
+      pack.empty = true;
+      return pack;
+    }
+
+    st.scan = { note: '正在解开整合包「' + (pack.title || file.name) + '」', done: 0, total: jars.length, name: '' };
+    touch();
+    for (let i = 0; i < jars.length; i++) {
+      const name = jars[i];
+      st.scan.done = i;
+      st.scan.name = name.split('/').pop();
+      if (i % 8 === 0) { touch(); await new Promise(r => setTimeout(r, 0)); }
+      try {
+        const bytes = await MC.zip.readEntryBytes(z, name);
+        if (!bytes) continue;
+        const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+        const entry = newDiffEntry(name.split('/').pop(), name, bytes.length, pack.entries.length);
+        entry.filePath = file.name + ' / ' + name;
+        const res = await inspectInto(entry, buf);
+        if (res.kind === 'mod' || res.kind === 'resourcepack' || res.kind === 'shader') pack.entries.push(entry);
+      } catch (err) { /* 单个 jar 坏了不影响其他 */ }
+      st.scan.done = i + 1;
+    }
+    pack.online = Math.max(0, pack.online - jars.length);
+    st.scan = null;
+    touch();
+    return pack;
+  }
+
   /* ---------- 把文件读成条目（整理页 / 对比页共用） ---------- */
   async function buildEntries(files, note) {
     const st = S();
@@ -40,19 +143,8 @@
         };
         try {
           const buf = await file.arrayBuffer();
-          const res = await MC.metadata.inspect(buf);
-          entry.kind = res.kind;
-          if (res.info) Object.assign(entry, res.info);
-          else if (res.kind === 'mod') entry.error = '没有找到模组元数据';
-          else notMod++;
-          if (res.kind === 'mod') {
-            entry.sha1 = await sha1Hex(buf);
-            // mods.toml 里写的版本常常是摆设（1.0.0），真实版本在文件名里
-            entry.version = MC.metadata.resolveVersion(entry.version, file.name, entry.name);
-          } else if (res.kind === 'resourcepack') {
-            // 资源包也算哈希：才能认出它和哪个模组是同一个 Modrinth 项目
-            entry.sha1 = await sha1Hex(buf);
-          }
+          const res = await inspectInto(entry, buf);
+          if (!res.info && res.kind !== 'mod') notMod++;
         } catch (err) {
           entry.error = '读不出来：' + (err && err.message ? err.message : err);
         }
@@ -73,70 +165,99 @@
   async function importFiles(files, opts) {
     opts = opts || {};
     const st = S();
-    // 一键重扫：整个替换，这样文件夹里删掉的模组也会从列表消失
-    if (opts.replace) {
-      st.mode = 'folder';
-      st.mods = [];
-      st.analysis = null;
-      st.selection = {};
-      st.excluded = {};
-      st.deps = [];
-      st.adapt = {};
-      st.connector = null;
-      st.detail = null;
-      st.filter = 'all';
-      st.rpOrder = [];
-      st.rpPair = {};
-      st.updates = {};
-    }
-    let list = Array.from(files || []).filter(f => /\.(jar|zip)$/i.test(f.name));
+    let list = Array.from(files || []).filter(f => /\.(jar|zip|mrpack)$/i.test(f.name));
     if (!list.length) {
       st.scan = null;
       touch();
-      return toast('没找到 .jar / .zip 文件，把 mods 文件夹拖进来就行');
+      return toast('没找到 .jar / .zip / .mrpack 文件，把 mods 文件夹或整合包拖进来就行');
     }
 
-    // 拖进来的是文件夹 → 回到「整理整个文件夹」模式
-    if (opts.fromFolder && st.mode === 'single') {
-      st.mode = 'folder';
-      st.mods = [];
-      st.analysis = null;
-      st.selection = {};
-      st.excluded = {};
-      st.deps = [];
-      st.detail = null;
+    // 拖进来的可能是整个整合包：先认出来，再解出里面的 jar
+    const packs = [];
+    let plain = [];
+    for (const f of list) {
+      if (await packType(f)) packs.push(f);
+      else plain.push(f);
+    }
+    const scanned = [];
+    const emptyPacks = [];
+    const packEnv = {};
+    for (const f of packs) {
+      const pack = await scanPack(f);
+      if (!pack) continue;
+      if (pack.empty) { emptyPacks.push(pack.title || f.name); continue; }
+      scanned.push(pack);
+      Object.assign(packEnv, pack.env || {});
+    }
+    st.scan = null;
+
+    if (!scanned.length && emptyPacks.length && !plain.length) {
+      touch();
+      return toast('「' + emptyPacks[0] + '」只有整合包清单、没有 mods 文件，读不出前置和版本；在启动器里装好后拖 mods 文件夹就行');
+    }
+
+    const hasPack = scanned.length > 0;
+    const single = !hasPack && (opts.single || st.mode === 'single');
+
+    // 一键重扫 / 拖入整合包：整个替换，这样删掉的模组也会从列表消失
+    if (hasPack) {
+      resetAll(st);
+      // 整合包清单里写着加载器和 MC 版本，先套上再分析
+      if (packEnv.loader && MC.store.DEFAULTS[packEnv.loader]) st.env.loader = packEnv.loader;
+      if (packEnv.loaderVersion) st.env.loaderVersion = packEnv.loaderVersion;
+      if (packEnv.mc) st.env.mc = packEnv.mc;
+      if (packEnv.loader || packEnv.loaderVersion || packEnv.mc) {
+        st.updates = {};
+        st.connector = null;
+        MC.store.saveEnv();
+      }
+    } else if (single) {
+      resetAll(st);
+      st.mode = 'single';
+      if (plain.length > 1) {
+        toast('单模组模式只分析第一个文件');
+        plain = plain.slice(0, 1);
+      }
+    } else if (opts.replace) {
+      resetAll(st);
+    } else if (opts.fromFolder && st.mode === 'single') {
+      resetAll(st);
       toast('已切回文件夹模式');
     }
 
-    const single = opts.single || st.mode === 'single';
-    if (single) {
-      st.mode = 'single';
-      st.mods = [];
-      st.analysis = null;
-      st.selection = {};
-      st.excluded = {};
-      st.deps = [];
-      st.detail = null;
-      st.filter = 'all';
-      if (list.length > 1) {
-        toast('单模组模式只分析第一个文件');
-        list = list.slice(0, 1);
-      }
+    let packEntries = [];
+    if (hasPack) {
+      scanned.forEach(pack => { packEntries = packEntries.concat(pack.entries); });
     }
 
-    const seen = new Set(st.mods.map(m => m.fileName + ':' + m.size));
-    const fresh = single ? list : list.filter(f => !seen.has(f.name + ':' + f.size));
-    if (!fresh.length) {
+    let plainEntries = [];
+    // 整合包里解出来的资源包 / 光影也放到「资源包与光影」里
+    let notMod = packEntries.filter(e => e.kind === 'resourcepack' || e.kind === 'shader').length;
+    if (plain.length) {
+      let fresh = plain;
+      if (!hasPack && !single) {
+        const seen = new Set(st.mods.map(m => m.fileName + ':' + m.size));
+        fresh = plain.filter(f => !seen.has(f.name + ':' + f.size));
+        if (!fresh.length) {
+          st.scan = null;
+          touch();
+          return toast('这些文件已经在列表里了');
+        }
+      }
+      const built = await buildEntries(fresh, hasPack ? '正在读取另外的文件' : '正在读取');
+      plainEntries = built.entries;
+      notMod = built.notMod;
+    }
+
+    const entries = packEntries.concat(plainEntries);
+    if (!entries.length) {
       st.scan = null;
       touch();
-      return toast('这些文件已经在列表里了');
+      return toast('没有读到可分析的模组');
     }
-
-    const built = await buildEntries(fresh, '正在读取');
-    st.mods.push(...built.entries);
-    if (opts.handle && !single && MC.libraryPanel) MC.libraryPanel.save(opts.handle, st);
+    st.mods.push(...entries);
+    if (opts.handle && !single && !hasPack && MC.libraryPanel) MC.libraryPanel.save(opts.handle, st);
     MC.pager.resetAll();
-    const notMod = built.notMod;
     st.progress = '';
     await FA.analyzeAndResolve(true);
     // 读取完就把每个项目的资料（简介 / 正文 / 图标）批量拉回来，详情页不用再等网络
@@ -153,6 +274,12 @@
     if (single && st.analysis && st.analysis.groups.length) {
       st.detail = st.analysis.groups[0].id;
       touch();
+    }
+    if (hasPack) {
+      const online = scanned.reduce((n, p) => n + (p.online || 0), 0);
+      toast('已扫描整合包：' + packEntries.length + ' 个模组' +
+        (online ? '（另有 ' + online + ' 个在线清单项不在包里）' : '') +
+        (packEnv.loader ? ' · ' + packEnv.loader + ' ' + (packEnv.mc || st.env.mc) : ''));
     }
   }
 

@@ -67,8 +67,8 @@
         </svg>
       </div>
       <div>
-        <h2 id="dropTitle">把 mods 文件夹拖进来</h2>
-        <p id="dropDesc">自动读取每个 jar 的模组信息，按你的加载器和游戏版本挑出合适的版本，<br>缺前置自动去 Modrinth 配好，最后一键打包成可以直接安装的整合包。</p>
+        <h2 id="dropTitle">把 mods 文件夹或整合包拖进来</h2>
+        <p id="dropDesc">自动读取每个 jar 的模组信息，按你的加载器和游戏版本挑出合适的版本，<br>缺前置自动去 Modrinth 配好，最后一键打包成可以直接安装的整合包。<br>整合包支持 .mrpack 和带 mods 的 .zip，会先解开再分析。</p>
         <div class="drop-acts">
           <button type="button" class="btn grad" id="pickFolder">选择 mods 文件夹</button>
           <button type="button" class="btn line" id="pickOne">只查一个模组</button>
@@ -101,7 +101,7 @@
       </div>
     </div>
     <input type="file" id="fileInput" multiple webkitdirectory hidden aria-hidden="true" tabindex="-1">
-    <input type="file" id="singleInput" accept=".jar,.zip" multiple hidden aria-hidden="true" tabindex="-1">
+    <input type="file" id="singleInput" accept=".jar,.zip,.mrpack" multiple hidden aria-hidden="true" tabindex="-1">
   </section>
 
   <section class="stats" id="stats" aria-live="polite"></section>
@@ -177,6 +177,7 @@
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
 <script src="js/core/zip-reader.js"></script>
+<script src="js/core/modpack.js"></script>
 <script src="js/core/version.js"></script>
 <script src="js/core/search.js"></script>
 <script src="js/core/identity.js"></script>
