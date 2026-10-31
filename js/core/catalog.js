@@ -119,28 +119,31 @@
     return guessAll(entry)[0] || 'misc';
   }
 
-  /** 一个模组的所有分类桶：Modrinth 多分类全部保留，没有元数据才用关键词 */
+  /** 一个模组的所有分类桶：手动主分类最优先，其次 Modrinth 多分类，最后关键词 */
   function tagsOf(entry) {
+    const out = [];
+    const add = id => {
+      if (!id || !LABEL[id] || out.indexOf(id) >= 0) return;
+      out.push(id);
+    };
+    add(String((entry && entry.primary) || ''));
     const slugs = ((entry && entry.cats) || []).map(s => String(s || '').toLowerCase());
     if (slugs.length) {
-      const out = [];
-      slugs.forEach(s => {
-        const id = MR_MAP[s];
-        if (!id || out.indexOf(id) >= 0) return;
-        out.push(id);
-      });
+      slugs.forEach(s => add(MR_MAP[s]));
       return out.length ? out : ['misc'];
     }
     const guessed = guessAll(entry);
-    return guessed.length ? guessed : ['misc'];
+    return out.length ? out : (guessed.length ? guessed : ['misc']);
   }
 
   function sourceOf(entry) {
     return ((entry && entry.cats) || []).length ? 'modrinth' : 'keyword';
   }
 
-  /** entry.cats（Modrinth 原始分类数组）优先，没有就退回关键词 */
+  /** entry.primary（后台手动设的）优先，其次 entry.cats（Modrinth 原始分类），最后关键词 */
   function categoryOf(entry) {
+    const manual = String((entry && entry.primary) || '');
+    if (manual && LABEL[manual]) return manual;
     const fromMr = primaryOf(entry && entry.cats);
     return fromMr || guess(entry);
   }

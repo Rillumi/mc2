@@ -70,14 +70,19 @@
       const id = String(e.id).toLowerCase();
       if (seen[id]) return;
       seen[id] = true;
+      const saved = (st.catsDb || {})[id];
+      const savedCats = saved && saved.cats ? String(saved.cats).split(',').filter(Boolean) : [];
+      // 后台手动设过主分类就听人的，不再让 Modrinth 结果把它盖回去
+      const manual = saved && saved.source === 'manual' ? String(saved.primary || '') : '';
       const fromMr = MC.catalog.fromProject(FC.projectForEntry(st, e, g));
       if (fromMr) {
         e.cats = fromMr.cats;
-        push.push({ id, cats: fromMr.cats.join(','), primary: fromMr.primary, source: 'modrinth' });
+        e.primary = manual || fromMr.primary;
+        if (!manual) push.push({ id, cats: fromMr.cats.join(','), primary: fromMr.primary, source: 'modrinth' });
         return;
       }
-      const saved = (st.catsDb || {})[id];
-      if (saved && saved.cats) e.cats = String(saved.cats).split(',').filter(Boolean);
+      if (savedCats.length) e.cats = savedCats;
+      if (manual || (saved && saved.primary)) e.primary = manual || String(saved.primary);
     };
     (st.analysis.groups || []).forEach(g => (g.rows || []).forEach(r => fill(r.entry, g)));
     (st.analysis.others || []).forEach(o => fill(o, null));

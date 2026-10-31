@@ -245,8 +245,11 @@
     const body = rows.map(c => {
       const cats = (c.cats || '').split(',').filter(Boolean)
         .map(x => '<span class="tag">' + esc(x) + '</span>').join(' ');
+      const opts = '<option value="">未设置</option>' + MC.catalog.CATS.map(x =>
+        '<option value="' + esc(x.id) + '"' + (x.id === c.primary ? ' selected' : '') + '>' +
+        esc(x.label) + '</option>').join('');
       return '<tr><td class="mono">' + esc(c.id) + '</td>' +
-        '<td>' + (c.primary ? '<span class="tag ok">' + esc(c.primary) + '</span>' : '<span class="muted">—</span>') + '</td>' +
+        '<td><select class="adm-sel" data-act="set-cat" data-id="' + esc(c.id) + '" aria-label="设为主分类">' + opts + '</select></td>' +
         '<td>' + (cats || '<span class="muted">—</span>') + '</td>' +
         '<td class="muted">' + esc(c.source || '—') + '</td>' +
         '<td class="muted">' + fmtTime(c.at) + '</td>' +
@@ -327,6 +330,14 @@
     if (!confirm('删除「' + id + '」的分类记录？')) return;
     await postJson('/api/admin/cats/delete', { id });
     toast('已删除');
+    await refresh();
+  }
+
+  /* 人工设定的主分类记为 source=manual，主程序读库时优先用它，不再被 Modrinth 覆盖 */
+  async function setCat(id, primary) {
+    const row = view.rows.find(x => x.id === id) || {};
+    await postJson('/api/mod-cats', { items: [{ id, cats: row.cats || '', primary, source: 'manual' }] });
+    toast(primary ? '已设为主分类' : '已取消手动主分类');
     await refresh();
   }
 
@@ -446,6 +457,9 @@
   });
 
   document.addEventListener('change', e => {
+    if (e.target.matches('[data-act="set-cat"]')) {
+      return setCat(e.target.dataset.id, e.target.value).catch(err => toast(err.message));
+    }
     if (e.target.matches('[data-act="pgsize"]')) {
       const n = Number(e.target.value) || 30;
       st.pageSize = n;
