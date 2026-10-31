@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light">
+<title>ModPilot · 后台</title>
+<link rel="stylesheet" href="css/tokens.css">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/components.css">
+<style>
+/* 后台专用布局：一个宽表 + 分页，不需要侧栏 */
+.admin { max-width: 1220px; margin: 0 auto; padding: 24px 28px 56px; }
+
+.adm-head { display: flex; align-items: center; gap: 13px; margin-bottom: 18px; flex-wrap: wrap; }
+.adm-logo {
+  width: 42px; height: 42px; border-radius: 13px; flex: 0 0 auto;
+  background: var(--grad-main); display: grid; place-items: center;
+  box-shadow: 0 8px 20px rgba(212, 120, 175, .30);
+}
+.adm-logo svg { width: 22px; height: 22px; stroke: #fff; fill: none; stroke-width: 2; }
+.adm-title h1 { margin: 0 0 2px; font-size: 19px; letter-spacing: .2px; }
+.adm-title p { margin: 0; font-size: 12px; color: var(--ink-3); }
+.adm-db {
+  margin-left: auto; font-size: 11.5px; padding: 5px 11px; border-radius: 999px;
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2);
+}
+.adm-db.ok { color: var(--ok); border-color: var(--ok-line); background: var(--ok-bg); }
+.adm-db.bad { color: var(--bad); border-color: var(--bad-line); background: var(--bad-bg); }
+
+.adm-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+.adm-stat {
+  background: linear-gradient(160deg, #FFFDFE 0%, #FFF8FC 100%);
+  border: 1px solid #F5E5EF; border-radius: var(--r-md);
+  padding: 13px 16px; box-shadow: var(--shadow-sm);
+}
+.adm-stat b { display: block; font-size: 22px; letter-spacing: .3px; line-height: 1.2; }
+.adm-stat span { font-size: 12px; color: var(--ink-2); }
+.adm-stat small { display: block; font-size: 11px; color: var(--ink-3); margin-top: 2px; }
+
+.adm-tabs { display: flex; gap: 6px; flex-wrap: wrap; padding: 14px 16px 0; }
+.adm-tab {
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2);
+  font-family: inherit; font-size: 12.5px; padding: 7px 14px; border-radius: 999px; transition: .16s;
+}
+.adm-tab:hover { border-color: #DCC9EA; color: var(--ink); }
+.adm-tab[aria-current="true"] {
+  background: var(--grad-main); color: #fff; border-color: transparent; font-weight: 600;
+  box-shadow: 0 6px 16px rgba(150, 120, 200, .22);
+}
+
+.adm-bar {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 12px 16px; border-bottom: 1px solid var(--line);
+}
+.adm-q {
+  flex: 1 1 240px; min-width: 180px;
+  border: 1px solid var(--line-2); border-radius: 10px; background: #fff;
+  padding: 8px 12px; font-size: 12.5px; color: var(--ink); outline: none;
+}
+.adm-q:focus { border-color: #D9BEF2; box-shadow: var(--focus); }
+.adm-sel {
+  border: 1px solid var(--line-2); border-radius: 10px; background: #fff; color: var(--ink-2);
+  padding: 7px 9px; font-size: 12px; cursor: pointer; outline: none;
+}
+.adm-sel:focus-visible { box-shadow: var(--focus); }
+.adm-spacer { flex: 1 1 auto; }
+
+.adm-hint {
+  display: flex; flex-wrap: wrap; gap: 4px 16px;
+  padding: 10px 18px; font-size: 11.5px; color: var(--ink-3);
+  background: #FCFAFE; border-bottom: 1px solid var(--line);
+}
+.adm-hint span::before { content: "· "; color: var(--line-2); }
+.adm-hint span:first-child::before { content: ""; }
+
+.adm-scroll { max-height: calc(100vh - 400px); min-height: 260px; overflow: auto; }
+.adm-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.adm-table th {
+  position: sticky; top: 0; z-index: 1;
+  text-align: left; padding: 10px 14px; white-space: nowrap;
+  font-size: 11px; letter-spacing: .5px; color: var(--ink-3);
+  background: #FCFAFE; border-bottom: 1px solid var(--line);
+}
+.adm-table td { padding: 10px 14px; border-bottom: 1px dashed var(--line); vertical-align: top; }
+.adm-table tr:hover td { background: var(--card-hover); }
+.adm-table .cell-strong { font-weight: 600; max-width: 220px; }
+.adm-table .cell-en { max-width: 200px; word-break: break-word; color: var(--ink-2); }
+.adm-table .cell-act { white-space: nowrap; }
+
+.adm-empty { padding: 46px 20px; text-align: center; color: var(--ink-3); font-size: 12.5px; }
+.adm-foot { margin: 16px 4px 0; font-size: 11.5px; color: var(--ink-3); }
+
+.mono { font-family: ui-monospace, Consolas, "Courier New", monospace; font-size: 11.5px; word-break: break-all; }
+.muted { color: var(--ink-3); }
+.small { font-size: 10.5px; }
+.tag {
+  display: inline-block; font-size: 10.5px; padding: 2px 7px; border-radius: 6px;
+  background: var(--grad-soft); color: var(--ink-2); border: 1px solid #fff; white-space: nowrap;
+}
+.tag.ok { background: var(--ok-bg); color: var(--ok); border-color: var(--ok-line); }
+.tag.bad { background: var(--bad-bg); color: var(--bad); border-color: var(--bad-line); }
+.tag + .tag { margin-left: 3px; }
+.btn.danger { color: var(--bad); }
+.btn.danger:hover:not(:disabled) { border-color: var(--bad-line); background: var(--bad-bg); }
+.adm-url { display: block; max-width: 300px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 860px) {
+  .admin { padding: 18px 15px 40px; }
+  .adm-stats { grid-template-columns: repeat(2, 1fr); }
+  .adm-scroll { max-height: none; }
+  .adm-table { font-size: 12px; }
+}
+</style>
+</head>
+<body>
+
+<div class="admin">
+  <header class="adm-head">
+    <div class="adm-logo">
+      <svg viewBox="0 0 24 24"><path d="M4 7.5 12 3l8 4.5v9L12 21l-8-4.5v-9Z"/><path d="M4 7.5 12 12l8-4.5M12 12v9"/></svg>
+    </div>
+    <div class="adm-title">
+      <h1>ModPilot 后台</h1>
+      <p>中文名、下载链接、分类、爱发电缓存 · 只有本机 127.0.0.1 能打开</p>
+    </div>
+    <span class="adm-db" id="dbPill">连接中…</span>
+    <a class="btn line sm" href="/index.html">回到主界面</a>
+  </header>
+
+  <section class="adm-stats" id="stats"></section>
+
+  <div class="panel">
+    <nav class="adm-tabs" id="tabs" role="tablist" aria-label="数据分区"></nav>
+    <div class="adm-bar">
+      <input class="adm-q" id="q" type="search" placeholder="搜索…" autocomplete="off" spellcheck="false">
+      <select class="adm-sel" id="filter"></select>
+      <span class="adm-spacer"></span>
+      <button class="btn line sm" id="expJson" type="button">导出 JSON</button>
+      <button class="btn line sm" id="expCsv" type="button">导出 CSV</button>
+      <button class="btn line sm" id="impBtn" type="button">导入 JSON</button>
+      <button class="btn line sm" id="missBtn" type="button" hidden>清掉「没查到」</button>
+      <button class="btn line sm danger" id="clearBtn" type="button">清空</button>
+      <input type="file" id="impFile" accept=".json,application/json" hidden>
+    </div>
+    <div class="adm-hint" id="hint"></div>
+    <div class="adm-scroll" id="list"></div>
+    <div id="pager"></div>
+  </div>
+
+  <p class="adm-foot">中文名库 = MySQL 表 mod_names + data/zh-names.json 缓存（没查到的也在缓存里）· 导出的 JSON 可以直接导入回来</p>
+</div>
+
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script src="js/ui/state.js"></script>
+<script src="js/ui/pager.js"></script>
+<script src="js/admin.js"></script>
+</body>
+</html>

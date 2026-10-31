@@ -678,6 +678,82 @@ function bodyJson(req) {
   });
 }
 
+/* ================= 后台（仅本机） =================
+   /admin 页面能看到数据库里的三张表 + 两个文件缓存。
+   所有 /api/admin/* 只认 127.0.0.1，以后就算端口被局域网看到也进不来。 */
+function isLocalReq(req) {
+  const ip = String((req.socket && req.socket.remoteAddress) || '');
+  return ip === '127.0.0.1' || ip === '::1' || ip === '::ffff:127.0.0.1';
+}
+
+function csvCell(v) {
+  const s = String(v == null ? '' : v);
+  return /[",\r\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+}
+
+function csvText(head, rows) {
+  return '\uFEFF' + [head].concat(rows).map(r => r.map(csvCell).join(',')).join('\r\n');
+}
+
+function sendDownload(res, filename, ctype, body) {
+  res.writeHead(200, {
+    'Content-Type': ctype,
+    'Content-Disposition': 'attachment; filename="' + filename + '"',
+    'Cache-Control': 'no-store'
+  });
+  res.end(body);
+}
+
+function fileInfo(p) {
+  try {
+    const st = fs.statSync(p);
+    return { size: st.size, at: st.mtimeMs };
+  } catch (err) {
+    return { size: 0, at: 0 };
+  }
+}
+
+/* 中文名库有两份：MySQL 的 mod_names（正式数据）和 data/zh-names.json（查询缓存，
+   含「没查到」）。后台把两边并起来看，才能知道谁还没查到。 */
+async function adminNames() {
+  const out = {};
+  if (dbReady) {
+    try {
+      const [rows] = await pool.query('SELECT mod_id, en, zh, abbr, mcmod_id, source, updated_at FROM mod_names');
+      rows.forEach(r => {
+        out[r.mod_id] = {
+          id: r.mod_id, en: r.en || '', zh: r.zh || '', abbr: r.abbr || '',
+          mcmodId: r.mcmod_id || '', url: r.source || '',
+          at: r.updated_at ? new Date(r.updated_at).getTime() : 0, origin: 'db'
+        };
+      });
+    } catch (err) { /* 数据库抽风时至少还能看文件缓存 */ }
+  }
+  const file = zhAll();
+  Object.keys(file).forEach(id => {
+    const rec = file[id] || {};
+    const cur = out[id];
+    if (cur) {
+      cur.origin = 'both';
+      if (rec.zh) {
+        cur.zh = rec.zh;
+        if (rec.en) cur.en = rec.en;
+        if (rec.abbr) cur.abbr = rec.abbr;
+        if (rec.mcmodId) cur.mcmodId = rec.mcmodId;
+        if (rec.url) cur.url = rec.url;
+        if (rec.at) cur.at = Number(rec.at) || cur.at;
+      }
+    } else {
+      out[id] = {
+        id, en: rec.en || '', zh: rec.zh || '', abbr: rec.abbr || '',
+        mcmodId: rec.mcmodId || '', url: rec.url || '',
+        at: Number(rec.at) || 0, origin: 'file'
+      };
+    }
+  });
+  return Object.keys(out).map(k => out[k]);
+}
+
 const server = http.createServer(async (req, res) => {
   let urlPath = '/';
   let query = new URLSearchParams();
@@ -690,6 +766,7 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 400, { ok: false, reason: 'Bad request' });
   }
   if (urlPath === '/') urlPath = '/index.html';
+  if (urlPath === '/admin' || urlPath === '/admin/') urlPath = '/admin.html';
 
   /* ---- API ---- */
   if (urlPath.startsWith('/api/')) {
@@ -842,6 +919,337 @@ const server = http.createServer(async (req, res) => {
           fetched: searched - offline,
           offline
         });
+      }
+
+      /* ---- 后台接口（只允许本机） ---- */
+      if (urlPath.startsWith('/api/admin/')) {
+        if (!isLocalReq(req)) return sendJson(res, 403, { ok: false, reason: '后台只允许在本机打开（127.0.0.1）' });
+
+        /* 总览：各表条数 + 文件缓存信息 + 主分类分布 */
+        if (urlPath === '/api/admin/overview' && req.method === 'GET') {
+          const names = await adminNames();
+          let links = 0;
+          let cats = 0;
+          let pcats = [];
+          if (dbReady) {
+            try {
+              const [[lc]] = await pool.query('SELECT COUNT(*) n FROM links');
+              const [[cc]] = await pool.query('SELECT COUNT(*) n FROM mod_cats');
+              links = Number(lc.n) || 0;
+              cats = Number(cc.n) || 0;
+              const [pc] = await pool.query("SELECT primary_cat, COUNT(*) n FROM mod_cats WHERE primary_cat <> '' GROUP BY primary_cat ORDER BY n DESC");
+              pcats = pc.map(x => ({ cat: x.primary_cat, n: Number(x.n) }));
+            } catch (err) { /* 先把能显示的显示出来 */ }
+          }
+          const af = afdianFile();
+          return sendJson(res, 200, {
+            ok: true, db: dbReady, dbError, database: cfg.database,
+            names: { total: names.length, hit: names.filter(n => n.zh).length, miss: names.filter(n => !n.zh).length },
+            links, cats, pcats,
+            sites: SITES.map(s => ({ key: s.key, label: s.label })),
+            files: { zh: fileInfo(ZH_FILE), afdian: fileInfo(AFDIAN_FILE) },
+            afdian: {
+              creators: (af.creators || []).length,
+              posts: (af.creators || []).reduce((sum, c) => sum + ((c.posts || []).length), 0),
+              at: af.updatedAt || 0,
+              token: !!afdianToken()
+            }
+          });
+        }
+
+        /* 中文名库：数据库 + 文件缓存合并后分页 */
+        if (urlPath === '/api/admin/names' && req.method === 'GET') {
+          const all = await adminNames();
+          const q = String(query.get('q') || '').trim().toLowerCase();
+          const status = String(query.get('status') || 'all');
+          let list = all;
+          if (q) {
+            list = list.filter(n => [n.id, n.zh, n.en, n.abbr, n.mcmodId]
+              .some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
+          }
+          if (status === 'hit') list = list.filter(n => n.zh);
+          else if (status === 'miss') list = list.filter(n => !n.zh);
+          else if (status === 'file') list = list.filter(n => n.origin !== 'db');
+          list.sort((a, b) => (b.at || 0) - (a.at || 0) || String(a.id).localeCompare(String(b.id)));
+          const size = Math.min(200, Math.max(5, Number(query.get('size')) || 30));
+          const pages = Math.max(1, Math.ceil(list.length / size));
+          const page = Math.min(pages, Math.max(1, Number(query.get('page')) || 1));
+          const start = (page - 1) * size;
+          return sendJson(res, 200, {
+            ok: true, db: dbReady, total: list.length,
+            hit: all.filter(n => n.zh).length, miss: all.filter(n => !n.zh).length,
+            page, size, rows: list.slice(start, start + size)
+          });
+        }
+
+        if (urlPath === '/api/admin/names/delete' && req.method === 'POST') {
+          const body = await bodyJson(req);
+          const id = String(body.id || '').trim();
+          if (id) {
+            if (dbReady) await pool.query('DELETE FROM mod_names WHERE mod_id = ?', [id]);
+            const all = zhAll();
+            if (all[id]) { delete all[id]; zhDirty = true; zhFlush(); }
+          }
+          return sendJson(res, 200, { ok: true });
+        }
+
+        /* mode=all 清空全部；mode=miss 只清「没查到」的缓存（主程序下次会重查） */
+        if (urlPath === '/api/admin/names/clear' && req.method === 'POST') {
+          const body = await bodyJson(req);
+          const mode = String(body.mode || 'all');
+          const all = zhAll();
+          let removed = 0;
+          if (mode === 'miss') {
+            Object.keys(all).forEach(id => {
+              if (!all[id] || !all[id].zh) { delete all[id]; removed++; }
+            });
+          } else {
+            if (dbReady) await pool.query('DELETE FROM mod_names');
+            Object.keys(all).forEach(id => delete all[id]);
+            removed = 1;
+          }
+          zhDirty = true;
+          zhFlush();
+          return sendJson(res, 200, { ok: true, mode, removed });
+        }
+
+        /* 链接库：分页 + 站点筛选 */
+        if (urlPath === '/api/admin/links' && req.method === 'GET') {
+          if (!dbReady) return sendJson(res, 200, { ok: false, reason: dbError, total: 0, rows: [] });
+          const q = String(query.get('q') || '').trim();
+          const site = String(query.get('site') || '');
+          const where = [];
+          const args = [];
+          if (q) {
+            const like = '%' + q + '%';
+            where.push('(mod_id LIKE ? OR mod_name LIKE ? OR url LIKE ? OR note LIKE ?)');
+            args.push(like, like, like, like);
+          }
+          if (site) { where.push('site = ?'); args.push(site); }
+          const w = where.length ? ' WHERE ' + where.join(' AND ') : '';
+          const [[cnt]] = await pool.query('SELECT COUNT(*) n FROM links' + w, args);
+          const size = Math.min(200, Math.max(5, Number(query.get('size')) || 30));
+          const pages = Math.max(1, Math.ceil(Number(cnt.n) / size));
+          const page = Math.min(pages, Math.max(1, Number(query.get('page')) || 1));
+          const [rows] = await pool.query(
+            'SELECT id, mod_id, mod_name, site, url, note, created_at FROM links' + w +
+            ' ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?',
+            args.concat([size, (page - 1) * size])
+          );
+          return sendJson(res, 200, {
+            ok: true, db: true, total: Number(cnt.n), page, size,
+            rows: rows.map(r => ({
+              id: r.id, modId: r.mod_id || '', modName: r.mod_name || '',
+              site: r.site || 'other', url: r.url || '', note: r.note || '',
+              at: r.created_at ? new Date(r.created_at).getTime() : 0
+            }))
+          });
+        }
+
+        if (urlPath === '/api/admin/links/delete' && req.method === 'POST') {
+          if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+          const body = await bodyJson(req);
+          if (body.id) await pool.query('DELETE FROM links WHERE id = ?', [Number(body.id)]);
+          return sendJson(res, 200, { ok: true });
+        }
+
+        if (urlPath === '/api/admin/links/clear' && req.method === 'POST') {
+          if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+          await pool.query('DELETE FROM links');
+          return sendJson(res, 200, { ok: true });
+        }
+
+        /* 分类库：分页 + 主分类筛选 */
+        if (urlPath === '/api/admin/cats' && req.method === 'GET') {
+          if (!dbReady) return sendJson(res, 200, { ok: false, reason: dbError, total: 0, rows: [] });
+          const q = String(query.get('q') || '').trim();
+          const primary = String(query.get('primary') || '');
+          const where = [];
+          const args = [];
+          if (q) {
+            const like = '%' + q + '%';
+            where.push('(mod_id LIKE ? OR cats LIKE ? OR primary_cat LIKE ?)');
+            args.push(like, like, like);
+          }
+          if (primary) { where.push('primary_cat = ?'); args.push(primary); }
+          const w = where.length ? ' WHERE ' + where.join(' AND ') : '';
+          const [[cnt]] = await pool.query('SELECT COUNT(*) n FROM mod_cats' + w, args);
+          const size = Math.min(200, Math.max(5, Number(query.get('size')) || 30));
+          const pages = Math.max(1, Math.ceil(Number(cnt.n) / size));
+          const page = Math.min(pages, Math.max(1, Number(query.get('page')) || 1));
+          const [rows] = await pool.query(
+            'SELECT mod_id, cats, primary_cat, source, updated_at FROM mod_cats' + w +
+            ' ORDER BY updated_at DESC, mod_id ASC LIMIT ? OFFSET ?',
+            args.concat([size, (page - 1) * size])
+          );
+          return sendJson(res, 200, {
+            ok: true, db: true, total: Number(cnt.n), page, size,
+            rows: rows.map(r => ({
+              id: r.mod_id, cats: r.cats || '', primary: r.primary_cat || '',
+              source: r.source || '', at: r.updated_at ? new Date(r.updated_at).getTime() : 0
+            }))
+          });
+        }
+
+        if (urlPath === '/api/admin/cats/delete' && req.method === 'POST') {
+          if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+          const body = await bodyJson(req);
+          const id = String(body.id || '').trim();
+          if (id) await pool.query('DELETE FROM mod_cats WHERE mod_id = ?', [id]);
+          return sendJson(res, 200, { ok: true });
+        }
+
+        if (urlPath === '/api/admin/cats/clear' && req.method === 'POST') {
+          if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+          await pool.query('DELETE FROM mod_cats');
+          return sendJson(res, 200, { ok: true });
+        }
+
+        /* 爱发电缓存（不含 token） */
+        if (urlPath === '/api/admin/afdian' && req.method === 'GET') {
+          const d = afdianFile();
+          return sendJson(res, 200, {
+            ok: true, updatedAt: d.updatedAt || 0, token: !!afdianToken(),
+            creators: d.creators || []
+          });
+        }
+
+        if (urlPath === '/api/admin/afdian/clear' && req.method === 'POST') {
+          const d = afdianFile();
+          d.creators = [];
+          d.updatedAt = 0;
+          afdianWrite();
+          return sendJson(res, 200, { ok: true });
+        }
+
+        /* 导出：type=names|links|cats|afdian，format=json|csv */
+        if (urlPath === '/api/admin/export' && req.method === 'GET') {
+          const type = String(query.get('type') || 'names').toLowerCase();
+          const format = String(query.get('format') || 'json').toLowerCase();
+          const base = 'modpilot-' + type + '-' + new Date().toISOString().slice(0, 10);
+          let payload = null;
+          let head = [];
+          let csvRows = [];
+
+          if (type === 'names') {
+            const list = await adminNames();
+            payload = { version: 1, type: 'names', exportedAt: new Date().toISOString(), items: list };
+            head = ['mod_id', 'zh', 'en', 'abbr', 'mcmod_id', 'url', 'status', 'origin', 'updated_at'];
+            csvRows = list.map(n => [n.id, n.zh, n.en, n.abbr, n.mcmodId, n.url,
+              n.zh ? 'hit' : 'miss', n.origin, n.at ? new Date(n.at).toISOString() : '']);
+          } else if (type === 'links') {
+            if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+            const [rows] = await pool.query('SELECT id, mod_id, mod_name, site, url, note, created_at FROM links ORDER BY created_at DESC, id DESC');
+            const items = rows.map(r => ({
+              id: r.id, modId: r.mod_id || '', modName: r.mod_name || '', site: r.site || '',
+              url: r.url || '', note: r.note || '',
+              at: r.created_at ? new Date(r.created_at).toISOString() : ''
+            }));
+            payload = { version: 1, type: 'links', exportedAt: new Date().toISOString(), items };
+            head = ['mod_id', 'mod_name', 'site', 'url', 'note', 'created_at'];
+            csvRows = items.map(x => [x.modId, x.modName, x.site, x.url, x.note, x.at]);
+          } else if (type === 'cats') {
+            if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+            const [rows] = await pool.query('SELECT mod_id, cats, primary_cat, source, updated_at FROM mod_cats ORDER BY mod_id ASC');
+            const items = rows.map(r => ({
+              id: r.mod_id, cats: r.cats || '', primary: r.primary_cat || '',
+              source: r.source || '', at: r.updated_at ? new Date(r.updated_at).toISOString() : ''
+            }));
+            payload = { version: 1, type: 'cats', exportedAt: new Date().toISOString(), items };
+            head = ['mod_id', 'cats', 'primary_cat', 'source', 'updated_at'];
+            csvRows = items.map(x => [x.id, x.cats, x.primary, x.source, x.at]);
+          } else if (type === 'afdian') {
+            const d = afdianFile();
+            payload = { version: 1, type: 'afdian', exportedAt: new Date().toISOString(), updatedAt: d.updatedAt || 0, creators: d.creators || [] };
+            head = ['user_id', 'name', 'home', 'posts', 'doing'];
+            csvRows = (d.creators || []).map(c => [c.userId, c.name, c.home, (c.posts || []).length, c.doing]);
+          } else {
+            return sendJson(res, 400, { ok: false, reason: '不认识的导出类型' });
+          }
+
+          if (format === 'csv') {
+            return sendDownload(res, base + '.csv', 'text/csv; charset=utf-8', csvText(head, csvRows));
+          }
+          return sendDownload(res, base + '.json', 'application/json; charset=utf-8', JSON.stringify(payload, null, 2));
+        }
+
+        /* 导入：type 放 query，body 直接是导出的 JSON（数组或 {items:[...]} 都行） */
+        if (urlPath === '/api/admin/import' && req.method === 'POST') {
+          const type = String(query.get('type') || 'names').toLowerCase();
+          const body = await bodyJson(req);
+          let saved = 0;
+          let skipped = 0;
+
+          if (type === 'names') {
+            const list = Array.isArray(body) ? body
+              : (Array.isArray(body.items) ? body.items
+                : (body && typeof body === 'object'
+                  ? Object.keys(body).map(k => {
+                    const v = body[k];
+                    return typeof v === 'string' ? { id: k, zh: v } : Object.assign({ id: k }, v || {});
+                  }) : []));
+            for (const it of list.slice(0, 2000)) {
+              const id = String((it && (it.id || it.modId || it.mod_id)) || '').trim().slice(0, 190);
+              if (!id) { skipped++; continue; }
+              const rec = {
+                id,
+                en: String((it && it.en) || '').slice(0, 255),
+                zh: String((it && it.zh) || '').slice(0, 255),
+                abbr: String((it && it.abbr) || '').slice(0, 32),
+                mcmodId: String((it && (it.mcmodId || it.mcmod_id)) || '').slice(0, 32),
+                url: String((it && (it.url || it.source)) || '').slice(0, 500)
+              };
+              zhRemember(rec);
+              await dbZhSave(rec);
+              saved++;
+            }
+            zhFlush();
+          } else if (type === 'links') {
+            if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+            const list = Array.isArray(body) ? body : (Array.isArray(body.items) ? body.items : []);
+            saved = await dbAdd(list.slice(0, 2000));
+            skipped = list.length - saved;
+          } else if (type === 'cats') {
+            if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+            const list = Array.isArray(body) ? body : (Array.isArray(body.items) ? body.items : []);
+            for (const it of list.slice(0, 2000)) {
+              const id = String((it && (it.id || it.mod_id)) || '').trim().toLowerCase().slice(0, 190);
+              if (!id) { skipped++; continue; }
+              try {
+                await pool.query(
+                  'INSERT INTO mod_cats (mod_id, cats, primary_cat, source) VALUES (?, ?, ?, ?) ' +
+                  'ON DUPLICATE KEY UPDATE cats = VALUES(cats), primary_cat = VALUES(primary_cat), source = VALUES(source)',
+                  [id, String((it && it.cats) || '').slice(0, 255),
+                    String((it && (it.primary || it.primary_cat)) || '').slice(0, 32),
+                    String((it && it.source) || 'modrinth').slice(0, 20)]
+                );
+                saved++;
+              } catch (err) { skipped++; }
+            }
+          } else if (type === 'afdian') {
+            const d = afdianFile();
+            const list = Array.isArray(body.creators) ? body.creators : (Array.isArray(body) ? body : []);
+            d.creators = list.slice(0, 2000).map(c => ({
+              userId: String((c && c.userId) || ''),
+              name: String((c && c.name) || ''),
+              slug: String((c && c.slug) || ''),
+              doing: String((c && c.doing) || '').slice(0, 120),
+              detail: String((c && c.detail) || '').slice(0, 600),
+              avatar: String((c && c.avatar) || ''),
+              home: String((c && c.home) || ('https://afdian.com/u/' + String((c && c.userId) || ''))),
+              posts: Array.isArray(c && c.posts) ? c.posts : []
+            })).filter(c => c.userId);
+            d.updatedAt = Number(body.updatedAt) || Date.now();
+            afdianWrite();
+            saved = d.creators.length;
+          } else {
+            return sendJson(res, 400, { ok: false, reason: '不认识的导入类型' });
+          }
+
+          return sendJson(res, 200, { ok: true, type, saved, skipped });
+        }
+
+        return sendJson(res, 404, { ok: false, reason: '没有这个后台接口' });
       }
 
       if (urlPath === '/api/logs') {
