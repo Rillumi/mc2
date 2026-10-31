@@ -406,19 +406,40 @@
       '</div>';
   }
 
+  /* ---------- 读取进度 ---------- */
+  function scanBar(s) {
+    const sc = s.scan;
+    if (!sc) return '';
+    const total = Math.max(0, sc.total || 0);
+    const done = total ? Math.min(sc.done || 0, total) : 0;
+    // 还在罗列文件夹、不知道总数时，用“来回跑”的不确定进度条
+    const pct = total ? Math.round((done / total) * 100) : 0;
+    return '<div class="scanbar' + (total ? '' : ' list') + '" role="status" aria-live="polite">' +
+      '<span class="spinner"></span>' +
+      '<div class="scan-main">' +
+      '<div class="scan-line"><b>' + esc(sc.note || '正在读取') +
+      (total ? ' ' + done + ' / ' + total : '…') + '</b>' +
+      (total ? '<span class="scan-pct">' + pct + '%</span>' : '') + '</div>' +
+      '<div class="scan-track' + (total ? '' : ' running') + '"><i style="width:' + (total ? pct : 40) + '%"></i></div>' +
+      (sc.name ? '<small>' + esc(sc.name) + '</small>' : '') +
+      '</div></div>';
+  }
+
   function renderRows(s) {
     const el = document.getElementById('rows');
     const title = document.getElementById('listTitle');
     if (!el) return;
 
+    const scanning = scanBar(s);
+
     if (!s.mods.length) {
-      el.innerHTML = '<div class="empty"><b>还没有扫描</b><br>把 mods 文件夹拖进来，或者点「只查一个模组」单独分析一个 jar。<br>全部在本地读取，文件不会上传。</div>';
-      if (title) title.textContent = '整理方案';
+      el.innerHTML = scanning || '<div class="empty"><b>还没有扫描</b><br>把 mods 文件夹拖进来，或者点「只查一个模组」单独分析一个 jar。<br>全部在本地读取，文件不会上传。</div>';
+      if (title) title.textContent = s.scan ? '正在读取…' : '整理方案';
       return;
     }
 
     if (!s.analysis) {
-      el.innerHTML = '<div class="loading"><span class="spinner"></span>' + esc(s.progress || '正在分析…') + '</div>';
+      el.innerHTML = scanning || '<div class="loading"><span class="spinner"></span>' + esc(s.progress || '正在分析…') + '</div>';
       return;
     }
 
@@ -453,7 +474,7 @@
 
     el.innerHTML = '<div class="section-label">' + esc(label) + ' · ' + groups.length + ' 组' +
       (s.selectMode ? '<span class="selhint">点左边的方框取消进包</span>' : '') + '</div>' +
-      extras +
+      extras + scanning +
       (s.progress ? '<div class="loading"><span class="spinner"></span>' + esc(s.progress) + '</div>' : '') +
       '<div class="rows">' + (groups.length
         ? groups.map(g => rowHtml(s, g)).join('')
@@ -1128,7 +1149,7 @@
     const el = document.getElementById('diffView');
     if (!el) return;
     const d = s.diff || { mods: [] };
-    if (!d.mods.length) { el.innerHTML = diffDropHtml(); return; }
+    if (!d.mods.length) { el.innerHTML = scanBar(s) + diffDropHtml(); return; }
 
     const res = MC.diff.compare(s.mods, d.mods);
     const c = res.counts;
@@ -1190,7 +1211,7 @@
         '</div>'
       : '';
 
-    el.innerHTML = '<div class="vpanel">' + head + stats + warning +
+    el.innerHTML = scanBar(s) + '<div class="vpanel">' + head + stats + warning +
       '<div class="dlistwrap">' +
       (onlyB + onlyA + ver + same + packSec || '<div class="empty">两个包没有可对比的模组。</div>') +
       '</div>' +
@@ -1443,6 +1464,17 @@
     if (!drop || !title) return;
     const compact = s.mods.length > 0;
     drop.classList.toggle('compact', compact);
+    drop.classList.toggle('reading', !!s.scan);
+    if (s.scan) {
+      const total = Math.max(0, s.scan.total || 0);
+      const done = total ? Math.min(s.scan.done || 0, total) : 0;
+      title.textContent = total ? '正在读取 ' + done + ' / ' + total : (s.scan.note || '正在扫描文件夹') + '…';
+      if (desc) {
+        desc.textContent = (s.scan.name ? s.scan.name + ' · ' : '') +
+          '读完会自动分析前置、挑版本，不用管。';
+      }
+      return;
+    }
     if (s.dragCount > 0) {
       title.textContent = '松手就导入 ' + s.dragCount + ' 个文件';
       if (desc) desc.textContent = '拖进来的 .jar 会立刻解析，.zip 资源包/光影也会被认出来。';

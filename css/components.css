@@ -48,6 +48,9 @@
 }
 .drop:hover { transform: translateY(-2px); box-shadow: 0 20px 46px rgba(176, 124, 168, .18); }
 .drop.over { background: linear-gradient(#FFF7FB, #FFF7FB) padding-box, var(--grad-main) border-box; }
+.drop.reading { cursor: progress; }
+.drop.reading .art { animation: artBreathe 1.5s ease-in-out infinite; }
+@keyframes artBreathe { 50% { transform: translateY(-4px) scale(1.05); } }
 .drop .art { flex: 0 0 132px; }
 .drop h2 { margin: 0 0 6px; font-size: 20px; letter-spacing: .2px; }
 .drop p { margin: 0; font-size: 13px; color: var(--ink-2); line-height: 1.75; }
@@ -289,6 +292,26 @@ aside { position: sticky; top: 22px; }
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
+/* 读取文件夹时的进度条 */
+.scanbar {
+  display: flex; align-items: center; gap: 12px;
+  margin: 6px 0 14px; padding: 13px 16px;
+  background: linear-gradient(135deg, #FFF6FB, #F4EFFF 60%, #EEF6FF);
+  border: 1px solid #F3E0F0; border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.scanbar .spinner { flex: 0 0 auto; }
+.scan-main { flex: 1; min-width: 0; display: grid; gap: 6px; }
+.scan-line { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 12px; color: var(--ink-2); }
+.scan-line b { font-size: 12.5px; color: var(--ink); }
+.scan-pct { font-variant-numeric: tabular-nums; color: var(--violet-deep); font-weight: 700; font-size: 12px; }
+.scan-track { height: 7px; border-radius: 999px; background: #F1E7F7; overflow: hidden; }
+.scan-track i { display: block; height: 100%; border-radius: 999px; background: var(--grad-main); transition: width .2s ease-out; }
+/* 还不知道总数（正在罗列文件夹）时的来回跑动进度 */
+.scan-track.running i { width: 34%; animation: scanSlide 1.15s ease-in-out infinite; }
+@keyframes scanSlide { 0% { transform: translateX(-110%); } 100% { transform: translateX(320%); } }
+.scanbar small { font-size: 11px; color: var(--ink-3); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 /* 提示条 */
 .toast {
   position: fixed; left: 50%; bottom: 28px; transform: translate(-50%, 16px);
@@ -488,7 +511,9 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .dline:last-child { border-bottom: 0; }
 .dline b { font-size: 13px; }
 .dline small { color: var(--ink-3); font-size: 11.5px; }
-.detail-picker { margin-bottom: 4px; }
+.detail-picker { margin-bottom: 4px; display: inline-block; max-width: 100%; }
+/* 详情里的下拉贴着选择框展开；默认的 right:0 会把它甩到弹窗右边 */
+.detail-picker .menu { left: 0; right: auto; }
 .dnote { margin-top: 18px; line-height: 1.8; }
 
 /* 中文名 / 原名 */

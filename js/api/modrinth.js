@@ -80,6 +80,38 @@
     return Array.isArray(data) ? data : [];
   }
 
+  /** 批量查更新：一次 POST 交出所有 jar 的哈希，返回 { sha1: 最新版本 } */
+  async function versionFilesUpdate(hashes, env) {
+    if (!hashes || !hashes.length) return {};
+    let lastError = null;
+    for (let i = 0; i < 3; i++) {
+      await gate();
+      try {
+        const res = await fetch(BASE + '/version_files/update', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+          body: JSON.stringify({
+            hashes,
+            algorithm: 'sha1',
+            loaders: [loaderSlug(env.loader)],
+            game_versions: [env.mc]
+          })
+        });
+        if (res.status === 429) {
+          const after = Number(res.headers.get('Retry-After'));
+          await sleep(after > 0 ? Math.min(after * 1000, 10000) : 2200);
+          continue;
+        }
+        if (!res.ok) throw new Error('Modrinth 返回 ' + res.status);
+        return await res.json();
+      } catch (err) {
+        lastError = err;
+        if (i < 2) await sleep(700);
+      }
+    }
+    throw lastError || new Error('Modrinth 请求失败');
+  }
+
   /** 在符合环境的版本里，按依赖给出的版本区间挑一个；挑不到就取最新的正式版 */
   function pickVersion(list, range) {
     if (!list || !list.length) return null;
@@ -101,5 +133,5 @@
   }
 
   MC.api = MC.api || {};
-  MC.api.modrinth = { get, project, search, versions, pickVersion, download, loaderSlug };
+  MC.api.modrinth = { get, project, search, versions, versionFilesUpdate, pickVersion, download, loaderSlug };
 })(globalThis);

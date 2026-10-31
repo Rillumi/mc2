@@ -71,34 +71,72 @@
   }
 
   /* ---------- 把文件读成条目（整理页 / 对比页共用） ---------- */
+  function sha1Hex(buf) {
+    try {
+      if (!globalThis.crypto || !globalThis.crypto.subtle) return Promise.resolve('');
+      return globalThis.crypto.subtle.digest('SHA-1', buf).then(d => {
+        const bytes = new Uint8Array(d);
+        let s = '';
+        for (let i = 0; i < bytes.length; i++) s += bytes[i].toString(16).padStart(2, '0');
+        return s;
+      }).catch(() => '');
+    } catch (err) {
+      return Promise.resolve('');
+    }
+  }
+
   async function buildEntries(files, note) {
+    const st = S();
     const out = [];
     let notMod = 0;
-    for (let i = 0; i < files.length; i++) {
-      const file = files[i];
-      MC.store.state.progress = (note || '正在读取') + ' ' + (i + 1) + '/' + files.length + '：' + file.name;
-      touch();
-      const entry = {
-        uid: 'u' + Date.now().toString(36) + '-' + i + '-' + Math.random().toString(36).slice(2, 6),
-        file, fileName: file.name, size: file.size,
-        kind: 'mod',
-        id: '', name: file.name.replace(/\.(jar|zip)$/i, ''), version: '',
-        loader: '', loaders: [], mc: '', mcRange: '',
-        allIds: [], deps: [], optionalDeps: [], recipes: 0, error: null
-      };
-      try {
-        const buf = await file.arrayBuffer();
-        const res = await MC.metadata.inspect(buf);
-        entry.kind = res.kind;
-        if (res.info) Object.assign(entry, res.info);
-        else if (res.kind === 'mod') entry.error = '没有找到模组元数据';
-        else notMod++;
-      } catch (err) {
-        entry.error = '读不出来：' + (err && err.message ? err.message : err);
+    const total = files.length;
+    st.scan = { note: note || '正在读取', done: 0, total, name: '' };
+    touch();
+    // 先让进度条画出来，再开始啃 jar
+    await new Promise(r => setTimeout(r, 40));
+    let lastPaint = Date.now();
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        st.scan.done = i;
+        st.scan.name = file.name;
+        if (Date.now() - lastPaint > 90) { lastPaint = Date.now(); touch(); }
+        // 每个文件之间让出一帧，进度条和文件名才动得起来
+        await new Promise(r => setTimeout(r, 0));
+
+        const entry = {
+          uid: 'u' + Date.now().toString(36) + '-' + i + '-' + Math.random().toString(36).slice(2, 6),
+          file, fileName: file.name, rel: file.webkitRelativePath || '',
+          size: file.size,
+          kind: 'mod',
+          id: '', name: file.name.replace(/\.(jar|zip)$/i, ''), version: '',
+          loader: '', loaders: [], mc: '', mcRange: '',
+          allIds: [], deps: [], optionalDeps: [], recipes: 0, error: null, sha1: ''
+        };
+        try {
+          const buf = await file.arrayBuffer();
+          const res = await MC.metadata.inspect(buf);
+          entry.kind = res.kind;
+          if (res.info) Object.assign(entry, res.info);
+          else if (res.kind === 'mod') entry.error = '没有找到模组元数据';
+          else notMod++;
+          if (res.kind === 'mod') {
+            entry.sha1 = await sha1Hex(buf);
+            // mods.toml 里写的版本常常是摆设（1.0.0），真实版本在文件名里
+            entry.version = MC.metadata.resolveVersion(entry.version, file.name, entry.name);
+          }
+        } catch (err) {
+          entry.error = '读不出来：' + (err && err.message ? err.message : err);
+        }
+        if (!entry.mc) entry.mc = MC.metadata.inferMcFromName(file.name);
+        if (!entry.id) entry.id = file.name.replace(/\.(jar|zip)$/i, '').toLowerCase();
+        out.push(entry);
+        st.scan.done = i + 1;
       }
-      if (!entry.mc) entry.mc = MC.metadata.inferMcFromName(file.name);
-      if (!entry.id) entry.id = file.name.replace(/\.(jar|zip)$/i, '').toLowerCase();
-      out.push(entry);
+    } finally {
+      st.scan = null;
+      st.progress = '';
+      touch();
     }
     return { entries: out, notMod };
   }
@@ -108,7 +146,11 @@
     opts = opts || {};
     const st = S();
     let list = Array.from(files || []).filter(f => /\.(jar|zip)$/i.test(f.name));
-    if (!list.length) return toast('没找到 .jar / .zip 文件，把 mods 文件夹拖进来就行');
+    if (!list.length) {
+      st.scan = null;
+      touch();
+      return toast('没找到 .jar / .zip 文件，把 mods 文件夹拖进来就行');
+    }
 
     // 拖进来的是文件夹 → 回到「整理整个文件夹」模式
     if (opts.fromFolder && st.mode === 'single') {
@@ -140,7 +182,11 @@
 
     const seen = new Set(st.mods.map(m => m.fileName + ':' + m.size));
     const fresh = single ? list : list.filter(f => !seen.has(f.name + ':' + f.size));
-    if (!fresh.length) return toast('这些文件已经在列表里了');
+    if (!fresh.length) {
+      st.scan = null;
+      touch();
+      return toast('这些文件已经在列表里了');
+    }
 
     const built = await buildEntries(fresh, '正在读取');
     st.mods.push(...built.entries);
@@ -471,52 +517,98 @@
     groups.forEach(g => { st.updates[g.id] = { status: 'checking' }; });
     touch();
 
-    let cursor = 0;
-    let netFails = 0;
-    let aborted = false;
-    const worker = async () => {
-      while (cursor < groups.length && !aborted) {
+    const targets = groups.map(g => ({ g, row: chosenOf(st, g) }));
+
+    /* 一次性把能算哈希的 jar 交给 Modrinth：/version_files/update 一个请求查一堆，
+       比逐个按 slug 查快得多；改名过的 jar 哈希不变，也照样能认出来。 */
+    const hashed = targets.filter(t => t.row && t.row.entry.sha1);
+    const noHash = targets.filter(t => t.row && !t.row.entry.sha1);
+    st.updateTotal = hashed.length + noHash.length;
+    const latestByHash = new Map();
+    let batchError = null;
+    const chunkSize = 80;
+    try {
+      for (let i = 0; i < hashed.length; i += chunkSize) {
         if (my !== gen) return;
-        const g = groups[cursor++];
-        const row = chosenOf(st, g);
-        if (!row) { st.updates[g.id] = { status: 'skip' }; st.updateDone++; touch(); continue; }
-        let res;
-        try {
-          res = await MC.updates.check(row.entry, st.env);
-        } catch (err) {
-          res = { status: 'error', reason: err && err.message ? err.message : String(err) };
-        }
-        if (my !== gen) return;
-        st.updates[g.id] = res;
-        st.updateDone++;
-        if (res.status === 'error' && isNetworkError(res.reason)) {
-          netFails++;
-          if (netFails >= 3) aborted = true;
-        }
+        const chunk = hashed.slice(i, i + chunkSize);
+        const data = await MC.api.modrinth.versionFilesUpdate(
+          chunk.map(t => t.row.entry.sha1), st.env
+        );
+        Object.keys(data || {}).forEach(h => latestByHash.set(h, data[h]));
+        st.updateDone = Math.min(i + chunkSize, hashed.length);
         touch();
       }
-    };
-    await Promise.all([worker(), worker(), worker(), worker()]);
+    } catch (err) {
+      batchError = err;
+    }
+    if (my !== gen) return;
+
+    let newer = 0;
+    let notFound = 0;
+    let skip = 0;
+    for (const t of targets) {
+      const gid = t.g.id;
+      if (!t.row) { st.updates[gid] = { status: 'skip' }; skip++; continue; }
+      // 没有哈希的留给下面按名字重查，先别判成“没收录”
+      if (!t.row.entry.sha1) continue;
+      const v = latestByHash.get(t.row.entry.sha1);
+      if (!v) { st.updates[gid] = { status: 'notfound' }; notFound++; continue; }
+      const latest = v.version_number || '';
+      const cmp = t.row.entry.version ? MC.version.cmp(latest, t.row.entry.version) : 1;
+      const status = cmp > 0 ? 'newer' : 'current';
+      st.updates[gid] = {
+        status,
+        latest,
+        installed: t.row.entry.version || '',
+        url: 'https://modrinth.com/mod/' + encodeURIComponent(v.project_id || ''),
+        project: v.name || '',
+        at: Date.now()
+      };
+      if (status === 'newer') newer++;
+    }
+
+    st.updateDone = hashed.length;
+
+    // 没算成哈希的（非 Modrinth 文件 / 浏览器不支持 SHA-1）：只对这些少量文件按名字查一次
+    const retry = noHash;
+    if (retry.length) {
+      let cursor = 0;
+      const worker = async () => {
+        while (cursor < retry.length) {
+          if (my !== gen) return;
+          const t = retry[cursor++];
+          let res;
+          try {
+            res = await MC.updates.check(t.row.entry, st.env);
+          } catch (err) {
+            res = { status: 'error', reason: err && err.message ? err.message : String(err) };
+          }
+          if (my !== gen) return;
+          st.updates[t.g.id] = res;
+          st.updateDone++;
+          touch();
+        }
+      };
+      await Promise.all([worker(), worker()]);
+    }
+
     if (my !== gen) return;
     st.updateBusy = false;
-    if (aborted) {
-      groups.forEach(g => {
-        const u = st.updates[g.id];
-        if (!u || u.status === 'checking') st.updates[g.id] = { status: 'error', reason: '连不上 Modrinth，已暂停检查' };
-      });
-      touch();
-      st.updateError = '连不上 Modrinth，已暂停检查。本地整理和打包不受影响。';
-      touch();
-      toast('连不上 Modrinth，已暂停检查。网络恢复后再点一次；本地整理和打包不受影响。');
-      return;
+    st.updateDone = st.updateTotal;
+    if (batchError) {
+      st.updateError = isNetworkError(batchError.message)
+        ? '连不上 Modrinth，可能是网络或代理问题。'
+        : '批量查更新失败：' + (batchError.message || '未知错误');
     }
     touch();
-    const newer = groups.filter(g => st.updates[g.id] && st.updates[g.id].status === 'newer').length;
-    const notFound = groups.filter(g => st.updates[g.id] && st.updates[g.id].status === 'notfound').length;
-    const failed = groups.filter(g => st.updates[g.id] && st.updates[g.id].status === 'error').length;
+    if (batchError) {
+      toast('连不上 Modrinth，检查更新失败；本地整理和打包不受影响。');
+      return;
+    }
     toast('检查完成：' + newer + ' 个有新版本' +
       (notFound ? '，' + notFound + ' 个 Modrinth 没收录' : '') +
-      (failed ? '，' + failed + ' 个查询失败' : ''));
+      (skip ? '，' + skip + ' 个没有可用版本' : '') +
+      (retry.length ? '，' + retry.length + ' 个按名字查过' : ''));
   }
 
   function exportGuide() {
@@ -535,7 +627,11 @@
   async function importDiff(files) {
     const st = S();
     const list = Array.from(files || []).filter(f => /\.(jar|zip)$/i.test(f.name));
-    if (!list.length) return toast('没找到 .jar / .zip 文件');
+    if (!list.length) {
+      st.scan = null;
+      touch();
+      return toast('没找到 .jar / .zip 文件');
+    }
     const built = await buildEntries(list, '正在读取另一个包');
     st.progress = '';
     st.diff = {
@@ -1253,9 +1349,18 @@
       drop.addEventListener('drop', async e => {
         e.preventDefault();
         drop.classList.remove('over');
-        S().dragCount = 0;
+        const st = S();
+        st.dragCount = 0;
+        // 罗列子文件夹也要有反馈：这一步可能比读 jar 还久
+        st.scan = { note: '正在罗列文件夹', done: 0, total: 0, name: '' };
+        touch();
         const got = await collectDrop(e.dataTransfer);
-        if (got.files.length) importFiles(got.files, { fromFolder: got.fromFolder });
+        if (got.files.length) {
+          importFiles(got.files, { fromFolder: got.fromFolder });
+        } else {
+          st.scan = null;
+          touch();
+        }
       });
     }
     window.addEventListener('dragover', e => e.preventDefault());
@@ -1373,9 +1478,18 @@
       if (!z) return;
       e.preventDefault();
       z.classList.remove('over');
+      const isDiff = z.dataset.drop === 'diff';
+      const st = S();
+      if (isDiff) {
+        st.scan = { note: '正在罗列文件夹', done: 0, total: 0, name: '' };
+        touch();
+      }
       const got = await collectDrop(e.dataTransfer);
-      if (!got.files.length) return;
-      if (z.dataset.drop === 'diff') importDiff(got.files);
+      if (!got.files.length) {
+        if (isDiff) { st.scan = null; touch(); }
+        return;
+      }
+      if (isDiff) importDiff(got.files);
       else if (z.dataset.drop === 'log') importLogs(got.files);
     });
 

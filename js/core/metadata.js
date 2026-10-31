@@ -228,6 +228,49 @@
     return m ? m[1] : '';
   }
 
+  /** 去掉作者手滑写出的尾巴："1.0.0}" → "1.0.0"；占位符没替换掉的直接当没有 */
+  function sanitizeVersion(v) {
+    let s = String(v == null ? '' : v).trim();
+    s = s.replace(/[}\]>,;]+$/, '').trim();
+    if (/[{}%$]/.test(s) || /^(unknown|null|none)$/i.test(s)) return '';
+    return s;
+  }
+
+  /** 1.0 / 1.0.0 这类"填着玩"的版本号：真实版本往往只在文件名里 */
+  function isGenericVersion(v) {
+    const s = sanitizeVersion(v);
+    if (!s) return true;
+    const core = s.replace(/\b1\.(?:1[2-9]|2[0-9])(?:\.\d+)?\b/g, '').replace(/[^\d.]/g, '');
+    const nums = core.split('.').filter(Boolean).join('.');
+    return !nums || /^1(\.0)*$/.test(nums);
+  }
+
+  /** 从文件名里猜真实版本：去掉中文标记、MC 版本、加载器名，取第一个版本号 */
+  function fileVersionOf(fileName, modName) {
+    let base = String(fileName || '').replace(/\.(jar|zip)$/i, '');
+    base = base.replace(/【[^】]*】|\[[^\]]*\]/g, ' ');
+    const name = String(modName || '').trim();
+    if (name && name.length >= 3) {
+      const re = new RegExp(name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/\s+/g, '\\s*'), 'ig');
+      base = base.replace(re, ' ');
+    }
+    base = base.replace(/mc\s*\d+\.\d+(?:\.\d+)?/ig, ' ');
+    // 只剔除 1.x 的 MC 版本，避免把 3.2.7 这类真实版本当 MC 版本
+    base = base.replace(/\b1\.(?:1[2-9]|2[0-9])(?:\.\d+)?\b/g, ' ');
+    base = base.replace(/\b(fabric|forge|neoforge|quilt)\b/ig, ' ');
+    const m = base.match(/[vV]?(\d+(?:\.\d+){1,3}(?:[a-zA-Z]+\d*)?)/);
+    return m ? m[1] : '';
+  }
+
+  /** 声明的版本坏了/太笼统时，用文件名里的版本兜底 */
+  function resolveVersion(declared, fileName, modName) {
+    const d = sanitizeVersion(declared);
+    const f = fileVersionOf(fileName, modName);
+    if (!f) return d;
+    if (!d || isGenericVersion(d)) return f;
+    return d;
+  }
+
   /** 读取一个文件，返回 { kind, info }：
    *  kind = mod / resourcepack / shader / unknown
    *  info = 模组信息（只有 mod 才有） */
@@ -336,7 +379,7 @@
         loader: primary.loader,
         loaders: found.map(f => f.loader),
         id: modId,
-        version: primary.meta.mods[0].version,
+        version: sanitizeVersion(primary.meta.mods[0].version),
         name: primary.meta.mods[0].name,
         nameZh,
         description: found.map(f => (f.meta.mods[0] && f.meta.mods[0].description) || '').find(Boolean) || '',
@@ -355,5 +398,5 @@
     return (await inspect(buf)).info;
   }
 
-  MC.metadata = { inspect, parseJarBuffer, normalizeMc, inferMcFromName, parseForgeToml, parseFabricJson, parseMcmodInfo };
+  MC.metadata = { inspect, parseJarBuffer, normalizeMc, inferMcFromName, parseForgeToml, parseFabricJson, parseMcmodInfo, sanitizeVersion, isGenericVersion, fileVersionOf, resolveVersion };
 })(globalThis);

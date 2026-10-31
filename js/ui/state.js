@@ -63,6 +63,7 @@
     previewQuery: '',   // 预览里的搜索词
     picker: null,       // 当前展开的自绘下拉：'g:<id>' / 'd:<key>'
     dragCount: 0,       // 拖拽悬停时的文件数，用于即时反馈
+    scan: null,         // 正在读取文件：{ note, done, total, name }
     busy: false,
     progress: ''
   };

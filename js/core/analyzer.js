@@ -77,15 +77,69 @@
     opts = opts || {};
     const includeOptional = !!opts.includeOptional;
 
-    const modFiles = mods.filter(m => (m.kind || 'mod') === 'mod');
-    const others = mods.filter(m => (m.kind || 'mod') !== 'mod');
+    // 同一个 jar 经常被复制到多个文件夹里备份，按内容哈希（没有哈希时按文件名+大小）去重，
+    // 避免同一个版本在列表里出现好几次
+    const uniqueMods = [];
+    const seenCopy = new Map();
+    mods.forEach(m => {
+      const key = m.sha1
+        ? 'h:' + m.sha1
+        : 'f:' + String(m.fileName || '').toLowerCase() + '|' + (m.size || 0);
+      const hit = seenCopy.get(key);
+      if (hit) {
+        hit.copies = (hit.copies || 1) + 1;
+        return;
+      }
+      m.copies = m.copies || 1;
+      seenCopy.set(key, m);
+      uniqueMods.push(m);
+    });
+
+    const modFiles = uniqueMods.filter(m => (m.kind || 'mod') === 'mod');
+    const others = uniqueMods.filter(m => (m.kind || 'mod') !== 'mod');
     const connector = opts.connector || detectConnector(modFiles);
 
-    const byId = new Map();
+    // 同一模组的不同打包常把 ID 写成 mizunoky_mod / mizunoky-mod，去掉分隔符再分组
+    const groupKey = entry => String(entry.id || '').toLowerCase().replace(/[_-]/g, '');
+    const nameKey = entry => String(entry.name || entry.nameZh || entry.id || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
+    // 显示名完全相同（例如 ID 从 nti_ziran 改成 ntileriaziran）也当作同一个模组
+    const sameDisplayName = (a, b) => {
+      const na = nameKey(a), nb = nameKey(b);
+      return !!na && na === nb && na.length >= 4;
+    };
+
+    const byKey = new Map();
     modFiles.forEach(m => {
-      const k = String(m.id || '').toLowerCase();
-      if (!byId.has(k)) byId.set(k, []);
-      byId.get(k).push(m);
+      const k = groupKey(m);
+      if (!byKey.has(k)) byKey.set(k, []);
+      byKey.get(k).push(m);
+    });
+
+    // 同名、且两个 ID 互为包含（cocricot / cocricotmod）→ 当作同一个模组的两个版本；
+    // 显示名完全一致也合并（作者改过 modId 但名字没变）
+    const pooled = [...byKey.entries()];
+    const dropped = new Set();
+    for (let i = 0; i < pooled.length; i++) {
+      if (dropped.has(i)) continue;
+      for (let j = i + 1; j < pooled.length; j++) {
+        if (dropped.has(j)) continue;
+        const ka = pooled[i][0], kb = pooled[j][0];
+        const na = nameKey(pooled[i][1][0]), nb = nameKey(pooled[j][1][0]);
+        if (!na || na !== nb) continue;
+        const idRelated = kb.length >= 5 && (ka.indexOf(kb) >= 0 || kb.indexOf(ka) >= 0);
+        if (idRelated || sameDisplayName(pooled[i][1][0], pooled[j][1][0])) {
+          pooled[i][1] = pooled[i][1].concat(pooled[j][1]);
+          dropped.add(j);
+        }
+      }
+    }
+
+    const groupOf = new Map(); // uid → 这一组的所有文件
+    const groupMeta = [];
+    pooled.forEach(([key, entries], i) => {
+      if (dropped.has(i)) return;
+      entries.forEach(e => groupOf.set(e.uid, entries));
+      groupMeta.push({ key, entries });
     });
 
     const rows = modFiles.map(entry => {
@@ -103,7 +157,8 @@
         }
       }
       if (entry.error) issues.push({ type: 'meta', text: entry.error });
-      const groupSize = byId.get(String(entry.id || '').toLowerCase()).length;
+      const peer = groupOf.get(entry.uid) || [entry];
+      const groupSize = peer.length;
       if (groupSize > 1) issues.push({ type: 'dup', text: '同 ID 共 ' + groupSize + ' 份' });
       return { uid: entry.uid, entry, usable, viaConnector, connectorFix, issues, groupSize, depInfo: [] };
     });
@@ -120,13 +175,16 @@
       });
     });
 
-    const groups = [...byId.entries()].map(([id, entries]) => {
-      const groupRows = rows.filter(r => String(r.entry.id).toLowerCase() === id);
+    const rowByUid = new Map(rows.map(r => [r.uid, r]));
+    const groups = groupMeta.map(gm => {
+      const groupRows = gm.entries.map(e => rowByUid.get(e.uid)).filter(Boolean);
+      const usableRows = groupRows.filter(r => r.usable);
+      const first = usableRows[0] || groupRows[0];
       return {
-        id,
-        displayId: groupRows[0].entry.id,
+        id: gm.key,
+        displayId: first ? first.entry.id : gm.key,
         rows: groupRows,
-        usableRows: groupRows.filter(r => r.usable),
+        usableRows,
         sizes: groupRows.length
       };
     }).sort((a, b) => b.sizes - a.sizes);

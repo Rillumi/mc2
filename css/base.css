@@ -54,6 +54,11 @@ a { color: var(--violet-deep); }
 .rail-field .pick:hover { background: #fff; border-color: #E9CCE3; }
 .rail-field .pick svg { width: 14px; height: 14px; opacity: .5; }
 .rail-field .menu { left: 0; right: 0; min-width: 0; max-width: none; max-height: 260px; overflow: auto; }
+/* 版本下拉在侧栏最底部，往下展开会被屏幕底边切掉，桌面宽度时改成往上弹 */
+@media (min-width: 981px) {
+  .rail-field .menu { top: auto; bottom: calc(100% + 6px); animation: menuUp .14s ease-out; }
+  @keyframes menuUp { from { opacity: 0; transform: translateY(4px); } }
+}
 .page { min-width: 0; }
 main.wrap { padding-top: 22px; padding-bottom: 40px; }
 
