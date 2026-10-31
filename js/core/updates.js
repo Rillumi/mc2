@@ -69,7 +69,7 @@
     const latest = MC.api.modrinth.pickVersion(versions, '');
     if (!latest) return { status: 'nomatch', url: projectUrl(proj), project: proj.title };
 
-    const cmp = entry.version ? MC.version.cmp(latest.version_number, entry.version) : 1;
+    const cmp = entry.version ? MC.version.compare(latest.version_number, entry.version) : 1;
     return {
       status: cmp > 0 ? 'newer' : 'current',
       latest: latest.version_number,

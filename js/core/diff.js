@@ -41,7 +41,7 @@
     const record = (id, a, b) => {
       const va = String(a.version || '');
       const vb = String(b.version || '');
-      const same = !va || !vb ? true : (MC.version.cmp(va, vb) === 0 && va === vb);
+      const same = !va || !vb ? true : MC.version.equals(va, vb);
       common.push({ id, name: pickName(a), a, b, same, va, vb });
     };
 

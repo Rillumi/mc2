@@ -771,7 +771,7 @@
       const v = latestByHash.get(t.row.entry.sha1);
       if (!v) { st.updates[gid] = { status: 'notfound' }; notFound++; continue; }
       const latest = v.version_number || '';
-      const cmp = t.row.entry.version ? MC.version.cmp(latest, t.row.entry.version) : 1;
+      const cmp = t.row.entry.version ? MC.version.compare(latest, t.row.entry.version) : 1;
       const status = cmp > 0 ? 'newer' : 'current';
       st.updates[gid] = {
         status,

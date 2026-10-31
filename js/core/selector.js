@@ -23,7 +23,7 @@
       const pa = V.isPrerelease(a.entry.version) ? 0 : 1;
       const pb = V.isPrerelease(b.entry.version) ? 0 : 1;
       if (pa !== pb) return pb - pa;
-      return V.cmp(b.entry.version, a.entry.version);
+      return V.compare(b.entry.version, a.entry.version);
     });
   }
 
