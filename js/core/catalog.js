@@ -63,7 +63,9 @@
   function hit(text, k) {
     if (!text) return false;
     if (/[\u4e00-\u9fff]/.test(k)) return text.indexOf(k) >= 0;
-    return new RegExp('(^|[^a-z0-9])' + escRe(k) + '($|[^a-z0-9])').test(text);
+    // 短词要求整词（api/jei/hud），长词允许词首派生（tech→technology、build→building）
+    const tail = k.length <= 3 ? '($|[^a-z0-9])' : '';
+    return new RegExp('(^|[^a-z0-9])' + escRe(k) + tail).test(text);
   }
 
   /* 一个项目常常同时挂着多个分类（Create 是 decoration+technology+utility），
@@ -94,22 +96,47 @@
     return { cats: list, primary: primaryOf(list) || 'misc' };
   }
 
-  /** 名称 / modId 命中权重 3，简介命中权重 1；取分最高的一类 */
-  function guess(entry) {
+  /** 名称 / modId 命中权重 3，简介命中权重 1；返回所有命中的分类，按分数排序 */
+  function guessAll(entry) {
     const id = String((entry && entry.id) || '').toLowerCase();
     const name = String((entry && entry.name) || '').toLowerCase();
     const desc = String((entry && entry.description) || '').toLowerCase();
-    let best = 'misc';
-    let bestScore = 0;
+    const scored = [];
     Object.keys(KW).forEach(cat => {
       let score = 0;
       KW[cat].forEach(k => {
         if (hit(id, k) || hit(name, k)) score += 3;
         else if (hit(desc, k)) score += 1;
       });
-      if (score > bestScore) { bestScore = score; best = cat; }
+      if (score > 0) scored.push({ id: cat, score });
     });
-    return best;
+    scored.sort((a, b) => b.score - a.score);
+    return scored.map(x => x.id);
+  }
+
+  /** 名称 / modId 命中权重 3，简介命中权重 1；取分最高的一类 */
+  function guess(entry) {
+    return guessAll(entry)[0] || 'misc';
+  }
+
+  /** 一个模组的所有分类桶：Modrinth 多分类全部保留，没有元数据才用关键词 */
+  function tagsOf(entry) {
+    const slugs = ((entry && entry.cats) || []).map(s => String(s || '').toLowerCase());
+    if (slugs.length) {
+      const out = [];
+      slugs.forEach(s => {
+        const id = MR_MAP[s];
+        if (!id || out.indexOf(id) >= 0) return;
+        out.push(id);
+      });
+      return out.length ? out : ['misc'];
+    }
+    const guessed = guessAll(entry);
+    return guessed.length ? guessed : ['misc'];
+  }
+
+  function sourceOf(entry) {
+    return ((entry && entry.cats) || []).length ? 'modrinth' : 'keyword';
   }
 
   /** entry.cats（Modrinth 原始分类数组）优先，没有就退回关键词 */
@@ -126,6 +153,13 @@
   function counts(items) {
     const n = {};
     items.forEach(e => { const c = categoryOf(e); n[c] = (n[c] || 0) + 1; });
+    return CATS.map(c => ({ id: c.id, label: c.label, n: n[c.id] || 0 })).filter(c => c.n);
+  }
+
+  /** 多标签计数：一个模组可以同时计入多个分类 */
+  function tagCounts(items) {
+    const n = {};
+    items.forEach(e => tagsOf(e).forEach(c => { n[c] = (n[c] || 0) + 1; }));
     return CATS.map(c => ({ id: c.id, label: c.label, n: n[c.id] || 0 })).filter(c => c.n);
   }
 
@@ -170,5 +204,9 @@
     return lines.join('\n');
   }
 
-  MC.catalog = { CATS, MR_MAP, categoryOf, labelOf, fromProject, counts, markdown };
+  MC.catalog = {
+    CATS, MR_MAP, categoryOf, labelOf, fromProject, counts,
+    guess, guessAll, tagsOf, tagCounts, sourceOf,
+    markdown
+  };
 })(globalThis);
