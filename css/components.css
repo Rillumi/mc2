@@ -561,6 +561,7 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
   margin-left: 6px; border-bottom: 1px dotted var(--line-2);
 }
 .zsrc:hover { color: var(--ink-2); }
+button.zsrc { background: none; border: 0; border-bottom: 1px dotted var(--line-2); padding: 0; cursor: pointer; }
 
 /* 简介语言切换 */
 .desc-tabs { display: flex; gap: 6px; margin-bottom: 9px; flex-wrap: wrap; }

@@ -4,14 +4,15 @@
   'use strict';
   const MC = (root.MC = root.MC || {});
 
-  /** items = [{ id, title, slug }] → { 命中的 id: { zh, en, abbr, url } } */
-  async function lookup(items) {
+  /** items = [{ id, title, slug }] → { 命中的 id: { zh, en, abbr, url } }；
+      opts.force = true 时忽略服务端缓存重新查（对应详情页的「重新查中文名」） */
+  async function lookup(items, opts) {
     const list = (items || []).filter(x => x && x.id);
     if (!list.length) return {};
     const res = await fetch('/api/zh-names', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: list })
+      body: JSON.stringify({ items: list, force: !!(opts && opts.force) })
     });
     if (!res.ok) throw new Error('HTTP ' + res.status);
     const data = await res.json();

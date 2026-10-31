@@ -1445,6 +1445,26 @@
         exportPackOptions();
         return true;
 
+      /* 详情页手动重查中文名：忽略服务端 24 小时缓存，立刻去 MC百科再搜一遍 */
+      case 'zh-recheck': {
+        const g = st.analysis && st.analysis.groups.find(x => x.id === group);
+        if (!g || !MC.zhNames) return true;
+        const row = chosenOf(st, g);
+        const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
+        if (!e) return true;
+        const p = projectForEntry(st, e, g);
+        toast('正在重新查中文名…');
+        MC.zhNames
+          .lookup([{ id: String(e.id || ''), title: String(e.name || ''), slug: String((p && p.slug) || '') }], { force: true })
+          .then(names => {
+            applyZhNames(st, names);
+            const rec = names[String(e.id || '')];
+            toast(rec && rec.zh ? '查到中文名：' + rec.zh : 'MC百科上也查不到这个模组的中文名');
+          })
+          .catch(err => toast('查不到：' + ((err && err.message) || '本地服务没开')));
+        return true;
+      }
+
       case 'detail':
         if (el.dataset.other) {
           st.detail = 'o:' + el.dataset.other;

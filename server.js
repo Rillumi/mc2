@@ -6,6 +6,11 @@ const http = require('http');
 const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
+const dns = require('dns');
+
+/* MC百科的 IPv6 地址经常连不上，Node 默认又优先 IPv6，
+   结果是每次抓中文名都「连接超时」。强制走 IPv4。 */
+try { dns.setDefaultResultOrder('ipv4first'); } catch (err) { /* 老 Node 忽略 */ }
 
 const ROOT = __dirname;
 const START_PORT = Number(process.argv[2]) || 8737;
@@ -285,11 +290,14 @@ async function loaderVersions(loader, mc) {
 /* ================= 中文名库（代理 MC百科 + 本地缓存） =================
    mods.toml 里的 displayName 一般是英文；大家聊天时用的是中文俗称。
    MC百科的搜索结果标题就是「[缩写] 中文名 (English Name)」，所以按英文名核对后
-   把中文名存下来，下次直接命中，不用再抓。查不到的条目记 7 天，避免反复请求。 */
+   把中文名存下来，下次直接命中，不用再抓。查不到的条目记 1 天，避免反复请求。 */
 const DATA_DIR = path.join(ROOT, 'data');
 const ZH_FILE = path.join(DATA_DIR, 'zh-names.json');
 const ZH_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
-const ZH_MISS_TTL = 7 * 24 * 60 * 60 * 1000;
+/* 没查到的记录只留 24 小时；ZH_VER 变更时旧的「没查到」全部作废重试，
+   避免匹配规则改好了却因为旧缓存一直显示没有中文名。 */
+const ZH_VER = 2;
+const ZH_MISS_TTL = 24 * 60 * 60 * 1000;
 let zhMem = null;
 let zhDirty = false;
 let zhTimer = null;
@@ -317,7 +325,7 @@ function zhFlush() {
 
 function zhRemember(rec) {
   const all = zhAll();
-  all[rec.id] = Object.assign({}, rec, { at: Date.now() });
+  all[rec.id] = Object.assign({}, rec, { at: Date.now(), v: ZH_VER });
   zhDirty = true;
   clearTimeout(zhTimer);
   zhTimer = setTimeout(zhFlush, 800);
@@ -366,16 +374,34 @@ function zhText(s) {
     .trim();
 }
 
+/** 搜索页高亮会在标题里插图标，比如「玉 🔍 ( Jade 🔍 )」，先清掉 */
+function zhClean(s) {
+  return String(s || '')
+    .replace(/\p{Extended_Pictographic}/gu, '')
+    .replace(/[\u200b-\u200f\uFE0F\u200D]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/* 搜索结果的高亮会给每个词之间插空格：森罗 物语 ： 兼容 → 森罗物语：兼容 */
+function zhTight(s) {
+  return String(s || '')
+    .replace(/([\u4e00-\u9fff])\s+(?=[\u4e00-\u9fff])/g, '$1')
+    .replace(/\s*([：:，,、])\s*/g, '$1')
+    .trim();
+}
+
 /** 「[TF] 暮色森林 (The Twilight Forest)」→ { abbr: 'TF', zh: '暮色森林', en: 'The Twilight Forest' } */
 function zhTitle(text) {
-  let t = zhText(text);
+  let t = zhClean(zhText(text));
   let abbr = '';
   const ab = /^\[([^\]]{1,12})\]\s*/.exec(t);
   if (ab) { abbr = ab[1]; t = t.slice(ab[0].length).trim(); }
   let zh = t;
   let en = '';
   const m = /^([\s\S]*?)\s*[(（]([^()（）]*)[)）]\s*$/.exec(t);
-  if (m) { zh = m[1].trim(); en = m[2].trim(); }
+  if (m) { zh = zhClean(m[1]); en = zhClean(m[2]); }
+  if (zhHasCjk(zh)) zh = zhTight(zh);
   return { abbr, zh, en };
 }
 
@@ -397,46 +423,70 @@ function zhNorm(s) {
   return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
 }
 
-/** 只认英文名对得上的结果，避免把「暮色森林法术包」当成暮色森林 */
+function zhHasCjk(s) {
+  return /[\u4e00-\u9fff]/.test(String(s || ''));
+}
+
+/** 只认名字对得上的结果，避免把「暮色森林法术包」当成暮色森林。
+   英文名和标题里的中文名都参与比对：显示名本身是中文的模组（比如森罗物语），
+   搜索结果里只有一个英文名，只比英文永远对不上。 */
 function pickMcmod(list, keys) {
   let best = null;
   let bestScore = 0;
+  const want = keys.map(k => zhNorm(k).replace(/^the/, '')).filter(k => k && k.length >= 3);
   (list || []).forEach(r => {
-    if (!r.en) return;
     const en = zhNorm(r.en).replace(/^the/, '');
-    keys.forEach(k => {
-      const kk = zhNorm(k).replace(/^the/, '');
-      if (!kk || kk.length < 3) return;
+    const zh = zhNorm(r.zh).replace(/^the/, '');
+    want.forEach(kk => {
       let score = 0;
-      if (en === kk) score = 100;
+      if (en && en === kk) score = 100;
+      else if (zh && zh === kk) score = 100;
       else if (en.length >= 5 && kk.length >= 5 && (en.indexOf(kk) >= 0 || kk.indexOf(en) >= 0)) {
-        score = 70 + Math.min(en.length, kk.length) / 10;
+        score = 80 + Math.min(en.length, kk.length) / 10;
+      } else if (zhHasCjk(kk) && zh.length >= 3 && (zh.indexOf(kk) >= 0 || kk.indexOf(zh) >= 0)) {
+        score = 72 + Math.min(zh.length, kk.length) / 10;
       }
       if (score > bestScore) { bestScore = score; best = r; }
     });
   });
-  return bestScore >= 70 ? best : null;
+  if (bestScore < 70) return null;
+  // 标题就是纯英文（GeckoLib / Cloth Config API）说明它本来没有中文名，别硬塞
+  if (!zhHasCjk(best.zh)) return null;
+  return best;
 }
 
-async function mcmodSearch(title, keys) {
-  const key = String(title || '').trim().slice(0, 90);
-  if (!key) return null;
+/* 先用显示名搜；显示名是中文、MC百科标题只有英文时，再用 modId/slug 搜一次 */
+async function mcmodSearch(title, keys, alt) {
+  const words = [title, alt]
+    .map(x => String(x || '').trim().slice(0, 90))
+    .filter((x, i, arr) => x && arr.indexOf(x) === i);
+  if (!words.length) return null;
+
   let lastError = null;
-  // MC百科偶尔会抽风／超时，重试一次再判定「没查到」，免得把好结果记成缺数据
-  for (let i = 0; i < 2; i++) {
-    try {
-      const res = await fetch('https://search.mcmod.cn/s?key=' + encodeURIComponent(key) + '&filter=0', {
-        headers: { 'User-Agent': ZH_UA, 'Accept-Language': 'zh-CN,zh;q=0.9' },
-        signal: AbortSignal.timeout(15000)
-      });
-      if (!res.ok) throw new Error('MC百科返回 ' + res.status);
-      return pickMcmod(parseMcmod(await res.text()), keys || [key]);
-    } catch (err) {
-      lastError = err;
-      if (i === 0) await new Promise(r => setTimeout(r, 600));
+  let responded = false;
+  let calls = 0;
+  for (const word of words) {
+    // MC百科偶尔会抽风／超时，每个关键词重试一次再判定「没查到」
+    for (let i = 0; i < 2; i++) {
+      if (calls) await new Promise(r => setTimeout(r, 600));
+      calls++;
+      try {
+        const res = await fetch('https://search.mcmod.cn/s?key=' + encodeURIComponent(word) + '&filter=0', {
+          headers: { 'User-Agent': ZH_UA, 'Accept-Language': 'zh-CN,zh;q=0.9' },
+          signal: AbortSignal.timeout(15000)
+        });
+        if (!res.ok) throw new Error('MC百科返回 ' + res.status);
+        responded = true;
+        const hit = pickMcmod(parseMcmod(await res.text()), keys || [word]);
+        if (hit) return hit;
+        break;   // 搜索本身成功了，只是没匹配上，换下一个关键词
+      } catch (err) {
+        lastError = err;
+      }
     }
   }
-  throw lastError;
+  if (!responded) throw lastError || new Error('连不上 MC百科');
+  return null;
 }
 
 /* ================= 爱发电（我支持过的作者 → 主页 / 发电帖） =================
@@ -690,6 +740,7 @@ const server = http.createServer(async (req, res) => {
       if (urlPath === '/api/zh-names' && req.method === 'POST') {
         const body = await bodyJson(req);
         const items = (Array.isArray(body.items) ? body.items : []).slice(0, 40);
+        const force = body.force === true;   // 手动「重新查」：忽略缓存，查过的也重来
         const all = zhAll();
         const names = {};
         const todo = [];
@@ -697,8 +748,14 @@ const server = http.createServer(async (req, res) => {
           const id = String((it && it.id) || '').trim().slice(0, 190);
           if (!id) continue;
           const rec = all[id];
-          if (rec && rec.zh) { names[id] = zhOut(rec); continue; }
-          if (rec && rec.at && Date.now() - rec.at < ZH_MISS_TTL) continue;  // 刚查过没查到
+          if (force) {
+            delete all[id];
+            zhDirty = true;
+          } else {
+            if (rec && rec.zh) { names[id] = zhOut(rec); continue; }
+            // 旧规则查空的不算数；刚查过没查到才跳过
+            if (rec && rec.v === ZH_VER && rec.at && Date.now() - rec.at < ZH_MISS_TTL) continue;
+          }
           todo.push({
             id,
             title: String((it && it.title) || '').trim().slice(0, 120),
@@ -707,7 +764,7 @@ const server = http.createServer(async (req, res) => {
         }
 
         for (const t of todo) {
-          if (names[t.id]) continue;
+          if (names[t.id] || force) continue;
           const db = await dbZhGet(t.id);
           if (db) {
             zhRemember(db);
@@ -725,7 +782,7 @@ const server = http.createServer(async (req, res) => {
           searched++;
           let hit = null;
           try {
-            hit = await mcmodSearch(t.title, keys);
+            hit = await mcmodSearch(t.title, keys, t.slug || t.id);
           } catch (err) {
             offline++;
             continue;   // 网络临时出错：不记「没查到」，下次再试
