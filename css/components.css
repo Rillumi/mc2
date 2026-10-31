@@ -70,6 +70,21 @@
 }
 .pill svg { width: 13px; height: 13px; stroke: var(--violet-deep); fill: none; stroke-width: 1.9; }
 
+/* 我的库：上次用过的 mods 文件夹 + 一键重扫 */
+.libcard {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-top: 12px; padding: 8px 12px; border-radius: 12px;
+  background: rgba(255, 255, 255, .78); border: 1px dashed #E7D4EE;
+}
+.libtx { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; min-width: 0; }
+.libtx b { font-size: 12.5px; }
+.libtx small { font-size: 11px; color: var(--ink-3); }
+.libtag {
+  font-size: 10.5px; color: #fff; border-radius: 999px; padding: 2px 8px;
+  background: var(--grad-main); letter-spacing: .3px;
+}
+.libacts { display: flex; gap: 6px; margin-left: auto; }
+
 /* 概览 */
 .stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; margin-bottom: 20px; }
 .stat {

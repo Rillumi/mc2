@@ -50,8 +50,9 @@
   }
 
   async function collectDrop(dt) {
-    if (!dt) return { files: [], fromFolder: false };
+    if (!dt) return { files: [], fromFolder: false, dirHandle: null };
     const entries = [];
+    const handleReqs = [];
     let fromFolder = false;
     if (dt.items && dt.items.length && dt.items[0].webkitGetAsEntry) {
       for (const item of dt.items) {
@@ -60,14 +61,26 @@
           if (entry.isDirectory) fromFolder = true;
           entries.push(entry);
         }
+        // 拖进来的文件夹也能拿到句柄，存起来就能下次一键重扫
+        if (item.getAsFileSystemHandle) {
+          try { handleReqs.push(item.getAsFileSystemHandle()); } catch (err) { /* 忽略 */ }
+        }
       }
+    }
+    let dirHandle = null;
+    if (handleReqs.length) {
+      try {
+        const got = await Promise.all(handleReqs.map(p => Promise.resolve(p).catch(() => null)));
+        const dir = got.find(h => h && h.kind === 'directory');
+        if (dir) dirHandle = dir;
+      } catch (err) { /* 忽略 */ }
     }
     if (entries.length) {
       const out = [];
       for (const e of entries) await walkEntry(e, out);
-      if (out.length) return { files: out, fromFolder };
+      if (out.length) return { files: out, fromFolder, dirHandle };
     }
-    return { files: Array.from(dt.files || []), fromFolder };
+    return { files: Array.from(dt.files || []), fromFolder, dirHandle };
   }
 
   /* ---------- 把文件读成条目（整理页 / 对比页共用） ---------- */
@@ -148,6 +161,22 @@
   async function importFiles(files, opts) {
     opts = opts || {};
     const st = S();
+    // 一键重扫：整个替换，这样文件夹里删掉的模组也会从列表消失
+    if (opts.replace) {
+      st.mode = 'folder';
+      st.mods = [];
+      st.analysis = null;
+      st.selection = {};
+      st.excluded = {};
+      st.deps = [];
+      st.adapt = {};
+      st.connector = null;
+      st.detail = null;
+      st.filter = 'all';
+      st.rpOrder = [];
+      st.rpPair = {};
+      st.updates = {};
+    }
     let list = Array.from(files || []).filter(f => /\.(jar|zip)$/i.test(f.name));
     if (!list.length) {
       st.scan = null;
@@ -193,6 +222,7 @@
 
     const built = await buildEntries(fresh, '正在读取');
     st.mods.push(...built.entries);
+    if (opts.handle && !single) saveLibrary(opts.handle, st);
     MC.pager.resetAll();
     const notMod = built.notMod;
     st.progress = '';
@@ -1750,15 +1780,129 @@
     return false;
   }
 
+  /* ---------- 我的库：记住上次的 mods 文件夹 ---------- */
+  let libHandle = null;
+
+  const pad2 = n => (n < 10 ? '0' + n : String(n));
+
+  function renderLibrary(info) {
+    const card = document.getElementById('libCard');
+    if (!card) return;
+    if (!libHandle) { card.hidden = true; return; }
+    const name = (info && info.name) || (libHandle && libHandle.name) || 'mods';
+    const bits = [];
+    if (info && info.count) bits.push(info.count + ' 个模组');
+    if (info && info.at) {
+      const d = new Date(info.at);
+      if (!isNaN(d.getTime())) {
+        bits.push('上次扫描 ' + d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate()) +
+          ' ' + pad2(d.getHours()) + ':' + pad2(d.getMinutes()));
+      }
+    }
+    if (!bits.length) bits.push('已记住这个文件夹');
+    const nameEl = document.getElementById('libName');
+    const metaEl = document.getElementById('libMeta');
+    if (nameEl) nameEl.textContent = name;
+    if (metaEl) metaEl.textContent = bits.join(' · ');
+    card.hidden = false;
+  }
+
+  async function loadLibrary() {
+    if (!MC.library || !MC.library.supported()) return;
+    const rec = await MC.library.load();
+    if (!rec || !rec.handle) return;
+    libHandle = rec.handle;
+    renderLibrary(rec.meta || MC.library.savedInfo());
+  }
+
+  async function saveLibrary(handle, st) {
+    try {
+      const meta = await MC.library.save(handle, { name: handle.name, count: st.mods.length });
+      libHandle = handle;
+      renderLibrary(meta);
+    } catch (err) { /* 记不住只影响下次，不影响这次整理 */ }
+  }
+
+  async function rescanLibrary() {
+    if (!libHandle) return;
+    const st = S();
+    let allowed = false;
+    try { allowed = await MC.library.permitted(libHandle, true); }
+    catch (err) { allowed = false; }
+    if (!allowed) return toast('读取权限没拿到，重新点一次「选择 mods 文件夹」吧');
+
+    st.scan = { note: '正在读取「' + (libHandle.name || 'mods') + '」', done: 0, total: 0, name: '' };
+    touch();
+    let files = [];
+    try { files = await MC.library.readFiles(libHandle); }
+    catch (err) {
+      st.scan = null;
+      touch();
+      return toast('读不了这个文件夹：' + (err && err.message ? err.message : err));
+    }
+    if (!files.length) {
+      st.scan = null;
+      touch();
+      return toast('这个文件夹里没有 .jar / .zip');
+    }
+    await importFiles(files, { fromFolder: true, replace: true, handle: libHandle });
+  }
+
+  async function forgetLibrary() {
+    libHandle = null;
+    const card = document.getElementById('libCard');
+    if (card) card.hidden = true;
+    try { await MC.library.forget(); } catch (err) { /* 忽略 */ }
+    toast('已从「我的库」移除，下次要重新选文件夹');
+  }
+
+  /* 打开系统文件夹选择器并读取；不支持时返回 false 交给普通 input */
+  async function chooseFolder() {
+    if (!MC.library || !MC.library.supported()) return false;
+    let handle = null;
+    try {
+      handle = await root.showDirectoryPicker();
+    } catch (err) {
+      if (err && err.name === 'AbortError') return true; // 用户取消，不算失败
+      toast('打不开文件夹选择器：' + (err && err.message ? err.message : err));
+      return false;
+    }
+    const st = S();
+    st.scan = { note: '正在读取「' + (handle.name || 'mods') + '」', done: 0, total: 0, name: '' };
+    touch();
+    let files = [];
+    try { files = await MC.library.readFiles(handle); }
+    catch (err) {
+      st.scan = null;
+      touch();
+      toast('读不了这个文件夹：' + (err && err.message ? err.message : err));
+      return true;
+    }
+    if (!files.length) {
+      st.scan = null;
+      touch();
+      toast('这个文件夹里没有 .jar / .zip');
+      return true;
+    }
+    libHandle = handle;
+    await importFiles(files, { fromFolder: true, handle });
+    return true;
+  }
+
   /* ---------- 绑定 ---------- */
   function init() {
     const drop = document.getElementById('drop');
     const input = document.getElementById('fileInput');
     const singleInput = document.getElementById('singleInput');
     if (drop && input) {
-      drop.addEventListener('click', () => input.click());
+      const startPick = () => {
+        chooseFolder().then(used => {
+          if (used === false) input.click(); // 不支持文件系统接口时退回普通选择
+        });
+      };
+      drop.addEventListener('click', () => startPick());
       drop.addEventListener('keydown', e => {
-        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); input.click(); }
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); startPick(); }
       });
       input.addEventListener('change', () => {
         const files = Array.from(input.files || []);
@@ -1774,11 +1918,28 @@
       }
       const pickFolder = document.getElementById('pickFolder');
       const pickOne = document.getElementById('pickOne');
-      if (pickFolder) pickFolder.addEventListener('click', e => { e.stopPropagation(); input.click(); });
+      if (pickFolder) pickFolder.addEventListener('click', e => { e.stopPropagation(); startPick(); });
       if (pickOne) pickOne.addEventListener('click', e => {
         e.stopPropagation();
         if (singleInput) singleInput.click();
       });
+
+      /* 我的库：上次的文件夹 + 一键重扫 / 移除 */
+      const libCard = document.getElementById('libCard');
+      if (libCard) {
+        libCard.addEventListener('click', e => e.stopPropagation());
+        const rescan = document.getElementById('libRescan');
+        const forget = document.getElementById('libForget');
+        if (rescan) rescan.addEventListener('click', e => {
+          e.stopPropagation();
+          rescanLibrary().catch(err => toast(err && err.message ? err.message : String(err)));
+        });
+        if (forget) forget.addEventListener('click', e => {
+          e.stopPropagation();
+          forgetLibrary().catch(err => toast(err && err.message ? err.message : String(err)));
+        });
+        loadLibrary();
+      }
 
       ['dragenter', 'dragover'].forEach(type => {
         drop.addEventListener(type, e => {
@@ -1805,7 +1966,7 @@
         touch();
         const got = await collectDrop(e.dataTransfer);
         if (got.files.length) {
-          importFiles(got.files, { fromFolder: got.fromFolder });
+          importFiles(got.files, { fromFolder: got.fromFolder, handle: got.dirHandle });
         } else {
           st.scan = null;
           touch();

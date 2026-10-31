@@ -73,6 +73,17 @@
           <button type="button" class="btn grad" id="pickFolder">选择 mods 文件夹</button>
           <button type="button" class="btn line" id="pickOne">只查一个模组</button>
         </div>
+        <div class="libcard" id="libCard" hidden>
+          <div class="libtx">
+            <span class="libtag">我的库</span>
+            <b id="libName">mods</b>
+            <small id="libMeta"></small>
+          </div>
+          <div class="libacts">
+            <button type="button" class="btn soft sm" id="libRescan">一键重扫</button>
+            <button type="button" class="btn line sm" id="libForget">移除</button>
+          </div>
+        </div>
         <div class="pills">
           <span class="pill">
             <svg viewBox="0 0 24 24"><path d="M12 3v12m0 0 4-4m-4 4-4-4"/><path d="M4 17v3h16v-3"/></svg>
@@ -159,6 +170,7 @@
 <script src="js/core/updates.js"></script>
 <script src="js/core/logscan.js"></script>
 <script src="js/core/resolver.js"></script>
+<script src="js/core/library.js"></script>
 <script src="js/core/zip-writer.js"></script>
 <script src="js/pack/mrpack.js"></script>
 <script src="js/ui/state.js"></script>
