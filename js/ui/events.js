@@ -9,6 +9,7 @@
   const FT = MC.flowTools; // 日志 / 资源包顺序（js/ui/flow/tools.js）
   const FE = MC.flowEnv; // 环境 / 版本列表 / 分页（js/ui/flow/env.js）
   const FC = MC.flowCommon; // 选中行 / 项目缓存 / 正文纯文本（js/ui/flow/common.js）
+  const FL = MC.flowLinks; // 链接库 / 爱发电（js/ui/flow/links.js）
 
   /* ---------- 把文件读成条目（整理页 / 对比页共用） ---------- */
   async function buildEntries(files, note) {
@@ -971,142 +972,6 @@
     }
   }
 
-  /* ---------- 爱发电：更新我发电过的作者名单 ---------- */
-  async function refreshAfdian() {
-    const st = S();
-    if (st.afdian && st.afdian.busy) return;
-    try {
-      await MC.afdian.refresh();
-      toast('爱发电名单已更新');
-    } catch (err) {
-      toast('爱发电更新失败：' + (err.message || err));
-    }
-    touch();
-  }
-
-  /* ---------- 下载页仓库：MySQL / 本地兜底 ---------- */
-  function syncDbState() {
-    const d = MC.linksdb.state;
-    S().db = {
-      mode: d.mode, ready: d.ready, error: d.error,
-      sites: d.sites || [], counts: d.counts || {}, dbName: d.dbName || 'modpilot'
-    };
-    touch();
-  }
-
-  async function addLink(modId, modName, url, note) {
-    try {
-      const r = await MC.linksdb.add([{ modId, modName, url, note }]);
-      syncDbState();
-      toast(r.db ? '已存进 MySQL，换浏览器也还在' : '已存浏览器（数据库没连上）');
-    } catch (err) {
-      const st = S();
-      const id = modId || '未归属';
-      st.links[id] = (st.links[id] || []).concat({ url, note, at: Date.now() });
-      MC.store.saveLinks();
-      touch();
-      toast('数据库写入失败，先存浏览器：' + (err.message || ''));
-    }
-  }
-
-  async function removeLink(item) {
-    try {
-      await MC.linksdb.remove(item);
-      syncDbState();
-    } catch (err) {
-      toast('删除失败：' + (err.message || ''));
-    }
-  }
-
-  async function bulkLinks(ta) {
-    const st = S();
-    const lines = String(ta.value || '').split(/\r?\n/).map(x => x.trim()).filter(Boolean);
-    if (!lines.length) return toast('先把要存的链接贴进来');
-
-    const known = [];
-    if (st.analysis) {
-      st.analysis.groups.forEach(g => {
-        const row = FC.chosenOf(st, g);
-        if (!row) return;
-        const e = row.entry;
-        [e.id, e.name, e.nameZh].forEach(x => {
-          if (x) known.push({ key: String(x).toLowerCase(), id: e.id || g.displayId, name: e.nameZh || e.name || '' });
-        });
-      });
-    }
-
-    const items = [];
-    let bad = 0;
-    lines.forEach(line => {
-      const parts = line.split('|').map(x => x.trim());
-      let key = '';
-      let url = '';
-      let note = '';
-      if (parts.length >= 3) { key = parts[0]; url = parts[1]; note = parts.slice(2).join(' | '); }
-      else if (parts.length === 2) { url = parts[0]; note = parts[1]; }
-      else { url = parts[0]; }
-      if (!/^https?:\/\//i.test(url)) { bad++; return; }
-      let modId = '';
-      let modName = '';
-      if (key) {
-        const hit = known.find(k => k.key === key.toLowerCase());
-        if (hit) { modId = hit.id; modName = hit.name; }
-      }
-      items.push({ modId, modName, url, note });
-    });
-
-    if (!items.length) return toast('没有能存的链接（链接格式不对）');
-    try {
-      const r = await MC.linksdb.add(items);
-      syncDbState();
-      ta.value = '';
-      toast('批量导入：存了 ' + r.saved + ' 条' + (bad ? '，跳过 ' + bad + ' 条（链接格式不对）' : '') +
-        (r.db ? '' : '（数据库没连上，先存浏览器）'));
-    } catch (err) {
-      toast('批量写入失败：' + (err.message || ''));
-    }
-  }
-
-  /* ---------- Fabric 转接：找当前环境下能用的 Sinytra Connector ---------- */
-  async function findConnector() {
-    const st = S();
-    if (st.connector && st.connector.status === 'loading') return;
-    st.connector = { status: 'loading', mc: st.env.mc, loader: st.env.loader };
-    touch();
-    try {
-      const [conn, ffapi] = await Promise.all([
-        MC.api.modrinth.project('sinytra-connector'),
-        MC.api.modrinth.project('forgified-fabric-api')
-      ]);
-      const env = { loader: st.env.loader, mc: st.env.mc };
-      const [cv, fv] = await Promise.all([
-        conn ? MC.api.modrinth.versions(conn.id, env) : [],
-        ffapi ? MC.api.modrinth.versions(ffapi.id, env) : []
-      ]);
-      const c = MC.api.modrinth.pickVersion(cv);
-      const f = MC.api.modrinth.pickVersion(fv);
-      const items = [];
-      if (c) {
-        items.push({
-          name: 'Sinytra Connector', version: c.version_number,
-          url: (c.files && c.files[0] && c.files[0].url) || '',
-          page: 'https://modrinth.com/mod/sinytra-connector/version/' + c.id
-        });
-      }
-      if (f) {
-        items.push({
-          name: 'Forgified Fabric API', version: f.version_number,
-          url: (f.files && f.files[0] && f.files[0].url) || '',
-          page: 'https://modrinth.com/mod/forgified-fabric-api/version/' + f.id
-        });
-      }
-      st.connector = { status: items.length ? 'ok' : 'none', mc: st.env.mc, loader: st.env.loader, items };
-    } catch (err) {
-      st.connector = { status: 'error', reason: (err && err.message) || '连不上 Modrinth' };
-    }
-    touch();
-  }
-
   /* ---------- 动作分发 ---------- */
   /* 动作模块（js/ui/actions/）和绑定层（bind.js）加载时从这里取用内部函数 */
   MC.actionCtx = {
@@ -1115,13 +980,13 @@
     bumpGen: () => { gen++; },
     findDep: FE.findDep, toggleExclude: FE.toggleExclude, pagerGo: FE.pagerGo, pagerFromEl: FE.pagerFromEl,
     autoLog: FT.autoLog, analyzeAndResolve, loadLoaderList: FE.loadLoaderList, loadMcList: FE.loadMcList, syncEnvInputs: FE.syncEnvInputs,
-    checkAllUpdates, checkOneUpdate, exportGuide, findConnector,
-    refreshAfdian, addLink, removeLink, bulkLinks,
+    checkAllUpdates, checkOneUpdate, exportGuide, findConnector: FE.findConnector,
+    refreshAfdian: FL.refreshAfdian, addLink: FL.addLink, removeLink: FL.removeLink, bulkLinks: FL.bulkLinks,
     movePack: FT.movePack, exportPackOrder: FT.exportPackOrder, exportPackOptions: FT.exportPackOptions, buildPack,
     chosenOf: FC.chosenOf, projectForEntry: FC.projectForEntry, applyZhNames,
     ensureDesc, ensureMrDesc, ensureBodyTr,
     matchDep, chooseCandidate, runAdapt, addAdapt, removeAdapt, retryAll,
-    handleAct, importFiles, importDiff, importLogs: FT.importLogs, syncDbState
+    handleAct, importFiles, importDiff, importLogs: FT.importLogs, syncDbState: FL.syncDbState
   };
 
   /* ---------- 动作分发：具体实现见 js/ui/actions/ ---------- */

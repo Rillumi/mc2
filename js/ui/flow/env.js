@@ -46,6 +46,46 @@
     }
   }
 
+  /* ---------- Fabric 转接：找当前环境下能用的 Sinytra Connector ---------- */
+  async function findConnector() {
+    const st = S();
+    if (st.connector && st.connector.status === 'loading') return;
+    st.connector = { status: 'loading', mc: st.env.mc, loader: st.env.loader };
+    touch();
+    try {
+      const [conn, ffapi] = await Promise.all([
+        MC.api.modrinth.project('sinytra-connector'),
+        MC.api.modrinth.project('forgified-fabric-api')
+      ]);
+      const env = { loader: st.env.loader, mc: st.env.mc };
+      const [cv, fv] = await Promise.all([
+        conn ? MC.api.modrinth.versions(conn.id, env) : [],
+        ffapi ? MC.api.modrinth.versions(ffapi.id, env) : []
+      ]);
+      const c = MC.api.modrinth.pickVersion(cv);
+      const f = MC.api.modrinth.pickVersion(fv);
+      const items = [];
+      if (c) {
+        items.push({
+          name: 'Sinytra Connector', version: c.version_number,
+          url: (c.files && c.files[0] && c.files[0].url) || '',
+          page: 'https://modrinth.com/mod/sinytra-connector/version/' + c.id
+        });
+      }
+      if (f) {
+        items.push({
+          name: 'Forgified Fabric API', version: f.version_number,
+          url: (f.files && f.files[0] && f.files[0].url) || '',
+          page: 'https://modrinth.com/mod/forgified-fabric-api/version/' + f.id
+        });
+      }
+      st.connector = { status: items.length ? 'ok' : 'none', mc: st.env.mc, loader: st.env.loader, items };
+    } catch (err) {
+      st.connector = { status: 'error', reason: (err && err.message) || '连不上 Modrinth' };
+    }
+    touch();
+  }
+
   /* ---------- 选中 ---------- */
   function findDep(key) {
     return S().deps.find(d => d.key === key);
@@ -89,7 +129,7 @@
   }
 
   MC.flowEnv = {
-    syncEnvInputs, loadMcList, loadLoaderList,
+    syncEnvInputs, loadMcList, loadLoaderList, findConnector,
     findDep, toggleExclude, pagerGo, pagerFromEl
   };
 })(globalThis);
