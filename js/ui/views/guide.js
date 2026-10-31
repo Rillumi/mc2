@@ -20,7 +20,8 @@
   function gcard(s, it) {
     const e = it.entry;
     const hl = t => MC.search.highlight(t, s.guideQuery);
-    const cat = MC.catalog.labelOf(MC.catalog.categoryOf(e));
+    const catTags = MC.catalog.tagsOf(e)
+      .map(id => '<span class="tag">' + esc(MC.catalog.labelOf(id)) + '</span>').join('');
     const rec = typeof e.recipes === 'number' ? (e.recipes ? e.recipes + ' 个配方' : '没找到配方') : '';
     return '<div class="gcard" data-act="detail" data-group="' + esc(it.groupId) + '" role="button" tabindex="0" title="' + esc(e.fileName || '') + '">' +
       tile(e.nameZh || e.name || e.id, true) +
@@ -28,7 +29,7 @@
       '<div class="gname"><span class="namezh">' + hl(e.nameZh || e.name || e.id) + '</span>' +
       (e.nameZh && e.name ? '<i class="alias">' + hl(e.name) + '</i>' : '') +
       (e.version ? ' <i>' + esc(e.version) + '</i>' : '') +
-      '<span class="tag">' + esc(cat) + '</span>' + updateChip(s.updates[it.groupId]) + '</div>' +
+      catTags + updateChip(s.updates[it.groupId]) + '</div>' +
       '<div class="gdesc">' + hl(e.description || '这个 jar 没写简介。') + '</div>' +
       '<div class="gmeta"><span>' + esc(e.id || '') + '</span>' +
       (rec ? '<span>' + esc(rec) + '</span>' : '') +
@@ -53,11 +54,11 @@
       return row ? { groupId: g.id, entry: row.entry } : null;
     }).filter(Boolean);
 
-    const cats = MC.catalog.counts(items.map(x => x.entry));
+    const cats = MC.catalog.tagCounts(items.map(x => x.entry));
     const q = MC.search.normalizeQuery(s.guideQuery);
     const filtered = items.filter(it => {
       const e = it.entry;
-      if (s.guideCat !== 'all' && MC.catalog.categoryOf(e) !== s.guideCat) return false;
+      if (s.guideCat !== 'all' && MC.catalog.tagsOf(e).indexOf(s.guideCat) < 0) return false;
       if (!q) return true;
       return MC.search.matches([e.name, e.nameZh, e.id, e.description, e.fileName], q);
     }).sort((x, y) => String(x.entry.nameZh || x.entry.name || x.entry.id).localeCompare(String(y.entry.nameZh || y.entry.name || y.entry.id), 'zh'));
