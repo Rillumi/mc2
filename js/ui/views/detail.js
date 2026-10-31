@@ -181,6 +181,23 @@
       '</div>' + tabs + body + '<div class="descnote">' + esc(note) + '</div>';
   }
 
+  /* 存的下载页按统一判重归属：库里的写法（大小写、下划线、中文名）可能与 jar 里的 modId 不同 */
+  const LINK_LEVELS = [MC.identity.LEVELS.MOD, MC.identity.LEVELS.NAME];
+  function savedLinksOf(s, e) {
+    const out = [];
+    const zh = MC.identity.normalizeName(e.nameZh || '');
+    Object.keys(s.links || {}).forEach(key => {
+      if (key === '未归属') return;
+      const sameZh = zh.length >= 4 && MC.identity.normalizeName(key) === zh;
+      if (!sameZh && !MC.identity.same({ id: key, name: key }, e, LINK_LEVELS)) return;
+      (s.links[key] || []).forEach(l => {
+        if (out.some(x => x.url === l.url)) return;
+        out.push(Object.assign({}, l, { modKey: key }));
+      });
+    });
+    return out;
+  }
+
   function detailHtml(s) {
     const a = s.analysis;
     if (String(s.detail || '').indexOf('o:') === 0) return otherDetailHtml(s);
@@ -194,6 +211,8 @@
       value: r.uid, current: chosen ? chosen.uid : '', text: MC.selector.label(r.entry), meta: r.entry.fileName
     }));
     const mrl = 'https://modrinth.com/mod/' + encodeURIComponent(String(e.id || '').toLowerCase());
+    // 有 MC百科条目地址就用它；没查到中文名就退回站内搜索（modId 比中文名更容易命中）
+    const mcmod = e.nameZhFrom || ('https://www.mcmod.cn/s?key=' + encodeURIComponent(e.id || e.name || ''));
 
     const depInfo = (chosen && chosen.depInfo) ? chosen.depInfo : [];
     const optCount = depInfo.filter(d => !d.mandatory).length;
@@ -214,7 +233,7 @@
         '只能靠进游戏看日志。这里能确认的是加载器、游戏版本、前置是否齐、前置版本够不够、有没有 ID 撞车。</div>'
       : '';
 
-    const savedLinks = s.links[e.id] || [];
+    const savedLinks = savedLinksOf(s, e);
     const links = '<div class="dsec-label">我存的下载页（' + savedLinks.length + '）</div>' +
       '<div class="linkbox">' +
       savedLinks.map(l =>
@@ -222,7 +241,7 @@
         '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' +
         esc(l.note || l.url) + '</a>' +
         '<button type="button" class="icon-btn sm" data-act="linkdel" data-row="' + esc(l.id || 0) +
-        '" data-mod="' + esc(e.id) + '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
+        '" data-mod="' + esc(l.modKey || e.id) + '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
       '<div class="ladd">' +
       '<input id="linkUrl" type="url" placeholder="Modrinth / CurseForge / 爱发电 / 网盘链接">' +
       '<input id="linkNote" placeholder="备注（可选）">' +
@@ -266,6 +285,8 @@
         '<button type="button" class="btn line" data-act="toggle-exclude" data-group="' + esc(group.id) + '">' +
         (s.excluded[group.id] ? '恢复进包' : '不要这个') + '</button>' +
         '<a class="btn line" href="' + esc(mrl) + '" target="_blank" rel="noopener">' + icon(IC.link) + 'Modrinth 页面</a>' +
+        '<a class="btn line" href="' + esc(mcmod) + '" target="_blank" rel="noopener" title="' +
+        esc(e.nameZhFrom ? 'MC百科条目' : '在 MC百科搜索') + '">' + icon(IC.link) + '在 MC百科查看</a>' +
         '<button type="button" class="btn grad" data-act="close">看完了</button>' +
       '</div>' +
       '</div>';
