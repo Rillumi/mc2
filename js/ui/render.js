@@ -808,7 +808,9 @@
       '<div class="sheet-head">' +
         '<div class="sheet-title">' + tile(e.nameZh || e.name || group.displayId, true) +
         '<div><b>' + esc(e.nameZh || e.name || group.displayId) +
-        (e.nameZh && e.name ? '<i class="alias">' + esc(e.name) + '</i>' : '') + '</b><small>' + esc(e.version || '版本未知') +
+        (e.nameZh && e.name ? '<i class="alias">' + esc(e.name) + '</i>' : '') +
+        (e.nameZhFrom ? ' <a class="zsrc" href="' + esc(e.nameZhFrom) + '" target="_blank" rel="noopener">中文名来自 MC百科</a>' : '') +
+        '</b><small>' + esc(e.version || '版本未知') +
         ' · ' + esc(e.loader || '?') + ' · ' + fmtSize(e.size) + '</small></div></div>' +
         '<button type="button" class="icon-btn" data-act="close" aria-label="关闭">' + icon(IC.close) + '</button>' +
       '</div>' +

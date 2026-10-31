@@ -9,5 +9,6 @@ Desktop.ini
 # 临时文件
 *.tmp
 *.bak
+data/
 node_modules/
 db.config.json

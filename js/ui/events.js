@@ -198,6 +198,8 @@
     await analyzeAndResolve(true);
     // 读取完就把每个项目的资料（简介 / 正文 / 图标）批量拉回来，详情页不用再等网络
     prefetchProjects();
+    // 顺便补上大家平时叫的中文名（MC百科），列表和搜索都能直接用
+    prefetchZhNames();
 
     if (notMod) {
       st.showOthers = true;
@@ -409,10 +411,15 @@
     const list = S().deps.filter(d => !(d.status === 'ok' && d.version));
     if (!list.length) return toast('没有需要重试的');
     toast('重新匹配 ' + list.length + ' 个…');
-    for (const dep of list) {
-      if (my !== gen) return;
-      await matchDep(dep, null, my);
-    }
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < list.length) {
+        if (my !== gen) return;
+        const dep = list[cursor++];
+        await matchDep(dep, null, my);
+      }
+    };
+    await Promise.all([worker(), worker(), worker()]);
   }
 
   /* ---------- 导览：检查更新 ---------- */
@@ -468,6 +475,74 @@
         touch();
       }
     }
+  }
+
+  /* ---------- 中文名库：读取后后台补齐，不挡任何操作 ---------- */
+  let zhGen = 0;
+
+  async function prefetchZhNames() {
+    const st = S();
+    if (!st.analysis || !MC.zhNames) return;
+    const my = ++zhGen;
+    const wanted = [];
+    const seen = {};
+    (st.analysis.groups || []).forEach(g => {
+      const row = chosenOf(st, g);
+      const e = row ? row.entry : (g.rows[0] && g.rows[0].entry);
+      if (!e || e.nameZh) return;
+      const id = String(e.id || '').trim();
+      if (!id || seen[id]) return;
+      seen[id] = true;
+      const p = projectForEntry(st, e, g);
+      wanted.push({
+        id,
+        title: String(e.name || (p && p.title) || ''),
+        slug: String((p && p.slug) || '')
+      });
+    });
+    if (!wanted.length) return;
+
+    const chunk = 15;
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < wanted.length) {
+        if (my !== zhGen) return;
+        const part = wanted.slice(cursor, cursor + chunk);
+        cursor += chunk;
+        try {
+          const names = await MC.zhNames.lookup(part);
+          if (my !== zhGen) return;
+          // 查一批就先显示一批，不用等全部回来
+          applyZhNames(st, names);
+        } catch (err) {
+          // 本地服务没开 / MC百科连不上：只是少了中文名，不影响整理和打包
+        }
+      }
+    };
+    await Promise.all([worker(), worker()]);
+  }
+
+  /** 把查到的中文名填进所有版本行（同一个模组可能有多个 id） */
+  function applyZhNames(st, byId) {
+    const ids = Object.keys(byId || {});
+    if (!ids.length) return;
+    let hit = 0;
+    const fill = e => {
+      if (!e || e.nameZh) return;
+      const keys = [e.id].concat(e.allIds || []).map(x => String(x || '')).filter(Boolean);
+      const rec = keys.map(k => byId[k]).find(x => x && x.zh);
+      if (!rec) return;
+      e.nameZh = rec.zh;
+      e.nameZhFrom = rec.url || '';
+      if (!e.name && rec.en) e.name = rec.en;
+      hit++;
+    };
+    (st.mods || []).forEach(fill);
+    if (st.analysis) {
+      (st.analysis.groups || []).forEach(g => (g.rows || []).forEach(r => fill(r.entry)));
+      (st.analysis.others || []).forEach(fill);
+    }
+    if (hit) touch();
   }
 
   /** 资源包：作者建议顺序 / 同路径冲突 / 和模组是同一个项目 */

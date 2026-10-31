@@ -100,6 +100,16 @@ async function initDb() {
       UNIQUE KEY uniq_link (mod_id, url(191)),
       KEY idx_site (site)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    // 中文名库：modId → 大家平时叫的中文名（数据来自 MC百科，查不到会缓存「没查到」）
+    await pool.query(`CREATE TABLE IF NOT EXISTS mod_names (
+      mod_id VARCHAR(190) PRIMARY KEY,
+      en VARCHAR(255) NOT NULL DEFAULT '',
+      zh VARCHAR(255) NOT NULL DEFAULT '',
+      abbr VARCHAR(32) NOT NULL DEFAULT '',
+      mcmod_id VARCHAR(32) NOT NULL DEFAULT '',
+      source VARCHAR(500) NOT NULL DEFAULT '',
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     dbReady = true;
     dbError = '';
     console.log('  下载页数据库已连接：MySQL ' + cfg.host + ':' + (cfg.port || 3306) + ' / ' + cfg.database);
@@ -272,6 +282,163 @@ async function loaderVersions(loader, mc) {
   });
 }
 
+/* ================= 中文名库（代理 MC百科 + 本地缓存） =================
+   mods.toml 里的 displayName 一般是英文；大家聊天时用的是中文俗称。
+   MC百科的搜索结果标题就是「[缩写] 中文名 (English Name)」，所以按英文名核对后
+   把中文名存下来，下次直接命中，不用再抓。查不到的条目记 7 天，避免反复请求。 */
+const DATA_DIR = path.join(ROOT, 'data');
+const ZH_FILE = path.join(DATA_DIR, 'zh-names.json');
+const ZH_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36';
+const ZH_MISS_TTL = 7 * 24 * 60 * 60 * 1000;
+let zhMem = null;
+let zhDirty = false;
+let zhTimer = null;
+
+function zhAll() {
+  if (zhMem) return zhMem;
+  zhMem = {};
+  try {
+    const obj = JSON.parse(fs.readFileSync(ZH_FILE, 'utf8'));
+    if (obj && typeof obj === 'object') zhMem = obj;
+  } catch (err) { /* 第一次运行还没有缓存 */ }
+  return zhMem;
+}
+
+function zhFlush() {
+  if (!zhDirty || !zhMem) return;
+  try {
+    fs.mkdirSync(DATA_DIR, { recursive: true });
+    fs.writeFileSync(ZH_FILE, JSON.stringify(zhMem, null, 1), 'utf8');
+    zhDirty = false;
+  } catch (err) {
+    console.log('  中文名缓存写入失败：' + err.message);
+  }
+}
+
+function zhRemember(rec) {
+  const all = zhAll();
+  all[rec.id] = Object.assign({}, rec, { at: Date.now() });
+  zhDirty = true;
+  clearTimeout(zhTimer);
+  zhTimer = setTimeout(zhFlush, 800);
+}
+
+function zhOut(rec) {
+  return { id: rec.id, zh: rec.zh || '', en: rec.en || '', abbr: rec.abbr || '', url: rec.url || '', mcmodId: rec.mcmodId || '' };
+}
+
+async function dbZhGet(id) {
+  if (!dbReady) return null;
+  try {
+    const [rows] = await pool.query('SELECT mod_id, en, zh, abbr, mcmod_id, source FROM mod_names WHERE mod_id = ? LIMIT 1', [id]);
+    if (!rows.length || !rows[0].zh) return null;
+    const r = rows[0];
+    return { id, en: r.en || '', zh: r.zh || '', abbr: r.abbr || '', mcmodId: r.mcmod_id || '', url: r.source || '' };
+  } catch (err) { return null; }
+}
+
+async function dbZhSave(rec) {
+  if (!dbReady) return;
+  try {
+    await pool.query(
+      'INSERT INTO mod_names (mod_id, en, zh, abbr, mcmod_id, source) VALUES (?, ?, ?, ?, ?, ?) ' +
+      'ON DUPLICATE KEY UPDATE en = VALUES(en), zh = VALUES(zh), abbr = VALUES(abbr), mcmod_id = VALUES(mcmod_id), source = VALUES(source)',
+      [rec.id, rec.en || '', rec.zh || '', rec.abbr || '', rec.mcmodId || '', (rec.url || '').slice(0, 500)]
+    );
+  } catch (err) { /* 数据库只是副本，文件缓存还在 */ }
+}
+
+function zhText(s) {
+  return String(s || '')
+    .replace(/<\/em>\s*<em[^>]*>/gi, ' ')
+    .replace(/<br\s*\/?>/gi, ' ')
+    .replace(/<[^>]*>/g, ' ')
+    .replace(/&nbsp;/g, ' ')
+    .replace(/&amp;/g, '&')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;|&apos;/g, "'")
+    .replace(/&#x([0-9a-f]+);/gi, (m, n) => String.fromCharCode(parseInt(n, 16)))
+    .replace(/&#(\d+);/g, (m, n) => String.fromCharCode(Number(n)))
+    .replace(/\s*'\s*/g, "'")
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+/** 「[TF] 暮色森林 (The Twilight Forest)」→ { abbr: 'TF', zh: '暮色森林', en: 'The Twilight Forest' } */
+function zhTitle(text) {
+  let t = zhText(text);
+  let abbr = '';
+  const ab = /^\[([^\]]{1,12})\]\s*/.exec(t);
+  if (ab) { abbr = ab[1]; t = t.slice(ab[0].length).trim(); }
+  let zh = t;
+  let en = '';
+  const m = /^([\s\S]*?)\s*[(（]([^()（）]*)[)）]\s*$/.exec(t);
+  if (m) { zh = m[1].trim(); en = m[2].trim(); }
+  return { abbr, zh, en };
+}
+
+function parseMcmod(html) {
+  const out = [];
+  const chunks = String(html || '').split('<div class="result-item">').slice(1);
+  for (const chunk of chunks) {
+    const block = chunk.slice(0, 3000);
+    const m = /<a[^>]+href="(https:\/\/www\.mcmod\.cn\/class\/(\d+)\.html)"[^>]*>([\s\S]*?)<\/a>/.exec(block);
+    if (!m) continue;
+    const info = zhTitle(m[3]);
+    if (!info.zh) continue;
+    out.push({ mcmodId: m[2], url: m[1], abbr: info.abbr, zh: info.zh, en: info.en });
+  }
+  return out;
+}
+
+function zhNorm(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
+}
+
+/** 只认英文名对得上的结果，避免把「暮色森林法术包」当成暮色森林 */
+function pickMcmod(list, keys) {
+  let best = null;
+  let bestScore = 0;
+  (list || []).forEach(r => {
+    if (!r.en) return;
+    const en = zhNorm(r.en).replace(/^the/, '');
+    keys.forEach(k => {
+      const kk = zhNorm(k).replace(/^the/, '');
+      if (!kk || kk.length < 3) return;
+      let score = 0;
+      if (en === kk) score = 100;
+      else if (en.length >= 5 && kk.length >= 5 && (en.indexOf(kk) >= 0 || kk.indexOf(en) >= 0)) {
+        score = 70 + Math.min(en.length, kk.length) / 10;
+      }
+      if (score > bestScore) { bestScore = score; best = r; }
+    });
+  });
+  return bestScore >= 70 ? best : null;
+}
+
+async function mcmodSearch(title, keys) {
+  const key = String(title || '').trim().slice(0, 90);
+  if (!key) return null;
+  let lastError = null;
+  // MC百科偶尔会抽风／超时，重试一次再判定「没查到」，免得把好结果记成缺数据
+  for (let i = 0; i < 2; i++) {
+    try {
+      const res = await fetch('https://search.mcmod.cn/s?key=' + encodeURIComponent(key) + '&filter=0', {
+        headers: { 'User-Agent': ZH_UA, 'Accept-Language': 'zh-CN,zh;q=0.9' },
+        signal: AbortSignal.timeout(15000)
+      });
+      if (!res.ok) throw new Error('MC百科返回 ' + res.status);
+      return pickMcmod(parseMcmod(await res.text()), keys || [key]);
+    } catch (err) {
+      lastError = err;
+      if (i === 0) await new Promise(r => setTimeout(r, 600));
+    }
+  }
+  throw lastError;
+}
+
 /* ================= HTTP ================= */
 function sendJson(res, code, obj) {
   res.writeHead(code, { 'Content-Type': 'application/json; charset=utf-8', 'Cache-Control': 'no-store' });
@@ -334,6 +501,70 @@ const server = http.createServer(async (req, res) => {
         const body = await bodyJson(req);
         if (body.id) await pool.query('DELETE FROM links WHERE id = ?', [Number(body.id)]);
         return sendJson(res, 200, { ok: true });
+      }
+
+      /* 中文名库：items = [{ id, title, slug }]，返回 { names: { id: { zh, en, abbr, url } } }
+         缓存命中的立刻返回；没查过的按顺序去 MC百科搜（400ms 间隔，别把人站打挂）。 */
+      if (urlPath === '/api/zh-names' && req.method === 'POST') {
+        const body = await bodyJson(req);
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 40);
+        const all = zhAll();
+        const names = {};
+        const todo = [];
+        for (const it of items) {
+          const id = String((it && it.id) || '').trim().slice(0, 190);
+          if (!id) continue;
+          const rec = all[id];
+          if (rec && rec.zh) { names[id] = zhOut(rec); continue; }
+          if (rec && rec.at && Date.now() - rec.at < ZH_MISS_TTL) continue;  // 刚查过没查到
+          todo.push({
+            id,
+            title: String((it && it.title) || '').trim().slice(0, 120),
+            slug: String((it && it.slug) || '').trim().slice(0, 120)
+          });
+        }
+
+        for (const t of todo) {
+          if (names[t.id]) continue;
+          const db = await dbZhGet(t.id);
+          if (db) {
+            zhRemember(db);
+            names[t.id] = zhOut(db);
+          }
+        }
+
+        let searched = 0;
+        let offline = 0;
+        for (const t of todo) {
+          if (names[t.id]) continue;
+          const keys = [t.title, t.slug, t.id].filter(Boolean);
+          if (!keys.length) continue;
+          if (searched) await new Promise(r => setTimeout(r, 400));
+          searched++;
+          let hit = null;
+          try {
+            hit = await mcmodSearch(t.title, keys);
+          } catch (err) {
+            offline++;
+            continue;   // 网络临时出错：不记「没查到」，下次再试
+          }
+          if (hit) {
+            const rec = { id: t.id, zh: hit.zh, en: hit.en, abbr: hit.abbr, mcmodId: hit.mcmodId, url: hit.url };
+            zhRemember(rec);
+            dbZhSave(rec);
+            names[t.id] = zhOut(rec);
+          } else {
+            zhRemember({ id: t.id, zh: '', en: '', abbr: '', mcmodId: '', url: '' });
+          }
+        }
+        zhFlush();
+        return sendJson(res, 200, {
+          ok: true,
+          names,
+          cached: Object.keys(names).length,
+          fetched: searched - offline,
+          offline
+        });
       }
 
       if (urlPath === '/api/logs') {
