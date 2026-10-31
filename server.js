@@ -115,6 +115,14 @@ async function initDb() {
       source VARCHAR(500) NOT NULL DEFAULT '',
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    // 分类库：modId → Modrinth 官方分类（cats 存原始 slug）+ 归并后的主分类
+    await pool.query(`CREATE TABLE IF NOT EXISTS mod_cats (
+      mod_id VARCHAR(190) PRIMARY KEY,
+      cats VARCHAR(255) NOT NULL DEFAULT '',
+      primary_cat VARCHAR(32) NOT NULL DEFAULT '',
+      source VARCHAR(20) NOT NULL DEFAULT 'modrinth',
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     dbReady = true;
     dbError = '';
     console.log('  下载页数据库已连接：MySQL ' + cfg.host + ':' + (cfg.port || 3306) + ' / ' + cfg.database);
@@ -701,6 +709,36 @@ const server = http.createServer(async (req, res) => {
         const body = await bodyJson(req);
         const saved = await dbAdd(body.items || []);
         return sendJson(res, 200, { ok: true, saved, skipped: (body.items || []).length - saved });
+      }
+
+      /* 分类库：读全部（离线或没被 Modrinth 覆盖的模组用它兜底） */
+      if (urlPath === '/api/mod-cats' && req.method === 'GET') {
+        if (!dbReady) return sendJson(res, 200, { ok: false, reason: dbError, cats: {} });
+        const [rows] = await pool.query('SELECT mod_id, cats, primary_cat, source FROM mod_cats');
+        const cats = {};
+        rows.forEach(r => { cats[r.mod_id] = { cats: r.cats || '', primary: r.primary_cat || '', source: r.source || '' }; });
+        return sendJson(res, 200, { ok: true, cats });
+      }
+
+      /* 分类库：批量写入（按 Modrinth 官方分类覆盖同一个 modId） */
+      if (urlPath === '/api/mod-cats' && req.method === 'POST') {
+        if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+        const body = await bodyJson(req);
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 500);
+        let saved = 0;
+        for (const it of items) {
+          const id = String((it && it.id) || '').trim().toLowerCase().slice(0, 190);
+          if (!id) continue;
+          try {
+            await pool.query(
+              'INSERT INTO mod_cats (mod_id, cats, primary_cat, source) VALUES (?, ?, ?, ?) ' +
+              'ON DUPLICATE KEY UPDATE cats = VALUES(cats), primary_cat = VALUES(primary_cat), source = VALUES(source)',
+              [id, String((it && it.cats) || '').slice(0, 255), String((it && it.primary) || '').slice(0, 32), String((it && it.source) || 'modrinth').slice(0, 20)]
+            );
+            saved++;
+          } catch (err) { /* 单条失败不影响其他 */ }
+        }
+        return sendJson(res, 200, { ok: true, saved });
       }
 
       if (urlPath === '/api/links/delete' && req.method === 'POST') {

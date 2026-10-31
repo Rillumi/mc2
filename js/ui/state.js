@@ -57,6 +57,8 @@
     projects: {},       // projectId → Modrinth 项目详情（扫描后批量预取，详情页秒开）
     hashProject: {},    // sha1 → projectId
     prefetching: false, // 是否正在批量拉项目资料
+    catsDb: null,       // 分类库：modId → { cats, primary }（来自本地 MySQL）
+    catsTried: false,   // 是否已经读过分类库
     packAdvice: null,   // 资源包：{ order, tips, conflicts, sameProject, byUid }
     bodyLang: 'zh',     // Modrinth 简介显示：zh 机翻 / en 原文
     bodyTr: {},         // 组 id → Modrinth 简介的机翻结果

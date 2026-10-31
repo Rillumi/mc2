@@ -201,6 +201,8 @@
     prefetchProjects();
     // 顺便补上大家平时叫的中文名（MC百科），列表和搜索都能直接用
     prefetchZhNames();
+    // 分类：先用本地库/Modrinth 填上，导览页不用等预取完成
+    applyCats(st);
 
     if (notMod) {
       st.showOthers = true;
@@ -473,9 +475,52 @@
       if (my === gen) {
         st.prefetching = false;
         analyzePacks(st);
+        applyCats(st);
         touch();
       }
     }
+  }
+
+  /* ---------- 分类库：Modrinth 官方分类优先，本地 MySQL 兜底 ---------- */
+  async function applyCats(st) {
+    if (!st.analysis) return;
+    if (!st.catsTried) {
+      st.catsTried = true;
+      try {
+        const data = await fetch('/api/mod-cats').then(r => r.json());
+        st.catsDb = (data && data.ok && data.cats) || {};
+      } catch (err) {
+        st.catsDb = {};   // 本地服务没开：只用 Modrinth + 关键词
+      }
+    }
+
+    const push = [];
+    const seen = {};
+    const fill = (e, g) => {
+      if (!e || !e.id) return;
+      const id = String(e.id).toLowerCase();
+      if (seen[id]) return;
+      seen[id] = true;
+      const fromMr = MC.catalog.fromProject(projectForEntry(st, e, g));
+      if (fromMr) {
+        e.cats = fromMr.cats;
+        push.push({ id, cats: fromMr.cats.join(','), primary: fromMr.primary, source: 'modrinth' });
+        return;
+      }
+      const saved = (st.catsDb || {})[id];
+      if (saved && saved.cats) e.cats = String(saved.cats).split(',').filter(Boolean);
+    };
+    (st.analysis.groups || []).forEach(g => (g.rows || []).forEach(r => fill(r.entry, g)));
+    (st.analysis.others || []).forEach(o => fill(o, null));
+    if (!push.length) return;
+
+    // 写进 MySQL，下次没网/不在 Modrinth 上的也能用同一套分类
+    fetch('/api/mod-cats', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: push })
+    }).catch(() => { /* 本地服务没开就算了 */ });
+    touch();
   }
 
   /* ---------- 中文名库：读取后后台补齐，不挡任何操作 ---------- */

@@ -1,41 +1,121 @@
-/* ===== 导览：按关键词把模组粗分到玩法分类，并导出 Markdown =====
-   只做「大概属于哪类」，不追求准确；分类判断只用于看的方便，不影响打包。 */
+/* ===== 导览：模组分类 =====
+   分类优先用 Modrinth 官方的 categories（项目页上「分类」那一栏就是它），
+   只有不在 Modrinth 上的模组才退回按关键词猜——关键词只当兜底，
+   而且必须整词命中，避免 "car" 撞上 "carpet" 这种误判。 */
 (function (root) {
   'use strict';
   const MC = (root.MC = root.MC || {});
 
   const CATS = [
-    { id: 'lib', label: '前置库', kw: ['api', 'lib', 'library', 'framework', 'loader', '前置'] },
-    { id: 'building', label: '建筑装饰', kw: ['build', 'building', 'decor', 'furniture', 'chisel', 'architecture', 'roof', 'window', 'stairs', 'slab', '建筑', '装饰', '家具', '屋顶', '方块'] },
-    { id: 'tech', label: '科技自动化', kw: ['tech', 'machine', 'energy', 'power', 'industrial', 'automation', 'pipe', 'cable', 'reactor', 'mekanism', 'thermal', 'create', '科技', '机械', '自动化', '能源', '电力'] },
-    { id: 'adventure', label: '冒险战斗', kw: ['adventure', 'dungeon', 'boss', 'combat', 'weapon', 'gear', 'mob', 'rpg', '冒险', '地牢', '战斗', '武器', '怪物'] },
-    { id: 'world', label: '世界生成', kw: ['worldgen', 'biome', 'terrain', 'dimension', 'ore', 'structure', '地形', '生物群系', '维度', '矿石', '结构'] },
-    { id: 'farming', label: '农业食物', kw: ['farm', 'crop', 'food', 'cook', 'kitchen', 'harvest', '农业', '食物', '烹饪', '作物'] },
-    { id: 'transport', label: '交通载具', kw: ['transport', 'vehicle', 'car', 'train', 'boat', 'plane', 'road', '交通', '载具', '汽车', '火车'] },
-    { id: 'ui', label: '界面优化', kw: ['ui', 'hud', 'minimap', 'map', 'inventory', 'jei', 'rei', 'tooltip', 'optimiz', 'performance', 'fps', '界面', '优化', '性能', '地图', '背包'] },
-    { id: 'misc', label: '其他', kw: [] }
+    { id: 'lib', label: '前置库' },
+    { id: 'building', label: '建筑装饰' },
+    { id: 'tech', label: '科技自动化' },
+    { id: 'adventure', label: '冒险战斗' },
+    { id: 'world', label: '世界生成' },
+    { id: 'farming', label: '农业食物' },
+    { id: 'transport', label: '交通载具' },
+    { id: 'ui', label: '界面优化' },
+    { id: 'misc', label: '其他' }
   ];
 
   const LABEL = {};
   CATS.forEach(c => { LABEL[c.id] = c.label; });
 
+  /* Modrinth 的 19 个官方分类 → 我们的 8 个桶 */
+  const MR_MAP = {
+    library: 'lib',
+    decoration: 'building',
+    technology: 'tech',
+    storage: 'tech',
+    adventure: 'adventure',
+    magic: 'adventure',
+    mobs: 'adventure',
+    equipment: 'adventure',
+    worldgen: 'world',
+    food: 'farming',
+    transportation: 'transport',
+    optimization: 'ui',
+    utility: 'ui',
+    cursed: 'misc',
+    economy: 'misc',
+    'game-mechanics': 'misc',
+    management: 'misc',
+    minigame: 'misc',
+    social: 'misc'
+  };
+
+  /* 关键词兜底：英文必须整词命中，中文按包含即可 */
+  const KW = {
+    lib: ['api', 'lib', 'library', 'framework', '前置'],
+    building: ['build', 'building', 'decor', 'furniture', 'chisel', 'architecture', 'roof', 'window', '建筑', '装饰', '家具', '屋顶'],
+    tech: ['tech', 'machine', 'energy', 'industrial', 'automation', 'pipe', 'cable', 'reactor', '科技', '机械', '自动化', '能源', '电力'],
+    adventure: ['adventure', 'dungeon', 'boss', 'combat', 'weapon', 'rpg', '冒险', '地牢', '战斗', '武器', '怪物'],
+    world: ['worldgen', 'biome', 'terrain', 'dimension', 'ore', 'structure', '地形', '生物群系', '维度', '矿石', '结构'],
+    farming: ['farm', 'crop', 'food', 'cook', 'kitchen', 'harvest', '农业', '食物', '烹饪', '作物'],
+    transport: ['transport', 'vehicle', 'train', 'boat', 'plane', '交通', '载具', '汽车', '火车'],
+    ui: ['hud', 'minimap', 'inventory', 'jei', 'rei', 'tooltip', 'optimiz', 'performance', '界面', '优化', '性能', '地图', '背包']
+  };
+
+  function escRe(s) {
+    return String(s).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  }
+
+  function hit(text, k) {
+    if (!text) return false;
+    if (/[\u4e00-\u9fff]/.test(k)) return text.indexOf(k) >= 0;
+    return new RegExp('(^|[^a-z0-9])' + escRe(k) + '($|[^a-z0-9])').test(text);
+  }
+
+  /* 一个项目常常同时挂着多个分类（Create 是 decoration+technology+utility），
+     按「最能说明它在玩什么」的顺序取第一个：玩法 > 库 > 装饰 > 杂项 */
+  const MR_ORDER = ['food', 'technology', 'storage', 'magic', 'mobs', 'adventure', 'equipment',
+    'worldgen', 'library', 'transportation', 'decoration', 'optimization', 'utility'];
+
+  function primaryOf(slugs) {
+    let best = '';
+    let bestRank = 999;
+    (slugs || []).forEach(s => {
+      const slug = String(s || '').toLowerCase();
+      const id = MR_MAP[slug];
+      if (!id) return;
+      const rank = MR_ORDER.indexOf(slug);
+      const r = rank < 0 ? 500 : rank;
+      if (r < bestRank) { bestRank = r; best = id; }
+    });
+    return best;
+  }
+
+  /** Modrinth 项目对象 → { cats: ['decoration', ...], primary: 'building' }；没有分类返回 null */
+  function fromProject(p) {
+    if (!p) return null;
+    const list = ((p.categories || []).concat(p.additional_categories || []))
+      .filter(Boolean).map(x => String(x).toLowerCase());
+    if (!list.length) return null;
+    return { cats: list, primary: primaryOf(list) || 'misc' };
+  }
+
   /** 名称 / modId 命中权重 3，简介命中权重 1；取分最高的一类 */
-  function categoryOf(entry) {
+  function guess(entry) {
     const id = String((entry && entry.id) || '').toLowerCase();
     const name = String((entry && entry.name) || '').toLowerCase();
     const desc = String((entry && entry.description) || '').toLowerCase();
     let best = 'misc';
     let bestScore = 0;
-    CATS.forEach(c => {
-      if (c.id === 'misc') return;
+    Object.keys(KW).forEach(cat => {
       let score = 0;
-      c.kw.forEach(k => {
-        if (id.indexOf(k) >= 0 || name.indexOf(k) >= 0) score += 3;
-        else if (desc.indexOf(k) >= 0) score += 1;
+      KW[cat].forEach(k => {
+        if (hit(id, k) || hit(name, k)) score += 3;
+        else if (hit(desc, k)) score += 1;
       });
-      if (score > bestScore) { bestScore = score; best = c.id; }
+      if (score > bestScore) { bestScore = score; best = cat; }
     });
     return best;
+  }
+
+  /** entry.cats（Modrinth 原始分类数组）优先，没有就退回关键词 */
+  function categoryOf(entry) {
+    const fromMr = primaryOf(entry && entry.cats);
+    return fromMr || guess(entry);
   }
 
   function labelOf(id) {
@@ -90,5 +170,5 @@
     return lines.join('\n');
   }
 
-  MC.catalog = { CATS, categoryOf, labelOf, counts, markdown };
+  MC.catalog = { CATS, MR_MAP, categoryOf, labelOf, fromProject, counts, markdown };
 })(globalThis);
