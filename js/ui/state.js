@@ -47,7 +47,7 @@
     updateTotal: 0,
     updateError: '',    // 批量检查时的网络错误提示
     diff: { mods: [], others: [], at: 0 }, // 另一个整合包的模组 + 资源包
-    diffSameOpen: false,     // 对比页里「共同且一致」是否展开
+    diffFilter: 'diff',      // 对比页筛选：diff 全部差异 / onlyB / verdiff / onlyA / same
     rpOrder: [],        // 资源包 uid 顺序（越靠前优先级越高）
     logs: { name: '', findings: [], lines: 0, errors: 0 },
     detail: null,       // 打开详情抽屉的组 id
@@ -71,7 +71,7 @@
     previewOpen: false, // 打包预览
     previewQuery: '',   // 预览里的搜索词
     picker: null,       // 当前展开的自绘下拉：'g:<id>' / 'd:<key>'
-    pg: { organize: 1, guide: 1, links: 1, packs: 1, diff: 1 }, // 各列表当前页码
+    pg: { organize: 1, guide: 1, links: 1, packs: 1, diff: 1, diffpacks: 1 }, // 各列表当前页码
     pageSize: savedPgSize, // 每页条数（20 / 30 / 50 / 100，记住上次选择）
     dragCount: 0,       // 拖拽悬停时的文件数，用于即时反馈
     scan: null,         // 正在读取文件：{ note, done, total, name }

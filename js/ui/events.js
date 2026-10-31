@@ -956,6 +956,9 @@
       at: Date.now()
     };
     st.scan = null;
+    st.diffFilter = 'diff';
+    MC.pager.reset('diff');
+    MC.pager.reset('diffpacks');
     touch();
     const packs = st.diff.others.length;
     if (!st.diff.mods.length && !packs) {
@@ -1381,14 +1384,21 @@
       }
 
       case 'diffclear':
-        st.diff = { mods: [], at: 0 };
+        st.diff = { mods: [], others: [], at: 0 };
+        st.diffFilter = 'diff';
+        MC.pager.reset('diff');
+        MC.pager.reset('diffpacks');
         touch();
         return true;
 
-      case 'diffsame':
-        st.diffSameOpen = !st.diffSameOpen;
+      case 'diffFilter': {
+        const f = el.dataset.df || 'diff';
+        if (st.diffFilter === f) return true;
+        st.diffFilter = f;
+        MC.pager.reset('diff');
         touch();
         return true;
+      }
 
       case 'getconnector':
         findConnector();
@@ -1978,7 +1988,8 @@
         st.updates = {};
         st.updateBusy = false;
         st.updateError = '';
-        st.diff = { mods: [], at: 0 };
+        st.diff = { mods: [], others: [], at: 0 };
+        st.diffFilter = 'diff';
         st.rpOrder = [];
         st.projects = {};
         st.hashProject = {};

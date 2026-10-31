@@ -759,33 +759,73 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 .minidrop span { display: block; font-size: 11.5px; color: var(--ink-3); line-height: 1.7; }
 .minidrop:focus-visible { outline: none; box-shadow: var(--focus); }
 
-/* 对比 */
-.dstats { display: flex; gap: 10px; flex-wrap: wrap; padding: 14px 20px 2px; }
-.dstat { flex: 1 1 140px; background: var(--grad-soft); border-radius: 13px; padding: 10px 13px; }
-.dstat b { display: block; font-size: 19px; letter-spacing: .3px; }
-.dstat small { font-size: 11px; color: var(--ink-3); }
-.dlistwrap { padding: 4px 12px 8px; }
-.dsec { padding-top: 8px; }
-.dsec .psec-head { padding: 0 8px; }
-.drow {
-  display: flex; align-items: center; gap: 10px;
-  padding: 8px 10px; border-radius: 11px; transition: .14s;
+/* 对比：筛选 chip + 「模组 / 当前包 / 另一个包 / 状态」四列表格 */
+.dhint { font-size: 11.5px; color: var(--ink-3); }
+.dtoolbar { display: flex; flex-wrap: wrap; gap: 8px; padding: 13px 20px 4px; }
+.dchip {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px solid var(--line-2); background: #fff; color: var(--ink-2);
+  font-family: inherit; font-size: 11.5px; padding: 6px 12px; border-radius: 999px;
+  cursor: pointer; transition: .16s;
 }
+.dchip:hover { border-color: #DCC9EA; color: var(--ink); }
+.dchip[aria-pressed="true"] {
+  background: var(--grad-soft); border-color: #E4D8F5;
+  color: var(--violet-deep); font-weight: 600;
+}
+.dchip b { font-size: 13px; letter-spacing: .2px; }
+.dchip:focus-visible { outline: none; box-shadow: var(--focus); }
+.dtablewrap { padding: 4px 12px 8px; }
+.dpacks { border-top: 1px solid var(--line); padding: 2px 12px 8px; }
+.dpacks .psec-head { padding: 10px 8px 4px; }
+.dthead, .drow {
+  display: grid; grid-template-columns: minmax(0, 1.7fr) minmax(0, 1fr) minmax(0, 1fr) 104px;
+  align-items: center; gap: 10px; padding: 8px 10px; border-radius: 11px;
+}
+.dthead {
+  font-size: 11px; color: var(--ink-3); padding: 6px 10px;
+  border-radius: 0; border-bottom: 1px solid var(--line);
+}
+.drow { transition: .14s; }
 .drow:hover { background: var(--card-hover); }
-.drow .t { flex: 1; min-width: 0; }
-.drow b { display: block; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.drow small { font-size: 10.5px; color: var(--ink-3); }
-.dlist { display: grid; gap: 1px; }
-.foldhead {
-  display: flex; align-items: center; gap: 8px; width: 100%;
-  padding: 10px 8px; border: 0; background: transparent; text-align: left;
-  color: var(--ink); border-radius: 10px; cursor: pointer;
+.drow.dv { background: rgba(255, 209, 102, .08); }
+.drow.dv:hover { background: rgba(255, 209, 102, .16); }
+.dmod { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.dmod .t { min-width: 0; }
+.dmod b {
+  display: block; font-size: 12.5px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-.foldhead:hover { background: var(--card-hover); }
-.foldhead b { font-size: 12.5px; }
-.foldhead .tcount { position: static; }
-.foldhead small { margin-left: auto; font-size: 11px; color: var(--ink-3); }
-.foldhead:focus-visible { outline: none; box-shadow: var(--focus); }
+.dmod small {
+  display: block; font-size: 10.5px; color: var(--ink-3);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.dmod-m { display: none; }
+.dcell { display: flex; align-items: center; gap: 6px; min-width: 0; }
+.dcell small { font-size: 10.5px; color: var(--ink-3); white-space: nowrap; }
+.dcell.muted { font-size: 12px; color: var(--line-2); }
+.dcell .tag { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dcell.change .tag { box-shadow: 0 0 0 2px rgba(226, 168, 44, .16); }
+.dno { font-size: 11px; color: var(--ink-3); }
+.dstate { display: flex; justify-content: flex-end; }
+.dgroup {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+  padding: 13px 10px 5px; font-size: 12px;
+}
+.dgroup::before {
+  content: ''; width: 4px; height: 14px; border-radius: 2px; background: var(--grad-main);
+}
+.dgroup.gb::before { background: linear-gradient(180deg, #8FC6F2, #5A9BD6); }
+.dgroup.gw::before { background: linear-gradient(180deg, #FFD27A, #E0A23A); }
+.dgroup.ga::before { background: linear-gradient(180deg, #C9B4F5, #9C7BE8); }
+.dgroup.gs::before { background: linear-gradient(180deg, #9BE0C0, #5CBB8E); }
+.dgroup b { font-size: 12.5px; }
+.dgroup span {
+  font-size: 10.5px; color: var(--violet-deep); background: var(--grad-soft);
+  border-radius: 7px; padding: 1px 7px; font-weight: 600;
+}
+.dgroup small { font-size: 11px; color: var(--ink-3); }
+.dempty { padding: 24px; text-align: center; color: var(--ink-3); font-size: 12px; }
 
 /* 工具：卡片整行堆叠，不再左右各半（长列表不再挤在半个屏里） */
 .toolstack { display: grid; gap: 16px; }
@@ -867,6 +907,14 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 @media (max-width: 960px) {
   .toolstack { gap: 14px; }
 }
+/* 窄屏：对比表收成「模组 + 状态」，版本号并进名字下面 */
+@media (max-width: 760px) {
+  .dthead { display: none; }
+  .drow { grid-template-columns: minmax(0, 1fr) auto; row-gap: 2px; }
+  .dcell { display: none; }
+  .dmod-m { display: block; }
+  .dtoolbar .dchip { padding: 5px 10px; }
+}
 @media (max-width: 520px) {
   .tabs button { padding: 7px 10px; }
   .tabs button small { display: none; }
@@ -877,9 +925,9 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
   .glist { padding: 6px; }
   .gcard { padding: 9px 8px; }
   .minidrop { margin: 12px 14px; padding: 20px 14px; }
-  .dstats { padding: 12px 14px 2px; }
-  .dlistwrap { padding: 4px 6px 8px; }
-  .drow { padding: 7px 6px; }
+  .dtoolbar { padding: 10px 14px 2px; gap: 6px; }
+  .dtablewrap, .dpacks { padding-left: 6px; padding-right: 6px; }
+  .drow { padding: 8px 6px; }
   .vfoot { padding: 10px 14px 12px; }
   .toolcard .vhead { padding: 12px 14px; }
   .logf code { font-size: 10px; }
@@ -1094,5 +1142,5 @@ button.opt:focus-visible { outline: none; box-shadow: var(--focus); border-radiu
 
 @media (prefers-reduced-motion: reduce) {
   .anim .hero, .anim .stats > *, .anim .panel, .anim .pack,
-  .anim .view > .vpanel, .anim .toolgrid > * { animation: none; }
+  .anim .view > .vpanel, .anim .toolstack > * { animation: none; }
 }
