@@ -472,17 +472,22 @@
 
     const others = (a.others && a.others.length && s.mode === 'folder') ? othersSection(s, a.others) : '';
 
+    const pg = MC.pager.slice('organize', groups.length);
+    const pageGroups = groups.slice(pg.start, pg.end);
+    const pagerHtml = MC.pager.html('organize', pg, { anchor: '#rows', unit: '组' });
+
     el.innerHTML = '<div class="section-label">' + esc(label) + ' · ' + groups.length + ' 组' +
       (s.selectMode ? '<span class="selhint">点左边的方框取消进包</span>' : '') + '</div>' +
       extras + scanning +
       (s.progress ? '<div class="loading"><span class="spinner"></span>' + esc(s.progress) + '</div>' : '') +
-      '<div class="rows">' + (groups.length
-        ? groups.map(g => rowHtml(s, g)).join('')
+      '<div class="rows">' + (pageGroups.length
+        ? pageGroups.map(g => rowHtml(s, g)).join('')
         : '<div class="empty">' + (q
           ? '没有匹配「' + esc(s.organizeQuery) + '」的模组。'
           : others
             ? '这个文件夹里没有模组，只有下面的资源包与光影。'
             : '这个分类下没有内容。') + '</div>') + '</div>' +
+      pagerHtml +
       others;
   }
 
@@ -1121,8 +1126,12 @@
       return '<button type="button" data-act="guidecat" data-cat="' + id + '" aria-pressed="' + (s.guideCat === id) + '">' + esc(label) + '</button>';
     }).join('') + '</div>';
 
+    const pg = MC.pager.slice('guide', filtered.length);
+    const pageItems = filtered.slice(pg.start, pg.end);
+    const pagerHtml = MC.pager.html('guide', pg, { anchor: '#guideView', unit: '个模组' });
+
     const list = filtered.length
-      ? '<div class="glist">' + filtered.map(it => gcard(s, it)).join('') + '</div>'
+      ? '<div class="glist">' + pageItems.map(it => gcard(s, it)).join('') + '</div>' + pagerHtml
       : '<div class="empty">' + (items.length ? '没有匹配的模组。' : '这个文件夹里没有模组。') + '</div>';
 
     el.innerHTML = '<div class="vpanel">' + head + banner + search + catbar + list +
@@ -1417,18 +1426,22 @@
       : '<div class="rpnum-note">数据库没连上' + (db.error ? '（' + esc(db.error) + '）' : '') +
         '，链接先存在浏览器里。填好项目目录下的 db.config.json（MySQL 账号密码），重启 启动.bat 就会自动切到数据库。</div>';
 
+    const pg = MC.pager.slice('links', shown.length);
+    const pageItems = shown.slice(pg.start, pg.end);
+    const pagerHtml = MC.pager.html('links', pg, { anchor: '#linkList', unit: '条' });
+
     return '<div class="vpanel toolcard" style="margin-top:16px">' +
       '<div class="vhead"><h3>下载页仓库</h3>' + badge +
       '<span class="adnote">' + list.length + ' 条 · ' + ids + ' 个模组</span></div>' +
       '<div class="vbody">' + tip + chips +
       (shown.length
-        ? '<div class="linklist">' + shown.slice(0, 80).map(l =>
+        ? '<div class="linklist" id="linkList">' + pageItems.map(l =>
           '<div class="linkitem"><span class="tag">' + esc(siteTag(l.url, l.site)) + '</span>' +
           '<span class="lm">' + esc(whom(l.modId)) + '</span>' +
           '<a href="' + esc(l.url) + '" target="_blank" rel="noopener">' + esc(l.note || l.url) + '</a>' +
           '<button type="button" class="icon-btn sm" data-act="linkdel" data-row="' + esc(l.rowId) +
-          '" data-mod="' + esc(l.modId) + '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') +
-          (shown.length > 80 ? '<div class="hint">只显示最近 80 条</div>' : '') + '</div>'
+          '" data-mod="' + esc(l.modId) + '" data-url="' + esc(l.url) + '" aria-label="删除">×</button></div>').join('') + '</div>' +
+          pagerHtml
         : '<div class="hint">' + (list.length ? '这个站点下还没有存过链接。' : '还没有存过链接。') + '</div>') +
       '<div class="bulkbox">' +
       '<div class="bulk-label">批量导入 <small>一行一个，粘完点下面的按钮就行</small></div>' +

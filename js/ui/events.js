@@ -193,6 +193,7 @@
 
     const built = await buildEntries(fresh, '正在读取');
     st.mods.push(...built.entries);
+    MC.pager.resetAll();
     const notMod = built.notMod;
     st.progress = '';
     await analyzeAndResolve(true);
@@ -1296,6 +1297,36 @@
     touch();
   }
 
+  /* ---------- 分页 ---------- */
+  function pagerGo(wrap, page) {
+    if (!wrap) return;
+    const st = S();
+    const key = wrap.dataset.pgkey;
+    const pages = Math.max(1, Number(wrap.dataset.pgpages) || 1);
+    const cur = Number(wrap.dataset.pgpage) || 1;
+    let p = Math.floor(Number(page) || 1);
+    if (p < 1) p = 1;
+    if (p > pages) p = pages;
+    if (p === cur) return;
+    if (!st.pg) st.pg = {};
+    st.pg[key] = p;
+    const anchor = wrap.dataset.pganchor;
+    touch();
+    const target = anchor ? document.querySelector(anchor) : null;
+    if (target) {
+      const y = target.getBoundingClientRect().top + window.pageYOffset - 14;
+      window.scrollTo({ top: Math.max(0, y), behavior: 'smooth' });
+    }
+  }
+
+  function pagerFromEl(el) {
+    const wrap = el.closest('.pager');
+    if (!wrap) return;
+    const cur = Number(wrap.dataset.pgpage) || 1;
+    const to = el.dataset.pg;
+    pagerGo(wrap, to === 'prev' ? cur - 1 : to === 'next' ? cur + 1 : Number(to));
+  }
+
   function handleAct(act, el) {
     const st = S();
     const key = el.dataset.key;
@@ -1328,6 +1359,7 @@
 
       case 'guidecat':
         st.guideCat = el.dataset.cat || 'all';
+        MC.pager.reset('guide');
         touch();
         return true;
 
@@ -1369,7 +1401,12 @@
 
       case 'siteset':
         st.siteFilter = el.dataset.site || 'all';
+        MC.pager.reset('links');
         touch();
+        return true;
+
+      case 'pg':
+        pagerFromEl(el);
         return true;
 
       case 'pick-log': {
@@ -1733,6 +1770,7 @@
         const inp = e.target.closest('#guideQuery');
         if (!inp) return;
         S().guideQuery = inp.value;
+        MC.pager.reset('guide');
         touch();
         const again = document.getElementById('guideQuery');
         if (again) {
@@ -1860,6 +1898,7 @@
         const btn = e.target.closest('button[data-filter]');
         if (!btn) return;
         S().filter = btn.dataset.filter;
+        MC.pager.reset('organize');
         touch();
       });
     }
@@ -1870,6 +1909,7 @@
       orgQuery.addEventListener('input', () => {
         if (orgClear) orgClear.hidden = !orgQuery.value;
         S().organizeQuery = orgQuery.value;
+        MC.pager.reset('organize');
         touch();
       });
       orgQuery.addEventListener('keydown', e => {
@@ -1878,6 +1918,7 @@
           orgQuery.value = '';
           if (orgClear) orgClear.hidden = true;
           S().organizeQuery = '';
+          MC.pager.reset('organize');
           touch();
         }
       });
@@ -1887,6 +1928,7 @@
         if (orgQuery) orgQuery.value = '';
         orgClear.hidden = true;
         S().organizeQuery = '';
+        MC.pager.reset('organize');
         touch();
         if (orgQuery) orgQuery.focus();
       });
@@ -1897,6 +1939,7 @@
       orgSearchBtn.addEventListener('click', () => {
         const q = document.getElementById('orgQuery');
         S().organizeQuery = q ? q.value.trim() : '';
+        MC.pager.reset('organize');
         touch();
       });
     }
@@ -1948,6 +1991,7 @@
         st.detail = null;
         st.previewOpen = false;
         st.progress = '';
+        MC.pager.resetAll();
         touch();
       });
     }
@@ -2019,6 +2063,26 @@
       if (!S().picker) return;
       if (e.target.closest('.picker')) return;
       S().picker = null;
+      touch();
+    });
+
+    // 分页：跳页输入框回车、每页条数切换
+    document.addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const inp = e.target.closest && e.target.closest('input[data-act="pgjump"]');
+      if (!inp) return;
+      e.preventDefault();
+      pagerGo(inp.closest('.pager'), inp.value);
+    });
+
+    document.addEventListener('change', e => {
+      const sel = e.target.closest && e.target.closest('select[data-act="pgsize"]');
+      if (!sel) return;
+      const st = S();
+      const n = Number(sel.value);
+      st.pageSize = MC.pager.SIZES.indexOf(n) >= 0 ? n : MC.pager.DEFAULT_SIZE;
+      MC.store.savePageSize();
+      MC.pager.resetAll();
       touch();
     });
 

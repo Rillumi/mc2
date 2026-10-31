@@ -11,6 +11,10 @@
   const savedLinks = (() => {
     try { return JSON.parse(localStorage.getItem('modpilot.links.v1') || '{}') || {}; } catch { return {}; }
   })();
+  const savedPgSize = (() => {
+    const n = Number(localStorage.getItem('modpilot.pgsize'));
+    return [20, 30, 50, 100].indexOf(n) >= 0 ? n : 30;
+  })();
 
   const state = {
     env: {
@@ -67,6 +71,8 @@
     previewOpen: false, // 打包预览
     previewQuery: '',   // 预览里的搜索词
     picker: null,       // 当前展开的自绘下拉：'g:<id>' / 'd:<key>'
+    pg: { organize: 1, guide: 1, links: 1, diff: 1 }, // 各列表当前页码
+    pageSize: savedPgSize, // 每页条数（20 / 30 / 50 / 100，记住上次选择）
     dragCount: 0,       // 拖拽悬停时的文件数，用于即时反馈
     scan: null,         // 正在读取文件：{ note, done, total, name }
     busy: false,
@@ -89,6 +95,9 @@
   function saveLinks() {
     try { localStorage.setItem('modpilot.links.v1', JSON.stringify(state.links)); } catch { /* ignore */ }
   }
+  function savePageSize() {
+    try { localStorage.setItem('modpilot.pgsize', String(state.pageSize)); } catch { /* ignore */ }
+  }
 
-  MC.store = { state, touch, set, saveEnv, saveLinks, subscribe(fn) { subs.push(fn); }, DEFAULTS };
+  MC.store = { state, touch, set, saveEnv, saveLinks, savePageSize, subscribe(fn) { subs.push(fn); }, DEFAULTS };
 })(globalThis);
