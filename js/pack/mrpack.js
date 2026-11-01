@@ -119,5 +119,48 @@
     return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '.mrpack' };
   }
 
-  MC.pack = { buildMrpack, dependencies, baseName };
+  /** 普通 zip：所有 jar 实打实放进去，离线也能装 */
+  async function buildPlainZip(opts) {
+    const env = opts.env;
+    const used = new Set();
+    const jars = [];
+    const skipped = [];
+    let downloaded = 0;
+
+    (opts.localJars || []).forEach(jar => {
+      jars.push({ name: uniqueJarName(jar.name, used), data: jar.data });
+    });
+
+    for (const dep of (opts.deps || [])) {
+      const f = dep.version && dep.version.files && dep.version.files[0];
+      if (!f) continue;
+      if (opts.onProgress) opts.onProgress('正在下载 ' + (dep.project.title || dep.project.slug) + '…');
+      try {
+        const bytes = await MC.api.modrinth.download(f.url);
+        downloaded++;
+        jars.push({ name: uniqueJarName(f.filename || ((dep.project.slug || 'mod') + '.jar'), used), data: bytes });
+      } catch (err) {
+        skipped.push((dep.project.title || dep.project.slug) + ' → ' + f.url);
+      }
+    }
+
+    const zipFiles = jars.map(j => ({ path: 'mods/' + j.name, data: j.data }));
+    (opts.extras || []).forEach(x => {
+      zipFiles.push({
+        path: packFolder(x.kind) + '/' + uniqueName(x.name, used, '.zip'),
+        data: x.data
+      });
+    });
+    (opts.overrides || []).forEach(o => {
+      zipFiles.push({ path: o.path, data: o.data });
+    });
+    zipFiles.push({
+      path: '安装说明.txt',
+      data: enc.encode(notice(env, (opts.localJars || []).length, downloaded, skipped, (opts.overrides || []).length))
+    });
+
+    return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '-普通包.zip' };
+  }
+
+  MC.pack = { buildMrpack, buildPlainZip, dependencies, baseName };
 })(globalThis);

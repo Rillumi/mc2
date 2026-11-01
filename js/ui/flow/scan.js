@@ -206,11 +206,16 @@
     }
 
     // 拖进来的可能是整个整合包：先认出来，再解出里面的 jar
+    // 文件夹里内嵌的整合包默认跳过（只扫 jar），不然会把包内在线清单混进来
     const packs = [];
     let plain = [];
+    const nested = [];
     for (const f of list) {
-      if (await packType(f)) packs.push(f);
-      else plain.push(f);
+      const inFolder = !!(f.webkitRelativePath || f.modpilotPath);
+      const type = await packType(f);
+      if (!type) { plain.push(f); continue; }
+      if (inFolder) { nested.push(f.name); continue; }
+      packs.push(f);
     }
     const scanned = [];
     const emptyPacks = [];
@@ -328,6 +333,11 @@
         (online ? '（另有 ' + online + ' 个在线清单项不在包里）' : '') +
         (skipped ? '；有 ' + skipped + ' 个 jar 没读到模组信息，已跳过' : '') +
         (packEnv.loader ? ' · ' + packEnv.loader + ' ' + (packEnv.mc || st.env.mc) : ''));
+    }
+    if (nested.length) {
+      toast('已跳过文件夹里内嵌的整合包 ' + nested.length + ' 个：' +
+        nested.slice(0, 3).join('、') + (nested.length > 3 ? ' 等' : '') +
+        '（只扫 jar，不带它们包内的在线清单）');
     }
   }
 

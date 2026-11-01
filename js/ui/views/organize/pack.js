@@ -88,8 +88,8 @@
       icon(IC.book, '#7C63E8') + '生成清单 / CurseForge</button>' +
       '</div>' +
 
-      '<div class="hintbox"><b>生成整合包</b>：.mrpack，PCL 2.13 以上直接拖入导入；前置和本地 jar 全打进 overrides/mods，离线也能装。<br>' +
-      '<b>生成清单 / CurseForge</b>：填了 key → CurseForge 整合包（按指纹反查，已进包的从清单里去掉）；没填 → 下载清单（manifest.json + modlist.html，不含 jar）。<br>' +
+      '<div class="hintbox"><b>生成整合包</b>：一次出两个 —— .mrpack（PCL 2.13+ 直接导入，前置按清单下载）和离线 zip（前置也下好，解压就能用）。<br>' +
+      '<b>生成清单 / CurseForge</b>：一定出下载清单（manifest.json + modlist.html，不含 jar）；填了 key 再额外给一份 CurseForge 整合包。<br>' +
       'key 在「工具 → 设置」里填，只存本机。从整合包扫描进来的会带上 config、defaultconfigs、kubejs、emotes、资源包/光影和 options.txt（不带 PCL、存档和 ffmpeg）。<br>' +
       '写进清单的加载器版本：<b>' + esc(s.env.loaderVersion || '未填') + '</b>（顶部「' + esc(verLabel) + '」可改）</div>';
   }

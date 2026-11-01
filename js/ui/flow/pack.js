@@ -10,10 +10,6 @@
     const st = S();
     if (st.busy) return;
     if (!st.analysis) return toast('先拖入模组文件夹');
-    // 两个按钮：pack = 整合包；manifest = 有 key 出 CurseForge 包，没 key 出下载清单
-    const fmt = format === 'manifest'
-      ? ((MC.api.curseforge && MC.api.curseforge.hasKey()) ? 'curse' : 'list')
-      : format;
     st.busy = true;
     st.progress = '正在读取本地 jar…';
     touch();
@@ -49,7 +45,7 @@
 
       // 原整合包里的 config / defaultconfigs / kubejs / resourcepacks 等一并带走
       const overrides = [];
-      if (fmt !== 'list') {
+      if (format === 'pack' || (MC.api.curseforge && MC.api.curseforge.hasKey())) {
         for (const src of (st.packSources || [])) {
           if (!MC.flowScan.listPacked || !MC.overrides) continue;
           const plan = MC.overrides.plan(await MC.flowScan.listPacked(src.name));
@@ -78,7 +74,9 @@
       const packTitle = (st.packSources[0] && st.packSources[0].name.replace(/\.(mrpack|zip)$/i, '')) ||
         ('ModPilot ' + st.env.loader + ' ' + st.env.mc);
 
-      if (fmt === 'list') {
+      const results = [];
+      if (format === 'manifest') {
+        // 下载清单：每次都出，跟有没有 key 无关
         const local = localList();
         deps.forEach(d => local.push({
           name: d.project.title || d.modId,
@@ -97,108 +95,95 @@
         const onlineClean = MC.pack.dedupe ? MC.pack.dedupe(online, usedNames) : online;
         st.progress = '正在生成下载清单…';
         touch();
-        result = await MC.pack.buildListZip({
+        results.push(await MC.pack.buildListZip({
           title: packTitle, env: st.env, local, online: onlineClean, original
-        });
-      } else if (fmt === 'curse') {
-        if (!MC.api.curseforge.hasKey()) {
-          toast('先设置 CurseForge key（工具 → 设置里填，只存本机）');
-          return;
-        }
-        st.progress = '正在反查 CurseForge 指纹…';
-        touch();
-        const items = localJars.map(j => ({
-          fp: MC.murmur2.fingerprint(j.data),
-          name: j.name, size: j.data.length, sha1: j.sha1
-        }));
-        const hook = await MC.api.curseforge.lookup(items);
-        const matched = hook.matches || {};
-        const projIds = [];
-        Object.keys(matched).forEach(fp => { if (matched[fp].projectID) projIds.push(matched[fp].projectID); });
-        const info = await MC.api.curseforge.modsInfo(projIds);
-        const matchedIds = {};
-        const blockedNames = [];
-        const seenBlocked = {};
-        Object.keys(matched).forEach(fp => {
-          const m = matched[fp];
-          if (!m.fileID) return;
-          matchedIds[m.fileID] = 1;
-          const mod = info.mods && info.mods[m.projectID];
-          if (mod && mod.allowModDistribution === false && !seenBlocked[m.fileID]) {
-            seenBlocked[m.fileID] = 1;
-            blockedNames.push(m.fileName || String(m.projectID));
-          }
-        });
-        const matchedFps = {};
-        Object.keys(matched).forEach(fp => { matchedFps[fp] = 1; });
-        const unmatched = items.filter(it => !matchedFps[it.fp]).map(it => it.name);
-
-        // 项目页链接：优先用 API 给的 websiteUrl，没有就用 /projects/<id>
-        const urls = {};
-        Object.keys(info.mods || {}).forEach(id => {
-          const u = info.mods[id] && info.mods[id].links && info.mods[id].links.websiteUrl;
-          if (u) urls[id] = u;
-        });
-
-        // 清单里只留没打进包的：已经放进 overrides/mods 的不再让启动器下一次
-        const files = [];
-        const seenFile = {};
-        (st.packSources || []).forEach(src => (src.onlineList || []).forEach(o => {
-          if (!o.projectID || !o.fileID || matchedIds[o.fileID]) return;
-          const k = o.projectID + ':' + o.fileID;
-          if (seenFile[k]) return;
-          seenFile[k] = 1;
-          files.push({ projectID: o.projectID, fileID: o.fileID });
         }));
 
-        // Modrinth 前置直接下好放进 overrides/mods，CF 清单里没有它们的位置
-        const jars = localJars.slice();
-        for (const dep of deps) {
-          const f = dep.version && dep.version.files && dep.version.files[0];
-          if (!f) continue;
-          st.progress = '正在下载 ' + (dep.project.title || dep.project.slug) + '…';
+        // 填了 key 才额外给一份 CurseForge 整合包（清单照出，不会顶替清单）
+        if (MC.api.curseforge && MC.api.curseforge.hasKey()) {
+          st.progress = '正在反查 CurseForge 指纹…';
           touch();
-          try {
-            const bytes = await MC.api.modrinth.download(f.url);
-            jars.push({ name: f.filename || ((dep.project.slug || 'mod') + '.jar'), data: bytes });
-          } catch { /* 下不下来就只能靠安装说明里留个记录 */ }
-        }
-        if (!hook.ok) toast('指纹反查没成功：' + hook.reason + '（清单里可能还留着已打包的模组）');
+          const items = localJars.map(j => ({
+            fp: MC.murmur2.fingerprint(j.data),
+            name: j.name, size: j.data.length, sha1: j.sha1
+          }));
+          const hook = await MC.api.curseforge.lookup(items);
+          const matched = hook.matches || {};
+          const projIds = [];
+          Object.keys(matched).forEach(fp => { if (matched[fp].projectID) projIds.push(matched[fp].projectID); });
+          const info = await MC.api.curseforge.modsInfo(projIds);
+          const matchedIds = {};
+          const blockedNames = [];
+          const seenBlocked = {};
+          Object.keys(matched).forEach(fp => {
+            const m = matched[fp];
+            if (!m.fileID) return;
+            matchedIds[m.fileID] = 1;
+            const mod = info.mods && info.mods[m.projectID];
+            if (mod && mod.allowModDistribution === false && !seenBlocked[m.fileID]) {
+              seenBlocked[m.fileID] = 1;
+              blockedNames.push(m.fileName || String(m.projectID));
+            }
+          });
+          const matchedFps = {};
+          Object.keys(matched).forEach(fp => { matchedFps[fp] = 1; });
+          const unmatched = items.filter(it => !matchedFps[it.fp]).map(it => it.name);
 
-        st.progress = '正在生成 CurseForge 整合包…';
-        touch();
-        result = await MC.pack.buildCurse({
-          title: packTitle, env: st.env, jars, extras, overrides, files, urls,
-          local: localList(), online: files, unmatched, blocked: blockedNames,
-          matched: Object.keys(matchedIds).length
-        });
+          // 项目页链接：优先用 API 给的 websiteUrl，没有就用 /projects/<id>
+          const urls = {};
+          Object.keys(info.mods || {}).forEach(id => {
+            const u = info.mods[id] && info.mods[id].links && info.mods[id].links.websiteUrl;
+            if (u) urls[id] = u;
+          });
+
+          // 清单里只留没打进包的：已经放进 overrides/mods 的不再让启动器下一次
+          const files = [];
+          const seenFile = {};
+          (st.packSources || []).forEach(src => (src.onlineList || []).forEach(o => {
+            if (!o.projectID || !o.fileID || matchedIds[o.fileID]) return;
+            const k = o.projectID + ':' + o.fileID;
+            if (seenFile[k]) return;
+            seenFile[k] = 1;
+            files.push({ projectID: o.projectID, fileID: o.fileID });
+          }));
+
+          // Modrinth 前置直接下好放进 overrides/mods，CF 清单里没有它们的位置
+          const jars = localJars.slice();
+          for (const dep of deps) {
+            const f = dep.version && dep.version.files && dep.version.files[0];
+            if (!f) continue;
+            st.progress = '正在下载 ' + (dep.project.title || dep.project.slug) + '…';
+            touch();
+            try {
+              const bytes = await MC.api.modrinth.download(f.url);
+              jars.push({ name: f.filename || ((dep.project.slug || 'mod') + '.jar'), data: bytes });
+            } catch { /* 下不下来就只能靠安装说明里留个记录 */ }
+          }
+          if (!hook.ok) toast('指纹反查没成功：' + hook.reason + '（清单里可能还留着已打包的模组）');
+
+          st.progress = '正在生成 CurseForge 整合包…';
+          touch();
+          results.push(await MC.pack.buildCurse({
+            title: packTitle, env: st.env, jars, extras, overrides, files, urls,
+            local: localList(), online: files, unmatched, blocked: blockedNames,
+            matched: Object.keys(matchedIds).length
+          }));
+        }
       } else {
-        // 整合包：前置也下载好放进 overrides/mods，导入即用、离线也能装
-        const jars = localJars.slice();
-        const skipped = [];
-        for (const dep of deps) {
-          const f = dep.version && dep.version.files && dep.version.files[0];
-          if (!f) {
-            skipped.push((dep.project.title || dep.project.slug) + '（没有可下载文件）');
-            continue;
-          }
-          st.progress = '正在下载 ' + (dep.project.title || dep.project.slug) + '…';
-          touch();
-          try {
-            const bytes = await MC.api.modrinth.download(f.url);
-            jars.push({ name: f.filename || ((dep.project.slug || 'mod') + '.jar'), data: bytes });
-          } catch {
-            skipped.push('[' + (dep.project.title || dep.project.slug) + '] ' + f.url);
-          }
-        }
-        st.progress = '正在生成整合包…';
+        // 整合包：.mrpack（按在线清单下载）+ 离线 zip，两个格式一起出
+        st.progress = '正在生成 .mrpack…';
         touch();
-        result = await MC.pack.buildMrpack({
-          env: st.env, localJars: jars, deps: [], extras, overrides, skipped, offline: true
-        });
+        results.push(await MC.pack.buildMrpack({ env: st.env, localJars, deps, extras, overrides }));
+        st.progress = '正在打包离线 zip…';
+        touch();
+        results.push(await MC.pack.buildPlainZip({
+          env: st.env, localJars, deps, extras, overrides,
+          onProgress: text => { st.progress = text; touch(); }
+        }));
       }
-      saveBlob(result.blob, result.filename);
-      toast('已生成 ' + result.filename);
+      results.forEach(r => saveBlob(r.blob, r.filename));
+      toast('已生成 ' + results.map(r => r.filename).join(' 和 '));
+
     } catch (err) {
       console.error(err);
       toast('打包失败：' + (err && err.message ? err.message : err));
