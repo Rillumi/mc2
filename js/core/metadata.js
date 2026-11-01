@@ -113,6 +113,11 @@
     return out;
   }
 
+  /* authors 常见写法："a, b" / "a;b" */
+  function splitNames(s) {
+    return String(s || '').split(/[,;，；]/).map(x => x.trim()).filter(Boolean);
+  }
+
   function parseForgeToml(text) {
     const mods = [];
     for (const m of text.matchAll(/\[\[mods\]\]([\s\S]*?)(?=\[\[|$)/g)) {
@@ -123,7 +128,9 @@
       if (/\$\{/.test(version)) version = '';      // ${file.jarVersion} 由 Forge 启动时替换
       mods.push({
         modId, version, name: tomlStr(body, 'displayName') || modId,
-        description: plainText(tomlText(body, 'description') || tomlText(text, 'description')).slice(0, 600)
+        description: plainText(tomlText(body, 'description') || tomlText(text, 'description')).slice(0, 600),
+        authors: splitNames(tomlStr(body, 'authors')),
+        displayURL: tomlStr(body, 'displayURL')
       });
     }
 
@@ -142,7 +149,14 @@
         mandatory: (tomlStr(body, 'mandatory') || 'true').toLowerCase() !== 'false'
       });
     }
-    return { mods, deps, mcRange, provides: tomlArray(text, 'provides') };
+    return {
+      mods,
+      deps,
+      mcRange,
+      provides: tomlArray(text, 'provides'),
+      authors: mods.length ? mods[0].authors : [],
+      links: mods.length && mods[0].displayURL ? [{ label: '主页', url: mods[0].displayURL }] : []
+    };
   }
 
   function parseFabricJson(text) {
@@ -160,6 +174,16 @@
         deps.push({ modId: k, versionRange: String(v), mandatory: false });
       }
     }
+    const authors = [];
+    (Array.isArray(o.authors) ? o.authors : []).forEach(a => {
+      const n = typeof a === 'string' ? a : (a && a.name);
+      if (n) authors.push(String(n).trim());
+    });
+    const links = [];
+    const contact = o.contact || {};
+    if (contact.homepage) links.push({ label: '主页', url: String(contact.homepage) });
+    if (contact.sources) links.push({ label: '源码', url: String(contact.sources) });
+    if (contact.issues) links.push({ label: '问题反馈', url: String(contact.issues) });
     return {
       mods: [{
         modId: o.id, version: o.version || '', name: o.name || o.id, mc: '',
@@ -167,7 +191,9 @@
       }],
       deps,
       provides: Array.isArray(o.provides) ? o.provides : [],
-      mcRange: o.depends && o.depends.minecraft ? String(o.depends.minecraft) : ''
+      mcRange: o.depends && o.depends.minecraft ? String(o.depends.minecraft) : '',
+      authors,
+      links
     };
   }
 
@@ -180,13 +206,20 @@
       version: x.version || '',
       name: x.name || x.modid,
       mc: x.mcversion || '',
-      description: plainText(x.description).slice(0, 600)
+      description: plainText(x.description).slice(0, 600),
+      authors: (Array.isArray(x.authorList) ? x.authorList : (x.author ? [x.author] : [])
+        ).map(a => (typeof a === 'string' ? a : a && a.name)).filter(Boolean),
+      url: x.url || ''
     }));
     let deps = [];
     if (list[0] && Array.isArray(list[0].dependencies)) {
       deps = list[0].dependencies.map(d => ({ modId: String(d), versionRange: '*', mandatory: true }));
     }
-    return { mods, deps, provides: [] };
+    return {
+      mods, deps, provides: [],
+      authors: mods.length ? mods[0].authors : [],
+      links: mods.length && mods[0].url ? [{ label: '主页', url: mods[0].url }] : []
+    };
   }
 
   /* 从 jar 自带的语言文件里找中文名：assets/<namespace>/lang/zh_cn.json（老版本是 .lang） */
@@ -400,6 +433,20 @@
     }
 
     const deps = [...depMap.values()];
+    // 作者和作者留下的主页/源码/爱发电链接（写进 jar 里，谁都读得到）
+    const authors = [];
+    const links = [];
+    found.forEach(f => {
+      (f.meta.authors || []).forEach(a => {
+        const n = String(a || '').trim();
+        if (n && authors.indexOf(n) < 0) authors.push(n);
+      });
+      (f.meta.links || []).forEach(l => {
+        if (!l || !l.url || !/^https?:/i.test(l.url)) return;
+        if (links.some(x => x.url === l.url)) return;
+        links.push({ label: l.label || '主页', url: l.url });
+      });
+    });
     const modId = primary.meta.mods[0].modId;
     const nameZh = await findZhName(z, [modId, ...ids]);
     return {
@@ -417,7 +464,9 @@
         mcRange,
         allIds: [...ids],
         deps: deps.filter(d => d.mandatory),
-        optionalDeps: deps.filter(d => !d.mandatory)
+        optionalDeps: deps.filter(d => !d.mandatory),
+        authors,
+        links
       }
     };
   }
@@ -427,5 +476,5 @@
     return (await inspect(buf)).info;
   }
 
-  MC.metadata = { inspect, parseJarBuffer, normalizeMc, inferMcFromName, parseForgeToml, parseFabricJson, parseMcmodInfo, sanitizeVersion, isGenericVersion, fileVersionOf, resolveVersion };
+  MC.metadata = { inspect, parseJarBuffer, normalizeMc, inferMcFromName, parseForgeToml, parseFabricJson, parseMcmodInfo, sanitizeVersion, isGenericVersion, fileVersionOf, resolveVersion, splitNames };
 })(globalThis);

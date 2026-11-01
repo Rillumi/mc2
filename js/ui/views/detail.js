@@ -281,6 +281,7 @@
         esc(e.filePath || e.fileName || '') + '">复制路径</button></div></div>' +
         descSection(s, group.id, e) +
         mrSection(s, group.id, e) +
+        authorSection(e) +
         recipeHtml(e) +
         (chosen ? updateSection(s, group.id, e) : '') +
         (rows.length > 1 ? '<div class="dsec-label">这个模组有 ' + rows.length + ' 份，进包的是</div>' +
@@ -338,6 +339,28 @@
     if (/429|too many/i.test(r)) return 'Modrinth 请求太频繁被限流，过一会儿再点「检查更新」。';
     if (/50\d/.test(r)) return 'Modrinth 服务器暂时不可用，过一会儿再试。';
     return esc(r || '网络问题');
+  }
+
+  /* 作者：来自 jar 元数据（fabric.mod.json / mods.toml / mcmod.info），所有人可见 */
+  function authorSection(e) {
+    const AM = MC.afdianMap || { isAfdian: () => false, find: () => null };
+    const authors = (e.authors || []).filter(Boolean);
+    const links = (e.links || []).filter(l => l && l.url);
+    const afd = links.filter(l => AM.isAfdian(l.url));
+    let pub = null;
+    if (!afd.length) {
+      try { pub = AM.find(e); } catch (err) { pub = null; }
+    }
+    if (!authors.length && !links.length && !pub) return '';
+    const btn = (label, url) => '<a class="btn line xs" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+      icon(IC.link) + label + '</a>';
+    const acts = [];
+    afd.forEach(l => acts.push(btn('爱发电主页', l.url)));
+    links.filter(l => !AM.isAfdian(l.url)).forEach(l => acts.push(btn(l.label || '作者主页', l.url)));
+    if (pub && pub.home) acts.push(btn('爱发电主页（公开表）', pub.home));
+    return '<div class="dsec-label">作者<span class="dsrc">jar 里写的</span></div>' +
+      (authors.length ? '<div class="hint">作者：<b>' + esc(authors.join('、')) + '</b></div>' : '') +
+      (acts.length ? '<div class="actions">' + acts.join('') + '</div>' : '');
   }
 
   /* ---------- 爱发电：匹配到的作者主页 / 相关发电帖 ---------- */

@@ -73,3 +73,33 @@ test('正常的 fabric.mod.json 行为不变', async () => {
   assert.equal(res.kind, 'mod');
   assert.equal(res.info.id, 'demo_mod');
 });
+
+test('fabric.mod.json 的作者和主页链接都能读出来', async () => {
+  const jar = makeZip([{
+    name: 'fabric.mod.json',
+    data: JSON.stringify({
+      schemaVersion: 1, id: 'demo_mod', version: '1.0.0', name: 'Demo Mod',
+      authors: ['小明', { name: 'Parchwing' }],
+      contact: { homepage: 'https://afdian.net/a/parchwing', sources: 'https://github.com/a/b' }
+    })
+  }]);
+  const res = await MC.metadata.inspect(jar);
+  assert.deepEqual(res.info.authors, ['小明', 'Parchwing']);
+  assert.equal(res.info.links[0].url, 'https://afdian.net/a/parchwing');
+  assert.equal(res.info.links[1].label, '源码');
+});
+
+test('mods.toml 的 authors / displayURL 也能读出来', () => {
+  const toml = [
+    'modLoader="javafml"',
+    '[[mods]]',
+    'modId="demo"',
+    'version="1.0"',
+    'displayName="Demo"',
+    'authors="A, B"',
+    'displayURL="https://afdian.com/a/demo"'
+  ].join('\n');
+  const p = MC.metadata.parseForgeToml(toml);
+  assert.deepEqual(p.authors, ['A', 'B']);
+  assert.equal(p.links[0].url, 'https://afdian.com/a/demo');
+});
