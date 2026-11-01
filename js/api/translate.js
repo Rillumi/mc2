@@ -127,7 +127,11 @@
   async function zh(text) {
     const src = String(text || '').trim();
     if (!src) return { ok: true, text: '' };
-    if (!/^[\x00-\x7F]*$/.test(src)) return { ok: true, text: src };   // 本来就是中文，不折腾
+    // 只看汉字和拉丁字母的比例，别用“有没有非 ASCII”来判断：
+    // 英文简介里常有 emoji / 重音字符，那样会被误判成中文，直接原样返回（看起来就是“点了没反应”）
+    const cjk = (src.match(/[\u3400-\u9fff\uf900-\ufaff]/g) || []).length;
+    const latin = (src.match(/[A-Za-z]/g) || []).length;
+    if (cjk > 0 && cjk * 2 >= latin) return { ok: true, text: src };   // 中文字数占一半以上，本来就是中文，不折腾
 
     const key = cacheKey(src);
     if (mem.has(key)) return { ok: true, text: mem.get(key) };
