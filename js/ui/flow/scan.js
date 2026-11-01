@@ -66,13 +66,15 @@
     const type = MC.modpack.detect(z.map);
     if (!type) return null;
 
-    const pack = { name: file.name, file, type, title: '', env: {}, online: 0, entries: [], skipped: 0, empty: false };
+    const pack = { name: file.name, file, type, title: '', env: {}, online: 0, entries: [], skipped: 0, empty: false, onlineList: [], modlistHtml: '' };
     if (type === 'mrpack') {
       try {
         const idx = JSON.parse(await MC.zip.readEntry(z, 'modrinth.index.json') || '{}');
         pack.env = MC.modpack.envFromMrpack(idx);
         pack.title = idx.name || '';
-        pack.online = (idx.files || []).filter(f => /^mods\//i.test(String(f.path || ''))).length;
+        const mods = (idx.files || []).filter(f => /^mods\//i.test(String(f.path || '')));
+        pack.online = mods.length;
+        pack.onlineList = mods.map(f => ({ path: String(f.path || ''), url: (f.downloads || [])[0] || '' }));
       } catch (err) { /* 清单坏了也照样解 jar */ }
     } else if (type === 'curseforge') {
       try {
@@ -80,6 +82,8 @@
         pack.env = MC.modpack.envFromCurse(mf);
         pack.title = mf.title || mf.name || '';
         pack.online = (mf.files || []).length;
+        pack.onlineList = (mf.files || []).map(f => ({ projectID: f.projectID, fileID: f.fileID }));
+        pack.modlistHtml = await MC.zip.readEntry(z, 'modlist.html') || '';
       } catch (err) { /* 忽略 */ }
     }
 
@@ -232,7 +236,10 @@
     if (hasPack) {
       resetAll(st);
       // 记下源整合包，打包时按路径回读 jar 字节（条目不保留 File 对象）
-      st.packSources = scanned.map(p => ({ name: p.name, file: p.file }));
+      st.packSources = scanned.map(p => ({
+        name: p.name, file: p.file, type: p.type,
+        onlineList: p.onlineList || [], modlistHtml: p.modlistHtml || ''
+      }));
       // 整合包清单里写着加载器和 MC 版本，先套上再分析
       if (packEnv.loader && MC.store.DEFAULTS[packEnv.loader]) st.env.loader = packEnv.loader;
       if (packEnv.loaderVersion) st.env.loaderVersion = packEnv.loaderVersion;

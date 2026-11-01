@@ -45,21 +45,52 @@
 
       // 原整合包里的 config / defaultconfigs / kubejs / resourcepacks 等一并带走
       const overrides = [];
-      for (const src of (st.packSources || [])) {
-        if (!MC.flowScan.listPacked || !MC.overrides) continue;
-        const plan = MC.overrides.plan(await MC.flowScan.listPacked(src.name));
-        for (let i = 0; i < plan.length; i++) {
-          if (i % 20 === 0) {
-            st.progress = '正在复制原包内容 ' + (i + 1) + '/' + plan.length + '：' + plan[i].path;
-            touch();
+      if (format !== 'list') {
+        for (const src of (st.packSources || [])) {
+          if (!MC.flowScan.listPacked || !MC.overrides) continue;
+          const plan = MC.overrides.plan(await MC.flowScan.listPacked(src.name));
+          for (let i = 0; i < plan.length; i++) {
+            if (i % 20 === 0) {
+              st.progress = '正在复制原包内容 ' + (i + 1) + '/' + plan.length + '：' + plan[i].path;
+              touch();
+            }
+            const data = await MC.flowScan.readPackedBytes(src.name, plan[i].src);
+            if (data) overrides.push({ path: plan[i].path, data });
           }
-          const data = await MC.flowScan.readPackedBytes(src.name, plan[i].src);
-          if (data) overrides.push({ path: plan[i].path, data });
         }
       }
 
       let result;
-      if (format === 'mrpack') {
+      if (format === 'list') {
+        const local = picked.map(row => {
+          const e = row.entry || {};
+          const p = MC.flowCommon.projectForEntry(st, e, row.group);
+          return {
+            name: e.nameZh || e.name || e.fileName || '?',
+            version: e.version || '',
+            source: p ? 'Modrinth' : '本地 jar',
+            url: p ? 'https://modrinth.com/mod/' + (p.slug || p.id) : ''
+          };
+        });
+        deps.forEach(d => local.push({
+          name: d.project.title || d.modId,
+          version: (d.version && d.version.version_number) || '',
+          source: 'Modrinth',
+          url: 'https://modrinth.com/mod/' + (d.project.slug || d.project.id)
+        }));
+        const online = [];
+        let original = '';
+        (st.packSources || []).forEach(src => {
+          (src.onlineList || []).forEach(o => online.push(o));
+          if (!original && src.modlistHtml) original = src.modlistHtml;
+        });
+        st.progress = '正在生成下载清单…';
+        touch();
+        result = await MC.pack.buildListZip({
+          title: (st.packSources[0] && st.packSources[0].name.replace(/\.[^.]+$/, '')) || 'ModPilot 下载清单',
+          env: st.env, local, online, original
+        });
+      } else if (format === 'mrpack') {
         st.progress = '正在生成 .mrpack…';
         touch();
         result = await MC.pack.buildMrpack({ env: st.env, localJars, deps, extras, overrides });
