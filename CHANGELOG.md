@@ -10,6 +10,7 @@ git log --oneline
 
 ### 详情页
 - 作者区新增「Modrinth · 账号名」链接：先拉项目团队成员，只有 jar 作者与成员账号同名（归一化后完全相同）才显示，避免跳到别人
+- 组织项目（成员不公开）退回用仓库 GitHub 组织名核对，对上才给「Modrinth 组织」页（如 Sinytra → `modrinth.com/organization/sinytra`）
 
 ### 打包与导出
 - 打包入口合并为两个按钮；生成整合包改成格式选择弹窗（`.mrpack` / 离线 zip / CurseForge），下载清单只出清单（d553736、85aa8e5、913f67a）

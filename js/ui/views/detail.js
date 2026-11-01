@@ -375,7 +375,16 @@
             acts.push(btn('Modrinth · ' + u, 'https://modrinth.com/user/' + encodeURIComponent(u)));
           });
           if (!hits.length) {
-            teamNote = '<div class="hint">Modrinth 项目团队里没有和 jar 作者同名的账号，所以不提供账号链接，避免跳到别人。</div>';
+            /* 组织项目没有公开成员账号，退回用仓库 GitHub 组织名核对 */
+            const org = API.matchOrg ? API.matchOrg(mproj, authors) : null;
+            if (org) {
+              acts.push(btn('Modrinth 组织 · ' + org,
+                'https://modrinth.com/organization/' + encodeURIComponent(org.toLowerCase())));
+            } else {
+              teamNote = mproj.organization
+                ? '<div class="hint">这个项目属于 Modrinth 组织，成员账号不公开；jar 里的作者名和仓库组织名也对不上，所以不提供账号链接。</div>'
+                : '<div class="hint">Modrinth 项目团队里没有和 jar 作者同名的账号，所以不提供账号链接，避免跳到别人。</div>';
+            }
           }
         } else if (!authorPending.has(pid)) {
           authorPending.add(pid);

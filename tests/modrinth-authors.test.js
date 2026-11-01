@@ -23,3 +23,15 @@ test('jar 没有作者或项目没有成员时返回空', () => {
   assert.deepEqual(M.matchAuthors([], [{ username: 'Tschipp' }]), []);
   assert.deepEqual(M.matchAuthors(['Tschipp'], []), []);
 });
+
+test('组织项目用仓库 GitHub 组织名核对 jar 作者', () => {
+  const proj = { organization: 'cnU8YRKG', source_url: 'https://github.com/Sinytra/ForgifiedFabricAPI' };
+  assert.equal(M.matchOrg(proj, ['FabricMC', 'Sinytra']), 'Sinytra');
+  assert.equal(M.matchOrg(proj, ['FabricMC']), null);
+});
+
+test('不是组织项目、没有仓库地址或组织名对不上时不给组织页', () => {
+  assert.equal(M.matchOrg({ source_url: 'https://github.com/Sinytra/x' }, ['Sinytra']), null);
+  assert.equal(M.matchOrg({ organization: 'org', source_url: '' }, ['Sinytra']), null);
+  assert.equal(M.matchOrg({ organization: 'org', source_url: 'https://gitlab.com/foo/bar' }, ['Sinytra']), null);
+});

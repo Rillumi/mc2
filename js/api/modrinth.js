@@ -209,6 +209,15 @@
     return out;
   }
 
+  /** 项目归属组织时，用仓库地址里的 GitHub 组织名和 jar 作者名对照，对得上才返回组织名 */
+  function matchOrg(project, authors) {
+    if (!project || !project.organization || !project.source_url) return null;
+    const m = String(project.source_url).match(/^https?:\/\/github\.com\/([^/]+)\//i);
+    if (!m) return null;
+    const owner = m[1];
+    return matchAuthors(authors, [{ username: owner }]).length ? owner : null;
+  }
+
   /** 已缓存的团队成员；没有返回 null，不触发请求 */
   function cachedMembers(projectId) {
     if (!projectId) return null;
@@ -252,5 +261,5 @@
 
   MC.api = MC.api || {};
   MC.api.modrinth = { get, project, search, versions, versionFilesUpdate, versionFiles, projectsByIds, pickVersion, download, loaderSlug,
-    teamMembers, cachedMembers, matchAuthors };
+    teamMembers, cachedMembers, matchAuthors, matchOrg };
 })(globalThis);
