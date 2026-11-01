@@ -23,6 +23,35 @@
     return tomlStr(text, key);
   }
 
+  /* 有些 jar 的 fabric.mod.json 在字符串里写了裸换行（Gson 宽松模式能读，JSON.parse 会直接报错）；
+     这里只把字符串内部的控制字符转义，不碰结构 */
+  function jsonLoose(text) {
+    let out = '';
+    let inStr = false;
+    let esc = false;
+    for (const ch of String(text)) {
+      const code = ch.charCodeAt(0);
+      if (!inStr) {
+        if (ch === '"') inStr = true;
+        out += ch;
+        continue;
+      }
+      if (esc) { esc = false; out += ch; continue; }
+      if (ch === '\\') { esc = true; out += ch; continue; }
+      if (ch === '"') { inStr = false; out += ch; continue; }
+      if (code < 0x20) {
+        out += code === 10 ? '\\n' : code === 13 ? '\\r' : code === 9 ? '\\t' : '\\u' + code.toString(16).padStart(4, '0');
+        continue;
+      }
+      out += ch;
+    }
+    return out;
+  }
+
+  function parseJson(text) {
+    try { return JSON.parse(text); } catch { return JSON.parse(jsonLoose(text)); }
+  }
+
   /* 简介可能是字符串，也可能是 JSON 文本组件 */
   function plainText(v) {
     if (v == null) return '';
@@ -36,7 +65,7 @@
 
   function parsePackMeta(text) {
     let o = {};
-    try { o = (JSON.parse(text) || {}).pack || {}; } catch { o = {}; }
+    try { o = (parseJson(text) || {}).pack || {}; } catch { o = {}; }
     let fmt = o.pack_format;
     if (!fmt && o.supported_formats) {
       fmt = Array.isArray(o.supported_formats) ? o.supported_formats[0] : o.supported_formats.min_inclusive;
@@ -118,7 +147,7 @@
 
   function parseFabricJson(text) {
     let o;
-    try { o = JSON.parse(text); } catch { return null; }
+    try { o = parseJson(text); } catch { return null; }
     if (!o || !o.id) return null;
     const deps = [];
     if (o.depends && typeof o.depends === 'object') {
@@ -144,7 +173,7 @@
 
   function parseMcmodInfo(text) {
     let data;
-    try { data = JSON.parse(text); } catch { return { mods: [], deps: [] }; }
+    try { data = parseJson(text); } catch { return { mods: [], deps: [] }; }
     const list = Array.isArray(data) ? data : (data.modList || []);
     const mods = list.filter(x => x && x.modid).map(x => ({
       modId: x.modid,
@@ -177,7 +206,7 @@
       });
       return obj;
     }
-    try { return JSON.parse(raw); } catch { return null; }
+    try { return parseJson(raw); } catch { return null; }
   }
 
   async function findZhName(z, ids) {
