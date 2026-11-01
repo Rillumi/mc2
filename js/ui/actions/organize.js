@@ -89,8 +89,15 @@
       C.retryAll();
     },
 
-    pack(el) {
+    pack(el, st) {
+      st.packMenu = '';
       C.buildPack(el.dataset.format);
+    },
+
+    'pack-menu'(el, st) {
+      const menu = el.dataset.menu || '';
+      st.packMenu = st.packMenu === menu ? '' : menu;
+      touch();
     },
 
     toggle(el, st) {

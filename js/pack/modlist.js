@@ -69,6 +69,14 @@
       ? '<p class="note">原包还带了一份 <a href="原包模组列表.html">原包模组列表</a>（含完整名称和链接）。</p>'
       : '';
 
+    const nameList = (arr, note) => arr.length
+      ? '<section><h2>' + esc(note) + '（' + arr.length + '）</h2><p class="note">' +
+        esc(arr.join('、')) + '</p></section>'
+      : '';
+
+    const unmatched = opt.unmatched || [];
+    const blocked = opt.blocked || [];
+
     return '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8">' +
       '<meta name="viewport" content="width=device-width, initial-scale=1">' +
       '<title>' + esc(opt.title || 'ModPilot 下载清单') + '</title><style>' +
@@ -89,6 +97,8 @@
       '<section><h2>在线项（' + online.length + '，由启动器按清单下载）</h2>' +
       (online.length ? '<table><thead><tr><th>项目</th><th>下载</th></tr></thead><tbody>' + onlineRows + '</tbody></table>' : '<p class="note">没有在线项。</p>') +
       '</section>' + original +
+      nameList(unmatched, 'CurseForge 上没有记录（jar 已打进包，启动器不会下载）') +
+      nameList(blocked, 'CurseForge 上禁止第三方分发（jar 已打进包）') +
       '<p class="foot">由 ModPilot 生成。manifest.json 是 CurseForge 格式，只有 projectID/fileID 的项才写得进去；' +
       'Modrinth 模组的直链写在 .mrpack 的 modrinth.index.json 里。</p>' +
       '</div></body></html>';

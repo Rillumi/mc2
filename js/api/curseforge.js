@@ -89,6 +89,26 @@
     return { ok: true, matches: map, failed };
   }
 
+  /* 批量拿项目详情：用来判断 allowModDistribution（作者是否禁止第三方分发） */
+  async function modsInfo(ids) {
+    const out = {};
+    const uniq = [];
+    const seen = {};
+    (ids || []).forEach(id => {
+      if (!id || seen[id]) return;
+      seen[id] = 1;
+      uniq.push(id);
+    });
+    for (let i = 0; i < uniq.length; i += 50) {
+      const part = uniq.slice(i, i + 50);
+      const qs = part.map(id => 'modIds=' + encodeURIComponent(id)).join('&');
+      const res = await request('/mods?' + qs);
+      if (!res.ok) return { ok: false, reason: res.reason, mods: out };
+      ((res.data && res.data.data) || []).forEach(m => { out[m.id] = m; });
+    }
+    return { ok: true, mods: out };
+  }
+
   MC.api = MC.api || {};
-  MC.api.curseforge = { key, hasKey, setKey, test, lookup, request };
+  MC.api.curseforge = { key, hasKey, setKey, test, lookup, modsInfo, request };
 })(globalThis);

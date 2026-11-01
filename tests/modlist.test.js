@@ -48,3 +48,14 @@ test('在线项去重：已打包的同名去掉，重复项只留一条', () =>
   ];
   assert.deepEqual(P.dedupe(online, ['a.jar']), [{ projectID: 1, fileID: 2 }]);
 });
+
+test('清单会单独列出 CF 上没有、以及禁止分发的模组', () => {
+  const t = P.modlistText({
+    title: 'x', env, local: [], online: [],
+    unmatched: ['a.jar', 'b.jar'], blocked: ['c.jar']
+  });
+  assert.match(t, /CurseForge 上没有记录.*（2）/);
+  assert.match(t, /a\.jar、b\.jar/);
+  assert.match(t, /CurseForge 上禁止第三方分发.*（1）/);
+  assert.match(t, /c\.jar/);
+});

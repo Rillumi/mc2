@@ -109,10 +109,25 @@
         }));
         const hook = await MC.api.curseforge.lookup(items);
         const matched = hook.matches || {};
+        const projIds = [];
+        Object.keys(matched).forEach(fp => { if (matched[fp].projectID) projIds.push(matched[fp].projectID); });
+        const info = await MC.api.curseforge.modsInfo(projIds);
         const matchedIds = {};
+        const blockedNames = [];
+        const seenBlocked = {};
         Object.keys(matched).forEach(fp => {
-          if (matched[fp] && matched[fp].fileID) matchedIds[matched[fp].fileID] = 1;
+          const m = matched[fp];
+          if (!m.fileID) return;
+          matchedIds[m.fileID] = 1;
+          const mod = info.mods && info.mods[m.projectID];
+          if (mod && mod.allowModDistribution === false && !seenBlocked[m.fileID]) {
+            seenBlocked[m.fileID] = 1;
+            blockedNames.push(m.fileName || String(m.projectID));
+          }
         });
+        const matchedFps = {};
+        Object.keys(matched).forEach(fp => { matchedFps[fp] = 1; });
+        const unmatched = items.filter(it => !matchedFps[it.fp]).map(it => it.name);
 
         // 清单里只留没打进包的：已经放进 overrides/mods 的不再让启动器下一次
         const files = [];
@@ -143,7 +158,7 @@
         touch();
         result = await MC.pack.buildCurse({
           title: packTitle, env: st.env, jars, extras, overrides, files,
-          local: localList(), online: files,
+          local: localList(), online: files, unmatched, blocked: blockedNames,
           matched: Object.keys(matchedIds).length
         });
       } else if (format === 'mrpack') {

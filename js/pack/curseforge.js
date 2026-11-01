@@ -56,6 +56,13 @@
       '交给启动器下载的清单：' + (opt.files || []).length + ' 个（projectID + fileID）',
       '指纹反查命中并去掉的重复项：' + (opt.matched || 0) + ' 个',
       '',
+      'CurseForge 上没有记录（只能靠包里的 jar）：' + ((opt.unmatched || []).length
+        ? (opt.unmatched || []).length + ' 个\n - ' + opt.unmatched.join('\n - ')
+        : '无'),
+      'CurseForge 上禁止第三方分发（启动器不会下载，jar 已打进包）：' + ((opt.blocked || []).length
+        ? (opt.blocked || []).length + ' 个\n - ' + opt.blocked.join('\n - ')
+        : '无'),
+      '',
       '安装：PCL 2.13 以上可以直接拖入这个 zip；其它启动器解压后是「manifest.json + overrides」的标准结构。',
       '启动器会按清单去 CurseForge 下载在线项，overrides 里的文件原样覆盖进版本目录。'
     ].join('\n');
@@ -85,7 +92,8 @@
       zip.push({
         path: 'modlist.html',
         data: enc.encode(MC.pack.modlistText({
-          title: opt.title, env: opt.env, local: opt.local || [], online: opt.online || []
+          title: opt.title, env: opt.env, local: opt.local || [], online: opt.online || [],
+          unmatched: opt.unmatched || [], blocked: opt.blocked || []
         }))
       });
     }

@@ -280,10 +280,28 @@
       '</div></div>';
   }
 
+  /* ---------- 设置 ---------- */
+  function settingsCard() {
+    const cf = MC.api && MC.api.curseforge;
+    const ok = !!(cf && cf.hasKey());
+    return '<div class="vpanel toolcard">' +
+      '<div class="vhead"><h3>设置</h3></div>' +
+      '<div class="vbody">' +
+      '<div class="hint">CurseForge API key：只存在这台电脑（localStorage），不上传、不进仓库。' +
+      '生成 CurseForge 整合包时用它按文件指纹反查 mod 的 projectID/fileID。</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:13px">' +
+      '<span>状态：' + (ok ? '已设置' : '未设置') + '</span>' +
+      '<button type="button" class="btn line sm" data-act="cfkey">' + (ok ? '更换 / 清除' : '填 key') + '</button>' +
+      (ok ? '<button type="button" class="btn line sm" data-act="cftest">测试</button>' : '') +
+      '</div>' +
+      '<div class="hint" style="margin-top:8px">免费申请：console.curseforge.com → API Keys → Create API Key。</div>' +
+      '</div></div>';
+  }
+
   function renderTools(s) {
     const el = document.getElementById('toolsView');
     if (!el) return;
-    el.innerHTML = '<div class="toolstack">' + rpCard(s) + logCard(s) + afdianCard(s) + linkCard(s) + '</div>';
+    el.innerHTML = '<div class="toolstack">' + settingsCard() + rpCard(s) + logCard(s) + afdianCard(s) + linkCard(s) + '</div>';
   }
 
   R.orderedPacks = orderedPacks;
