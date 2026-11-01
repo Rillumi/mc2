@@ -89,7 +89,15 @@
       C.retryAll();
     },
 
-    pack(el) {
+    'pack-pick'(el, st) {
+      st.packPick = true;
+      st.detail = null;
+      st.previewOpen = false;
+      touch();
+    },
+
+    pack(el, st) {
+      st.packPick = false;
       C.buildPack(el.dataset.format);
     },
 

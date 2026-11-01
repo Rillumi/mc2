@@ -45,7 +45,7 @@
 
       // 原整合包里的 config / defaultconfigs / kubejs / resourcepacks 等一并带走
       const overrides = [];
-      if (format === 'pack' || (MC.api.curseforge && MC.api.curseforge.hasKey())) {
+      if (format !== 'manifest') {
         for (const src of (st.packSources || [])) {
           if (!MC.flowScan.listPacked || !MC.overrides) continue;
           const plan = MC.overrides.plan(await MC.flowScan.listPacked(src.name));
@@ -98,9 +98,11 @@
         results.push(await MC.pack.buildListZip({
           title: packTitle, env: st.env, local, online: onlineClean, original
         }));
-
-        // 填了 key 才额外给一份 CurseForge 整合包（清单照出，不会顶替清单）
-        if (MC.api.curseforge && MC.api.curseforge.hasKey()) {
+      } else if (format === 'curse') {
+        if (!MC.api.curseforge.hasKey()) {
+          toast('先在「工具 → 设置」里填 CurseForge 的 API key');
+          return;
+        }
           st.progress = '正在反查 CurseForge 指纹…';
           touch();
           const items = localJars.map(j => ({
@@ -168,12 +170,11 @@
             local: localList(), online: files, unmatched, blocked: blockedNames,
             matched: Object.keys(matchedIds).length
           }));
-        }
-      } else {
-        // 整合包：.mrpack（按在线清单下载）+ 离线 zip，两个格式一起出
+      } else if (format === 'mrpack') {
         st.progress = '正在生成 .mrpack…';
         touch();
         results.push(await MC.pack.buildMrpack({ env: st.env, localJars, deps, extras, overrides }));
+      } else {
         st.progress = '正在打包离线 zip…';
         touch();
         results.push(await MC.pack.buildPlainZip({

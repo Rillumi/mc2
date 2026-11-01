@@ -71,6 +71,7 @@
     logAutoTried: false,// 工具页是否已经试过自动读日志
     logBusy: false,
     previewOpen: false, // 打包预览
+    packPick: false,    // 选整合包格式的弹窗
     previewQuery: '',   // 预览里的搜索词
     picker: null,       // 当前展开的自绘下拉：'g:<id>' / 'd:<key>'
     pg: { organize: 1, guide: 1, links: 1, packs: 1, diff: 1, diffpacks: 1 }, // 各列表当前页码

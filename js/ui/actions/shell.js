@@ -10,6 +10,7 @@
     close(el, st) {
       st.detail = null;
       st.previewOpen = false;
+      st.packPick = false;
       touch();
     },
 

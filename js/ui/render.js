@@ -98,6 +98,7 @@
     let html = '';
     if (s.detail) html = R.detailHtml(s);
     else if (s.previewOpen) html = R.previewHtml(s);
+    else if (s.packPick) html = R.packPickHtml(s);
 
     if (!html) {
       el.hidden = true;
@@ -109,7 +110,7 @@
     }
 
     // 同一个弹窗里重新渲染（切中英文、预览移出、选版本）：保留滚动位置，也不重播入场动效
-    const key = s.detail || 'preview';
+    const key = s.detail || (s.previewOpen ? 'preview' : 'packpick');
     const prevBody = el.querySelector('.sheet-body');
     const sameSheet = !el.hidden && !!el.querySelector('.sheet') && key === lastSheetKey;
     const keepTop = sameSheet && prevBody ? prevBody.scrollTop : 0;
