@@ -166,7 +166,9 @@
       else note = '这是 Modrinth 上的英文原文。';
     } else {
       body = '<div class="descbox">' + esc(tr.text) + '</div>';
-      note = '机翻只作参考；想看原句点「英文原文」。';
+      note = tr.partial
+        ? '机翻只作参考；网络不稳，有几段没翻出来（保留英文原文），点「中文（机翻）」可以重试。'
+        : '机翻只作参考；想看原句点「英文原文」。';
     }
 
     const stats = [];

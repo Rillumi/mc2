@@ -120,9 +120,22 @@
     return text2;
   }
 
+  // 一段文本：先谷歌，连不上就换备用源
+  async function translatePart(p) {
+    if (googleDown) return backupOne(p);
+    try {
+      return await one(p);
+    } catch (err) {
+      const msg = (err && err.message) || '翻译失败';
+      if (/没响应|连不上/.test(msg)) markGoogleDown();
+      try { return await backupOne(p); }
+      catch (err2) { throw new Error(msg + '；备用翻译源也失败：' + ((err2 && err2.message) || err2)); }
+    }
+  }
+
   /**
    * 英 → 中
-   * @returns {Promise<{ok:true,text:string}|{ok:false,reason:string}>}
+   * @returns {Promise<{ok:true,text:string,partial?:true}|{ok:false,reason:string}>}
    */
   async function zh(text) {
     const src = String(text || '').trim();
@@ -137,31 +150,29 @@
     if (mem.has(key)) return { ok: true, text: mem.get(key) };
     if (disk[key]) { mem.set(key, disk[key]); return { ok: true, text: disk[key] }; }
 
-    try {
-      const parts = chunk(src);
-      const out = [];
-      for (const p of parts) {
-        if (googleDown) {
-          out.push(await backupOne(p));
-          continue;
-        }
-        try {
-          out.push(await one(p));
-        } catch (err) {
-          const msg = (err && err.message) || '翻译失败';
-          if (/没响应|连不上/.test(msg)) markGoogleDown();
-          try { out.push(await backupOne(p)); }
-          catch (err2) { throw new Error(msg + '；备用翻译源也失败：' + ((err2 && err2.message) || err2)); }
-        }
+    const parts = chunk(src);
+    const out = [];
+    let failed = 0;
+    let lastReason = '';
+    for (const p of parts) {
+      try {
+        out.push(await translatePart(p));
+      } catch (err) {
+        // 一段翻不出来就保留原文，别让整篇作废（长文分段时这种情况很常见）
+        failed++;
+        lastReason = (err && err.message) || '翻译失败';
+        out.push(p);
       }
-      const text2 = out.join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
-      mem.set(key, text2);
-      disk[key] = text2;
-      saveDisk();
-      return { ok: true, text: text2 };
-    } catch (err) {
-      return { ok: false, reason: (err && err.message) || '连不上翻译接口' };
     }
+    if (!parts.length) return { ok: true, text: src };
+    if (failed === parts.length) return { ok: false, reason: lastReason || '连不上翻译接口' };
+
+    const text2 = out.join('\n').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+    if (failed) return { ok: true, text: text2, partial: true };   // 不写缓存，下次重试还能补齐
+    mem.set(key, text2);
+    disk[key] = text2;
+    saveDisk();
+    return { ok: true, text: text2 };
   }
 
   function clear() {

@@ -298,9 +298,10 @@
     try { res = await MC.translate.zh(m.text.slice(0, 3000)); }
     catch (err) { res = { ok: false, reason: (err && err.message) || '翻译失败' }; }
     st.bodyTr[gid] = res.ok
-      ? { status: 'ok', text: res.text }
+      ? { status: 'ok', text: res.text, partial: !!res.partial }
       : { status: 'error', reason: res.reason || '连不上翻译接口' };
     if (!res.ok && MC.uiBase) MC.uiBase.toast('机翻没成功：' + (res.reason || '连不上翻译接口'));
+    else if (res.partial && MC.uiBase) MC.uiBase.toast('网络不太稳，有几段没翻出来（先保留英文）');
     touch();
   }
 

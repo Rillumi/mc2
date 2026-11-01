@@ -61,7 +61,7 @@
       const gid = st.detail;
       if (lang === 'zh' && gid) {
         const prev = st.bodyTr[gid];
-        if (prev && prev.status === 'error') delete st.bodyTr[gid];
+        if (prev && (prev.status === 'error' || prev.partial)) delete st.bodyTr[gid];
         C.ensureBodyTr(gid);
       }
     }
