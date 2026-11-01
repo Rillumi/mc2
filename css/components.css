@@ -140,6 +140,11 @@
   font-weight: 700; font-size: 15px; color: #fff;
   background: linear-gradient(135deg, var(--a), var(--b));
   box-shadow: inset 0 0 0 1px rgba(255, 255, 255, .35);
+  position: relative; overflow: hidden;
+}
+.tile.hasimg img {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: cover; display: block;
 }
 .tile.sm { flex: 0 0 32px; height: 32px; border-radius: 9px; font-size: 12.5px; }
 .main { min-width: 0; flex: 1; }

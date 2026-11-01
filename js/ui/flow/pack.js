@@ -43,14 +43,29 @@
         }
       }
 
+      // 原整合包里的 config / defaultconfigs / kubejs / resourcepacks 等一并带走
+      const overrides = [];
+      for (const src of (st.packSources || [])) {
+        if (!MC.flowScan.listPacked || !MC.overrides) continue;
+        const plan = MC.overrides.plan(await MC.flowScan.listPacked(src.name));
+        for (let i = 0; i < plan.length; i++) {
+          if (i % 20 === 0) {
+            st.progress = '正在复制原包内容 ' + (i + 1) + '/' + plan.length + '：' + plan[i].path;
+            touch();
+          }
+          const data = await MC.flowScan.readPackedBytes(src.name, plan[i].src);
+          if (data) overrides.push({ path: plan[i].path, data });
+        }
+      }
+
       let result;
       if (format === 'mrpack') {
         st.progress = '正在生成 .mrpack…';
         touch();
-        result = await MC.pack.buildMrpack({ env: st.env, localJars, deps, extras });
+        result = await MC.pack.buildMrpack({ env: st.env, localJars, deps, extras, overrides });
       } else {
         result = await MC.pack.buildPlainZip({
-          env: st.env, localJars, deps, extras,
+          env: st.env, localJars, deps, extras, overrides,
           onProgress: text => { st.progress = text; touch(); }
         });
       }

@@ -61,13 +61,13 @@
 
     const localBody = '<div class="plist">' + localGroups.map(g => packItemHtml(g, s)).join('') + '</div>';
     const depBody = '<div class="plist">' + addedShown.map(d =>
-      '<div class="pitem">' + tile(d.project.title || d.modId, true) +
+      '<div class="pitem">' + tile(d.project.title || d.modId, true, d.project.icon_url) +
       '<div class="t"><b>' + hl(d.project.title || d.modId) + '</b><small>' + esc(d.version.version_number) +
       ' · ' + fmtSize((d.version.files && d.version.files[0] && d.version.files[0].size) || 0) + ' · 自动补的前置</small></div>' +
       '<button type="button" class="btn line xs" data-act="depunadd" data-key="' + esc(d.key) + '">移除</button>' +
       '</div>').join('') + '</div>';
     const adaptBody = '<div class="plist">' + adaptedShown.map(x =>
-      '<div class="pitem">' + tile(x.project.title || x.id, true) +
+      '<div class="pitem">' + tile(x.project.title || x.id, true, x.project.icon_url) +
       '<div class="t"><b>' + hl(x.project.title || x.id) + '</b><small>' + esc(x.version.version_number) +
       ' · ' + fmtSize((x.version.files && x.version.files[0] && x.version.files[0].size) || 0) +
       ' · 替换掉本地不兼容的那份</small></div>' +

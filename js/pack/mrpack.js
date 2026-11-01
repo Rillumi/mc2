@@ -41,18 +41,21 @@
     return kind === 'shader' ? 'shaderpacks' : 'resourcepacks';
   }
 
-  function notice(env, localCount, onlineCount, skipped) {
+  function notice(env, localCount, onlineCount, skipped, overrideCount) {
     const lines = [
       'ModPilot 导出的整合包',
       '',
       '目标环境：' + env.loader + ' ' + env.mc,
       '加载器版本：' + loaderVersion(env),
       '本地 jar：' + localCount + ' 个',
-      '在线前置：' + onlineCount + ' 个',
+      '在线前置：' + onlineCount + ' 个'
+    ];
+    if (overrideCount) lines.push('原包配置/资源包：' + overrideCount + ' 个文件');
+    lines.push(
       '',
       '安装：把这个压缩包解压进 .minecraft，把 mods 文件夹和里面的 jar 放进版本目录的 mods 里。',
       '如果有启动器提示缺前置，说明在线前置没有下载成功，可按下面的链接手动下载：'
-    ];
+    );
     if (skipped && skipped.length) {
       skipped.forEach(s => lines.push(' - ' + s));
     } else {
@@ -105,9 +108,14 @@
       });
     });
 
+    // 原包里带过来的 config / defaultconfigs / kubejs / resourcepacks 等
+    (opts.overrides || []).forEach(o => {
+      zipFiles.push({ path: 'overrides/' + o.path, data: o.data });
+    });
+
     zipFiles.push({
       path: 'overrides/ModPilot-说明.txt',
-      data: enc.encode(notice(env, (opts.localJars || []).length, files.length))
+      data: enc.encode(notice(env, (opts.localJars || []).length, files.length, null, (opts.overrides || []).length))
     });
 
     return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '.mrpack' };
@@ -145,9 +153,12 @@
         data: x.data
       });
     });
+    (opts.overrides || []).forEach(o => {
+      zipFiles.push({ path: o.path, data: o.data });
+    });
     zipFiles.push({
       path: '安装说明.txt',
-      data: enc.encode(notice(env, (opts.localJars || []).length, downloaded, skipped))
+      data: enc.encode(notice(env, (opts.localJars || []).length, downloaded, skipped, (opts.overrides || []).length))
     });
 
     return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '-普通包.zip' };

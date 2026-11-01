@@ -88,6 +88,7 @@
 
       '<div class="hintbox">.mrpack：PCL 2.13 以上直接导入，在线前置按清单自动下载，本地 jar 放进 overrides/mods。<br>' +
       '普通 zip：会把在线前置也下载好一起打包，离线也能用。<br>' +
+      '从整合包扫描进来的，会顺带复制原包的 config、defaultconfigs、kubejs、emotes、resourcepacks、shaderpacks 和 options.txt（不带 PCL、存档状态和 ffmpeg）。<br>' +
       '写进清单的加载器版本：<b>' + esc(s.env.loaderVersion || '未填') + '</b>（顶部「' + esc(verLabel) + '」可改）</div>';
   }
 

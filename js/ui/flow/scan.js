@@ -128,6 +128,18 @@
     return MC.zip.readEntryBytes(z, path);
   }
 
+  /** 导出时列出原包里的条目路径（用来挑 config / 资源包这些非 mods 内容） */
+  async function listPacked(packName) {
+    const src = (S().packSources || []).find(p => p.name === packName);
+    if (!src || !src.file) return [];
+    let z = packZips.get(src.file);
+    if (!z) {
+      try { z = MC.zip.parseCentral(await src.file.arrayBuffer()); } catch (err) { return []; }
+      packZips.set(src.file, z);
+    }
+    return Array.from(z.map.keys());
+  }
+
   /** 把文件读成条目（整理页 / 对比页共用） */
   async function buildEntries(files, note) {
     const st = S();
@@ -420,5 +432,5 @@
       (nested.length ? '（其中 ' + nested.length + ' 个从整合包内解出）' : ''));
   }
 
-  MC.flowScan = { buildEntries, importFiles, expandModpack, newDiffEntry, importDiff, readPackedBytes };
+  MC.flowScan = { buildEntries, importFiles, expandModpack, newDiffEntry, importDiff, readPackedBytes, listPacked };
 })(globalThis);

@@ -27,7 +27,7 @@
         ? picker(s, 'd:' + dep.key, ver.version_number, items, 'dep-picker')
         : '';
       body = '<div class="resolve">' +
-        tile(dep.project.title || dep.modId, true) +
+        tile(dep.project.title || dep.modId, true, dep.project.icon_url) +
         '<div class="t"><b>' + esc(dep.project.title || dep.modId) + '</b><small>' +
         esc(ver.version_number) + ' · ' + esc(s.env.loader) + ' · ' + esc(s.env.mc) +
         (dep.via ? ' · ' + esc(dep.via) : '') + '</small></div>' +
@@ -73,7 +73,7 @@
     return '<div class="cands"><div class="cands-label">Modrinth 搜到的，点一个当结果：</div>' +
       list.map(c =>
         '<button type="button" class="cand" data-act="cand" data-key="' + esc(dep.key) + '" data-slug="' + esc(c.slug) + '">' +
-        tile(c.title, true) +
+        tile(c.title, true, c.icon) +
         '<span class="t"><b>' + esc(c.title) + '</b><small>' + esc((c.description || '').slice(0, 62)) + '</small></span>' +
         '<span class="dl">' + (c.downloads ? compact(c.downloads) : '') + '</span>' +
         '</button>').join('') + '</div>';

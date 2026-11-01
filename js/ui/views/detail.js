@@ -257,9 +257,11 @@
       '<div class="actions"><button type="button" class="btn line xs" data-act="gotools">打开批量导入</button></div>' +
       '</div>';
 
+    const mproj = MC.flowCommon.projectForEntry(s, e, group);
+
     return '<div class="sheet detail" role="dialog" aria-modal="true" aria-label="模组详情">' +
       '<div class="sheet-head">' +
-        '<div class="sheet-title">' + tile(e.nameZh || e.name || group.displayId, true) +
+        '<div class="sheet-title">' + tile(e.nameZh || e.name || group.displayId, true, mproj && mproj.icon_url) +
         '<div><b>' + esc(e.nameZh || e.name || group.displayId) +
         (e.nameZh && e.name ? '<i class="alias">' + esc(e.name) + '</i>' : '') +
         (e.nameZhFrom ? ' <a class="zsrc" href="' + esc(e.nameZhFrom) + '" target="_blank" rel="noopener">中文名来自 MC百科</a>' : '') +

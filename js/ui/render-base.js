@@ -23,10 +23,18 @@
     return PALETTE[h % PALETTE.length];
   }
 
-  function tile(name, small) {
+  function tile(name, small, iconUrl) {
     const label = String(name || '?').trim()[0] || '?';
     const [a, b] = hue(name);
-    return '<div class="tile' + (small ? ' sm' : '') + '" style="--a:' + a + ';--b:' + b + '">' + esc(label.toUpperCase()) + '</div>';
+    const cls = 'tile' + (small ? ' sm' : '');
+    const bg = '--a:' + a + ';--b:' + b;
+    // 有 Modrinth 图标就盖在色块上；图片加载失败会自动移除，露出首字母
+    if (iconUrl) {
+      return '<div class="' + cls + ' hasimg" style="' + bg + '">' + esc(label.toUpperCase()) +
+        '<img src="' + esc(iconUrl) + '" alt="" loading="lazy" referrerpolicy="no-referrer" onerror="this.remove()">' +
+        '</div>';
+    }
+    return '<div class="' + cls + '" style="' + bg + '">' + esc(label.toUpperCase()) + '</div>';
   }
 
   function icon(paths, color) {

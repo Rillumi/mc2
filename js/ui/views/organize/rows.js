@@ -43,12 +43,13 @@
 
     if (!chosen) {
       const first = group.rows[0];
+      const proj = MC.flowCommon.projectForEntry(s, first.entry, group);
       const issue = first.issues.find(i => i.type === 'loader') || first.issues.find(i => i.type === 'mc');
       const reason = first.entry.error || (issue && issue.text) || '不可用';
       const attrs = 'data-group="' + esc(group.id) + '" data-id="' + esc(first.entry.id || group.displayId) + '"';
       return '<div class="rowwrap">' +
         '<div class="row dead" data-act="detail" data-group="' + esc(group.id) + '" role="button" tabindex="0">' +
-        tile(first.entry.nameZh || first.entry.name || group.displayId) +
+        tile(first.entry.nameZh || first.entry.name || group.displayId, false, proj && proj.icon_url) +
         '<div class="main"><div class="name">' + hl(first.entry.nameZh || first.entry.name || group.displayId) +
         (first.entry.nameZh && first.entry.name ? '<i class="alias">' + hl(first.entry.name) + '</i>' : '') +
         ' <i>' + esc(first.entry.version || '') + '</i></div>' +
@@ -82,10 +83,11 @@
       meta: r.entry.fileName
     }));
     const pk = multi ? picker(s, 'g:' + group.id, MC.selector.label(e), items, 'row-picker') : '';
+    const proj = MC.flowCommon.projectForEntry(s, e, group);
 
     return '<div class="row' + (s.excluded[group.id] ? ' off' : '') + '" data-act="detail" data-group="' + esc(group.id) + '"' +
       ' role="button" tabindex="0" title="' + esc(e.fileName || '') + '">' +
-      check + tile(e.nameZh || e.name || group.displayId) +
+      check + tile(e.nameZh || e.name || group.displayId, false, proj && proj.icon_url) +
       '<div class="main"><div class="name">' + hl(e.nameZh || e.name || group.displayId) +
       (e.nameZh && e.name ? '<i class="alias">' + hl(e.name) + '</i>' : '') +
       ' <i>' + esc(e.version || '') + '</i></div>' +
