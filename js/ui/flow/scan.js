@@ -64,7 +64,7 @@
     const type = MC.modpack.detect(z.map);
     if (!type) return null;
 
-    const pack = { name: file.name, type, title: '', env: {}, online: 0, entries: [], empty: false };
+    const pack = { name: file.name, type, title: '', env: {}, online: 0, entries: [], skipped: 0, empty: false };
     if (type === 'mrpack') {
       try {
         const idx = JSON.parse(await MC.zip.readEntry(z, 'modrinth.index.json') || '{}');
@@ -102,6 +102,7 @@
         entry.filePath = file.name + ' / ' + name;
         const res = await inspectInto(entry, buf);
         if (res.kind === 'mod' || res.kind === 'resourcepack' || res.kind === 'shader') pack.entries.push(entry);
+        else pack.skipped++;
       } catch (err) { /* 单个 jar 坏了不影响其他 */ }
       st.scan.done = i + 1;
     }
@@ -277,8 +278,11 @@
     }
     if (hasPack) {
       const online = scanned.reduce((n, p) => n + (p.online || 0), 0);
-      toast('已扫描整合包：' + packEntries.length + ' 个模组' +
+      const skipped = scanned.reduce((n, p) => n + (p.skipped || 0), 0);
+      const modCount = packEntries.filter(e => e.kind === 'mod').length;
+      toast('已扫描整合包：' + modCount + ' 个模组' +
         (online ? '（另有 ' + online + ' 个在线清单项不在包里）' : '') +
+        (skipped ? '；有 ' + skipped + ' 个 jar 没读到模组信息，已跳过' : '') +
         (packEnv.loader ? ' · ' + packEnv.loader + ' ' + (packEnv.mc || st.env.mc) : ''));
     }
   }
