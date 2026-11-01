@@ -122,7 +122,7 @@
       '</div>' +
       '<div class="sheet-foot">' +
         '<button type="button" class="btn line" data-act="close">继续调整</button>' +
-        '<button type="button" class="btn grad" data-act="pack" data-format="mrpack"' + (totalCount ? '' : ' disabled') + '>就这样，生成 .mrpack</button>' +
+        '<button type="button" class="btn grad" data-act="pack" data-format="pack"' + (totalCount ? '' : ' disabled') + '>就这样，生成整合包</button>' +
       '</div>' +
       '</div>';
   }

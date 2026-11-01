@@ -41,25 +41,23 @@
     return kind === 'shader' ? 'shaderpacks' : 'resourcepacks';
   }
 
-  function notice(env, localCount, onlineCount, skipped, overrideCount) {
+  function notice(env, localCount, onlineCount, skipped, overrideCount, offline) {
     const lines = [
       'ModPilot 导出的整合包',
       '',
       '目标环境：' + env.loader + ' ' + env.mc,
       '加载器版本：' + loaderVersion(env),
-      '本地 jar：' + localCount + ' 个',
-      '在线前置：' + onlineCount + ' 个'
+      '本地 jar：' + localCount + ' 个' + (offline ? '（含前置，全部在 overrides/mods）' : '')
     ];
+    if (!offline) lines.push('在线前置：' + onlineCount + ' 个');
     if (overrideCount) lines.push('原包配置/资源包：' + overrideCount + ' 个文件');
-    lines.push(
-      '',
-      '安装：把这个压缩包解压进 .minecraft，把 mods 文件夹和里面的 jar 放进版本目录的 mods 里。',
-      '如果有启动器提示缺前置，说明在线前置没有下载成功，可按下面的链接手动下载：'
-    );
+    lines.push('');
+    lines.push(offline
+      ? '安装：把 .mrpack 拖进 PCL 2.13 以上（或 HMCL / Prism）直接导入，模组和配置都在包里，不用再联网下载。'
+      : '安装：把 .mrpack 拖进 PCL 2.13 以上（或 HMCL / Prism）导入，在线前置会按清单自动下载。');
     if (skipped && skipped.length) {
+      lines.push('下面这些没打进包，需要手动补：');
       skipped.forEach(s => lines.push(' - ' + s));
-    } else {
-      lines.push(' （无）');
     }
     lines.push('', '生成时间：' + new Date().toLocaleString('zh-CN'));
     return lines.join('\n');
@@ -115,54 +113,11 @@
 
     zipFiles.push({
       path: 'overrides/ModPilot-说明.txt',
-      data: enc.encode(notice(env, (opts.localJars || []).length, files.length, null, (opts.overrides || []).length))
+      data: enc.encode(notice(env, (opts.localJars || []).length, files.length, opts.skipped, (opts.overrides || []).length, opts.offline))
     });
 
     return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '.mrpack' };
   }
 
-  /** 普通 zip：所有 jar 实打实放进去，离线也能装 */
-  async function buildPlainZip(opts) {
-    const env = opts.env;
-    const used = new Set();
-    const jars = [];
-    const skipped = [];
-    let downloaded = 0;
-
-    (opts.localJars || []).forEach(jar => {
-      jars.push({ name: uniqueJarName(jar.name, used), data: jar.data });
-    });
-
-    for (const dep of (opts.deps || [])) {
-      const f = dep.version && dep.version.files && dep.version.files[0];
-      if (!f) continue;
-      if (opts.onProgress) opts.onProgress('正在下载 ' + (dep.project.title || dep.project.slug) + '…');
-      try {
-        const bytes = await MC.api.modrinth.download(f.url);
-        downloaded++;
-        jars.push({ name: uniqueJarName(f.filename || ((dep.project.slug || 'mod') + '.jar'), used), data: bytes });
-      } catch (err) {
-        skipped.push((dep.project.title || dep.project.slug) + ' → ' + f.url);
-      }
-    }
-
-    const zipFiles = jars.map(j => ({ path: 'mods/' + j.name, data: j.data }));
-    (opts.extras || []).forEach(x => {
-      zipFiles.push({
-        path: packFolder(x.kind) + '/' + uniqueName(x.name, used, '.zip'),
-        data: x.data
-      });
-    });
-    (opts.overrides || []).forEach(o => {
-      zipFiles.push({ path: o.path, data: o.data });
-    });
-    zipFiles.push({
-      path: '安装说明.txt',
-      data: enc.encode(notice(env, (opts.localJars || []).length, downloaded, skipped, (opts.overrides || []).length))
-    });
-
-    return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '-普通包.zip' };
-  }
-
-  MC.pack = { buildMrpack, buildPlainZip, dependencies, baseName };
+  MC.pack = { buildMrpack, dependencies, baseName };
 })(globalThis);

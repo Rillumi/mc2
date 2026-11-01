@@ -81,31 +81,16 @@
       (s.busy ? '<div class="loading"><span class="spinner"></span>' + esc(s.progress || '正在打包…') + '</div>' : '') +
 
       '<div class="pack-actions">' +
-      '<button type="button" class="btn grad full" data-act="pack-menu" data-menu="pack"' + disabled + '>' +
+      '<button type="button" class="btn grad full" data-act="pack" data-format="pack"' + disabled + '>' +
       icon('<path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M4 16v4h16v-4"/>', '#fff') +
-      '生成整合包' + (s.packMenu === 'pack' ? ' ▴' : ' ▾') + '</button>' +
-      (s.packMenu === 'pack'
-        ? '<div class="packmenu" style="display:grid;gap:6px;margin:6px 0 2px">' +
-          '<button type="button" class="btn line full" data-act="pack" data-format="mrpack">.mrpack：PCL 2.13 以上直接导入，在线前置按清单下载</button>' +
-          '<button type="button" class="btn line full" data-act="pack" data-format="zip">普通 zip：前置也下载好一起打包，离线能装</button>' +
-          '</div>'
-        : '') +
-      '<button type="button" class="btn line full" data-act="pack-menu" data-menu="list"' + (s.analysis ? '' : ' disabled') + '>' +
-      '生成清单 / CurseForge' + (s.packMenu === 'list' ? ' ▴' : ' ▾') + '</button>' +
-      (s.packMenu === 'list'
-        ? '<div class="packmenu" style="display:grid;gap:6px;margin:6px 0 2px">' +
-          '<button type="button" class="btn line full" data-act="pack" data-format="list">下载清单：manifest.json + modlist.html，不含 jar</button>' +
-          '<button type="button" class="btn line full" data-act="pack" data-format="curse">CurseForge 整合包：含 overrides，指纹去重（需要 key）</button>' +
-          '</div>'
-        : '') +
+      '生成整合包</button>' +
+      '<button type="button" class="btn line full" data-act="pack" data-format="manifest"' + (s.analysis ? '' : ' disabled') + '>' +
+      icon(IC.book, '#7C63E8') + '生成清单 / CurseForge</button>' +
       '</div>' +
 
-      '<div class="hintbox">.mrpack：PCL 2.13 以上直接导入，在线前置按清单自动下载，本地 jar 放进 overrides/mods。<br>' +
-      '普通 zip：会把在线前置也下载好一起打包，离线也能用。<br>' +
-      'CurseForge 整合包：先按文件指纹反查 projectID/fileID，已经打进包的从清单里去掉，不会重复下载；Modrinth 前置直接下好放 overrides/mods。<br>' +
-      'CurseForge key 在「工具 → 设置」里填（只存本机）。<br>' +
-      '下载清单：只出清单不出 jar，manifest.json 是 CurseForge 结构（只有 projectID/fileID 的在线项写得进去），modlist.html 是人看的完整表。<br>' +
-      '从整合包扫描进来的，会顺带复制原包的 config、defaultconfigs、kubejs、emotes、resourcepacks、shaderpacks 和 options.txt（不带 PCL、存档状态和 ffmpeg）。<br>' +
+      '<div class="hintbox"><b>生成整合包</b>：.mrpack，PCL 2.13 以上直接拖入导入；前置和本地 jar 全打进 overrides/mods，离线也能装。<br>' +
+      '<b>生成清单 / CurseForge</b>：填了 key → CurseForge 整合包（按指纹反查，已进包的从清单里去掉）；没填 → 下载清单（manifest.json + modlist.html，不含 jar）。<br>' +
+      'key 在「工具 → 设置」里填，只存本机。从整合包扫描进来的会带上 config、defaultconfigs、kubejs、emotes、资源包/光影和 options.txt（不带 PCL、存档和 ffmpeg）。<br>' +
       '写进清单的加载器版本：<b>' + esc(s.env.loaderVersion || '未填') + '</b>（顶部「' + esc(verLabel) + '」可改）</div>';
   }
 

@@ -93,7 +93,7 @@
         path: 'modlist.html',
         data: enc.encode(MC.pack.modlistText({
           title: opt.title, env: opt.env, local: opt.local || [], online: opt.online || [],
-          unmatched: opt.unmatched || [], blocked: opt.blocked || []
+          unmatched: opt.unmatched || [], blocked: opt.blocked || [], urls: opt.urls || {}
         }))
       });
     }

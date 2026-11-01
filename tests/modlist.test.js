@@ -59,3 +59,12 @@ test('清单会单独列出 CF 上没有、以及禁止分发的模组', () => {
   assert.match(t, /CurseForge 上禁止第三方分发.*（1）/);
   assert.match(t, /c\.jar/);
 });
+
+test('在线项带项目页跳转：优先用接口给的网址，没有就用 /projects/<id>', () => {
+  const t = P.modlistText({
+    title: 'x', env, online: [{ projectID: 1, fileID: 2 }, { projectID: 3, fileID: 4 }],
+    urls: { 1: 'https://www.curseforge.com/minecraft/mc-mods/jei' }
+  });
+  assert.match(t, /https:\/\/www\.curseforge\.com\/minecraft\/mc-mods\/jei/);
+  assert.match(t, /https:\/\/www\.curseforge\.com\/projects\/3/);
+});

@@ -33,7 +33,6 @@
     organizeQuery: '',  // 整理页搜索词（边打边筛，按回车也行）
     includeOptional: false,
     includePacks: false, // 资源包 / 光影是否也放进整合包
-    packMenu: '',         // 打包卡展开的子菜单：pack / list
     showOthers: false,   // 主列表里展开「资源包与光影」
     rpPair: {},          // uid → 另一个资源包 uid（对比覆盖）
     links: savedLinks,   // 手动保存的下载页：modId → [{ url, note, at }]

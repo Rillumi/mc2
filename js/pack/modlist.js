@@ -59,10 +59,16 @@
       '</td></tr>').join('');
 
     // 在线项：CurseForge 只有 projectID/fileID，Modrinth 有直链
+    const urls = opt.urls || {};
     const onlineRows = online.map(o => {
       const name = o.path ? o.path.split('/').pop() : ('项目 ' + o.projectID + ' / 文件 ' + o.fileID);
-      const link = o.url ? '<a href="' + esc(o.url) + '" target="_blank" rel="noopener">下载</a>' : '按 projectID/fileID 下载';
-      return '<tr><td>' + esc(name) + '</td><td>' + link + '</td></tr>';
+      const links = [];
+      if (o.url) links.push('<a href="' + esc(o.url) + '" target="_blank" rel="noopener">下载</a>');
+      if (o.projectID) {
+        const page = urls[o.projectID] || ('https://www.curseforge.com/projects/' + o.projectID);
+        links.push('<a href="' + esc(page) + '" target="_blank" rel="noopener">项目页</a>');
+      }
+      return '<tr><td>' + esc(name) + '</td><td>' + (links.length ? links.join(' · ') : '按 projectID/fileID 下载') + '</td></tr>';
     }).join('');
 
     const original = opt.original
@@ -95,7 +101,7 @@
       (local.length ? '<table><thead><tr><th>模组</th><th>版本</th><th>来源</th></tr></thead><tbody>' + localRows + '</tbody></table>' : '<p class="note">这包里没有本地模组。</p>') +
       '</section>' +
       '<section><h2>在线项（' + online.length + '，由启动器按清单下载）</h2>' +
-      (online.length ? '<table><thead><tr><th>项目</th><th>下载</th></tr></thead><tbody>' + onlineRows + '</tbody></table>' : '<p class="note">没有在线项。</p>') +
+      (online.length ? '<table><thead><tr><th>项目</th><th>下载 / 项目页</th></tr></thead><tbody>' + onlineRows + '</tbody></table>' : '<p class="note">没有在线项。</p>') +
       '</section>' + original +
       nameList(unmatched, 'CurseForge 上没有记录（jar 已打进包，启动器不会下载）') +
       nameList(blocked, 'CurseForge 上禁止第三方分发（jar 已打进包）') +
@@ -112,7 +118,7 @@
       '加载器版本：' + (((opt.env && opt.env.loaderVersion) || '未填')),
       '',
       '本地已打包：' + (opt.local || []).length + ' 个（见 modlist.html）',
-      '在线项：' + (opt.online || []).length + ' 个（原清单全部条目，本地已打包的也在里面，启动器会按清单下全量）',
+      '在线项：' + (opt.online || []).length + ' 个（启动器按清单去下载，已打进包的不在里面）',
       '',
       'manifest.json 是 CurseForge 格式：启动器会按 projectID + fileID 去下载。',
       'Modrinth 的模组没有 CurseForge ID，写不进 manifest.json，直链在 .mrpack 的 modrinth.index.json 里。'
