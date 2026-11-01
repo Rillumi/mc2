@@ -110,6 +110,7 @@
     const items = [];
     const seen = {};
     let modCount = 0;
+    const missed = [];
     const push = it => {
       const k = String(it.key || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
       if (!k || seen[k]) return;
@@ -129,7 +130,10 @@
       let hit = [];
       try { hit = MC.afdian.find(row.entry, 1); } catch (err) { hit = []; }
       const c = hit[0] && hit[0].creator;
-      if (!c || !c.home || !MC.afdianMap.isAfdian(c.home)) return;
+      if (!c || !c.home || !MC.afdianMap.isAfdian(c.home)) {
+        if (missed.length < 8) missed.push(row.entry.nameZh || row.entry.name || row.entry.id || '');
+        return;
+      }
       [row.entry.id, row.entry.nameZh, row.entry.name].forEach(n => {
         if (!n) return;
         const before = items.length;
@@ -142,7 +146,8 @@
     try {
       const r = await MC.afdianMap.save(items);
       toast(r.saved
-        ? '已写进公开映射表 ' + r.saved + ' 条（作者 ' + creators.length + ' 位、模组 ' + modCount + ' 个），其他人打开也能看到'
+        ? '已写进公开映射表 ' + r.saved + ' 条（作者 ' + creators.length + ' 位、模组 ' + modCount + ' 个）'
+          + (missed.length ? '；没匹配到作者：' + missed.join('、') : '')
         : '没写进去（本地服务或数据库没起来）');
     } catch (err) {
       toast('写入映射表失败：' + (err.message || err));
