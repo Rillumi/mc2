@@ -269,6 +269,15 @@
         touch();
         return;
       }
+      /* 哈希没对上、靠 modId/名字找到的项目也存进缓存，标题图标和作者页才能用 */
+      const pid = full && (full.id || full.project_id);
+      if (pid) {
+        st.projects = Object.assign({}, st.projects || {}, { [pid]: full });
+        st.hashProject = Object.assign({}, st.hashProject || {});
+        [e].concat((g.rows || []).map(r => r.entry)).forEach(r => {
+          if (r && r.sha1) st.hashProject[r.sha1] = pid;
+        });
+      }
       st.mr[gid] = {
         status: 'ok',
         text: text.slice(0, 6000),
