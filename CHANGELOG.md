@@ -11,6 +11,7 @@ git log --oneline
 ### 详情页
 - 作者区新增「Modrinth · 账号名」链接：先拉项目团队成员，只有 jar 作者与成员账号同名（归一化后完全相同）才显示，避免跳到别人
 - 哈希没对上、靠 modId/名字才找到的 Modrinth 项目也会写回缓存，详情标题图标、Modrinth 页面链接和作者页随之可用
+- 新增可选「后台补图标」开关（工具 → 设置，默认关闭）：分析后按 modId 逐个补项目元信息（图标/标题/链接），间隔 320ms，不拉正文
 - 组织项目（成员不公开）退回用仓库 GitHub 组织名核对，对上才给「Modrinth 组织」页（如 Sinytra → `modrinth.com/organization/sinytra`）
 
 ### 打包与导出

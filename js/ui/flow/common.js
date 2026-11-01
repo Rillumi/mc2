@@ -22,6 +22,10 @@
       const p = r.entry && byHash(r.entry.sha1);
       if (p) return p;
     }
+    /* 哈希对不上时，用后台预取记下的 modId → 项目 关系 */
+    const mid = e && e.id ? String(e.id).toLowerCase() : '';
+    const pid = mid ? (st.modProject || {})[mid] : '';
+    if (pid && (st.projects || {})[pid]) return st.projects[pid];
     return null;
   }
 

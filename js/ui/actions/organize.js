@@ -137,6 +137,15 @@
       cf.test().then(res => {
         C.toast(res.ok ? 'CurseForge key 可用' : 'CurseForge key 有问题：' + res.reason);
       });
+    },
+
+    preflite() {
+      const FM = MC.flowMeta;
+      if (!FM || !FM.setLite) return;
+      const on = !FM.liteOn();
+      FM.setLite(on);
+      touch();
+      C.toast(on ? '已开启后台补图标，下次分析后生效' : '已关闭后台补图标');
     }
   });
 })(globalThis);

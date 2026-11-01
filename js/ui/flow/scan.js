@@ -312,6 +312,8 @@
     await FA.analyzeAndResolve(true);
     // 读取完就把每个项目的资料（简介 / 正文 / 图标）批量拉回来，详情页不用再等网络
     FM.prefetchProjects();
+    // 哈希对不上的模组，按 modId 在后台补图标/链接（只拉元信息，默认关闭，可在设置里开）
+    FM.prefetchLite();
     // 顺便补上大家平时叫的中文名（MC百科），列表和搜索都能直接用
     FM.prefetchZhNames();
     // 分类：先用本地库/Modrinth 填上，导览页不用等预取完成

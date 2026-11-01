@@ -50,6 +50,54 @@
     }
   }
 
+  /* ---------- 轻量预取：只补项目元信息（图标 / 标题 / 链接），不拉正文 ---------- */
+  const LITE_KEY = 'modpilot.prefetchLite';
+
+  function liteOn() {
+    try { return localStorage.getItem(LITE_KEY) === '1'; } catch (err) { return false; }
+  }
+
+  function setLite(on) {
+    try { localStorage.setItem(LITE_KEY, on ? '1' : '0'); } catch (err) { /* ignore */ }
+  }
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+  async function prefetchLite() {
+    if (!liteOn()) return;
+    const st = S();
+    const my = FC.getGen();
+    if (!st.mods || !st.mods.length) return;
+
+    const seen = {};
+    const targets = (st.mods || []).filter(e => {
+      if (!e || !e.fileName || !/\.jar$/i.test(e.fileName)) return false;
+      if (e.sha1 && (st.hashProject || {})[e.sha1]) return false;   // 哈希已认出的不用补
+      const key = String(e.id || '').toLowerCase();
+      if (!key || seen[key]) return false;
+      seen[key] = 1;
+      if ((st.modProject || {})[key]) return false;                  // 上次已经补过
+      return true;
+    });
+    if (!targets.length) return;
+
+    for (const e of targets) {
+      if (my !== FC.getGen()) return;   // 换了一批文件就停下
+      try {
+        const p = await MC.updates.findProject(e);
+        if (p && p.id) {
+          st.projects = Object.assign({}, st.projects || {}, { [p.id]: {
+            id: p.id, slug: p.slug, title: p.title, project_type: p.project_type,
+            icon_url: p.icon_url, downloads: p.downloads, followers: p.followers, updated: p.updated
+          } });
+          st.modProject = Object.assign({}, st.modProject || {}, { [String(e.id).toLowerCase()]: p.id });
+          touch();
+        }
+      } catch (err) { /* 失败就跳过，打开详情时还会再试 */ }
+      await sleep(320);
+    }
+  }
+
   /* ---------- 分类库：Modrinth 官方分类优先，本地 MySQL 兜底 ---------- */
   async function applyCats(st) {
     if (!st.analysis) return;
@@ -315,7 +363,7 @@
   }
 
   MC.flowMeta = {
-    prefetchProjects, applyCats, prefetchZhNames, applyZhNames,
+    prefetchProjects, prefetchLite, liteOn, setLite, applyCats, prefetchZhNames, applyZhNames,
     analyzePacks, ensureDesc, ensureMrDesc, ensureBodyTr
   };
 })(globalThis);
