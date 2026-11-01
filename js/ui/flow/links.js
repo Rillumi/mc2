@@ -120,7 +120,7 @@
 
     creators.forEach(c => {
       if (!c || !c.home || !c.name || !MC.afdianMap.isAfdian(c.home)) return;
-      push({ key: c.name, name: c.name, home: c.home, source: 'afdian-creator' });
+      push({ key: c.name, name: c.name, home: c.home, source: 'afdian-creator', kind: 'author' });
     });
 
     /* 每个模组单独存一条：别人拿到同一个 modId，就算作者名对不上也能反查到主页 */
@@ -134,10 +134,10 @@
         if (missed.length < 8) missed.push(row.entry.nameZh || row.entry.name || row.entry.id || '');
         return;
       }
-      [row.entry.id, row.entry.nameZh, row.entry.name].forEach(n => {
-        if (!n) return;
+      [[row.entry.id, 'modid'], [row.entry.nameZh, 'zh'], [row.entry.name, 'en']].forEach(([k, kind]) => {
+        if (!k) return;
         const before = items.length;
-        push({ key: n, name: c.name || n, home: c.home, source: 'afdian-mod' });
+        push({ key: k, name: c.name || k, home: c.home, source: 'afdian-mod', kind });
         if (items.length > before) modCount++;
       });
     });
@@ -147,6 +147,7 @@
       const r = await MC.afdianMap.save(items);
       toast(r.saved
         ? '已写进公开映射表 ' + r.saved + ' 条（作者 ' + creators.length + ' 位、模组 ' + modCount + ' 个）'
+          + ((r.conflicts || []).length ? '；' + r.conflicts.length + ' 条已有不同主页，没覆盖' : '')
           + (missed.length ? '；没匹配到作者：' + missed.join('、') : '')
         : '没写进去（本地服务或数据库没起来）');
     } catch (err) {

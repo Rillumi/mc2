@@ -29,6 +29,7 @@
     overview: null,
     afdian: null,
     afdianMap: null,
+    afKind: '',
     total: 0,
     rows: []
   };
@@ -144,12 +145,15 @@
       opts = [['', '全部站点']].concat((o.sites || []).map(s => [s.key, s.label]));
     } else if (tab === 'cats') {
       opts = [['', '全部主分类']].concat((o.pcats || []).map(p => [p.cat, p.cat + '（' + p.n + '）']));
+    } else if (tab === 'afdianmap') {
+      opts = [['', '全部类型'], ['author', '作者名'], ['modid', 'modId'], ['zh', '中文名'], ['en', '英文名'], ['legacy', '旧数据']];
     }
     sel.hidden = !opts.length;
     sel.innerHTML = opts.map(x =>
       '<option value="' + esc(x[0]) + '">' + esc(x[1]) + '</option>'
     ).join('');
-    const cur = tab === 'names' ? view.status : tab === 'links' ? view.site : view.primary;
+    const cur = tab === 'names' ? view.status : tab === 'links' ? view.site
+      : tab === 'afdianmap' ? view.afKind : view.primary;
     sel.value = cur || '';
   }
 
@@ -282,11 +286,14 @@
 
   function afdianMapList() {
     const all = (view.afdianMap && view.afdianMap.rows) || [];
+    const byKind = view.afKind ? all.filter(r => (r.kind || 'legacy') === view.afKind) : all;
     const q = view.q.toLowerCase();
-    if (!q) return all;
-    return all.filter(r => [r.key, r.name, r.home, r.source]
+    if (!q) return byKind;
+    return byKind.filter(r => [r.key, r.name, r.home, r.source, r.kind]
       .some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
   }
+
+  const KIND_LABEL = { author: '作者名', modid: 'modId', zh: '中文名', en: '英文名', legacy: '旧数据' };
 
   function renderAfdianMap() {
     const list = afdianMapList();
@@ -298,9 +305,10 @@
     }
     const pg = MC.pager.slice('afdianmap', list.length);
     const rows = list.slice(pg.start, pg.end);
-    const head = '<tr><th>键（modId / 名字）</th><th>作者</th><th>爱发电主页</th><th>来源</th><th>更新时间</th><th></th></tr>';
+    const head = '<tr><th>键</th><th>类型</th><th>作者</th><th>爱发电主页</th><th>来源</th><th>更新时间</th><th></th></tr>';
     const body = rows.map(r => '<tr>' +
       '<td class="mono">' + esc(r.key) + '</td>' +
+      '<td><span class="adm-kind">' + esc(KIND_LABEL[r.kind || 'legacy'] || r.kind) + '</span></td>' +
       '<td class="cell-strong">' + esc(r.name || '—') + '</td>' +
       '<td>' + (r.home
         ? '<a class="adm-url" href="' + esc(r.home) + '" target="_blank" rel="noopener">' + esc(r.home) + '</a>'
@@ -453,6 +461,7 @@
     view.status = 'all';
     view.site = '';
     view.primary = '';
+    view.afKind = '';
     $('#q').value = '';
     st.pg[view.tab] = 1;
     renderTabs();
@@ -480,6 +489,7 @@
     if (view.tab === 'names') view.status = v || 'all';
     else if (view.tab === 'links') view.site = v;
     else if (view.tab === 'cats') view.primary = v;
+    else if (view.tab === 'afdianmap') view.afKind = v;
     st.pg[view.tab] = 1;
     load();
   });

@@ -134,8 +134,13 @@ async function initDb() {
       author VARCHAR(120) NOT NULL DEFAULT '',
       home VARCHAR(400) NOT NULL DEFAULT '',
       source VARCHAR(20) NOT NULL DEFAULT 'manual',
+      kind VARCHAR(16) NOT NULL DEFAULT 'legacy',
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    /* 旧库补列：author / modid / zh / en，老数据记为 legacy */
+    try {
+      await pool.query("ALTER TABLE afdian_map ADD COLUMN kind VARCHAR(16) NOT NULL DEFAULT 'legacy'");
+    } catch (err) { /* 列已存在 */ }
     dbReady = true;
     dbError = '';
     console.log('  下载页数据库已连接：MySQL ' + cfg.host + ':' + (cfg.port || 3306) + ' / ' + cfg.database);
@@ -835,11 +840,11 @@ const server = http.createServer(async (req, res) => {
       if (urlPath === '/api/afdian-map' && req.method === 'GET') {
         if (!dbReady) return sendJson(res, 200, { ok: false, reason: dbError, map: {}, rows: [] });
         const [rows] = await pool.query(
-          'SELECT map_key, author, home, source FROM afdian_map ORDER BY updated_at DESC LIMIT 2000'
+          'SELECT map_key, author, home, source, kind FROM afdian_map ORDER BY updated_at DESC LIMIT 2000'
         );
         const map = {};
         rows.forEach(r => {
-          map[r.map_key] = { name: r.author || '', home: r.home || '', source: r.source || '' };
+          map[r.map_key] = { name: r.author || '', home: r.home || '', source: r.source || '', kind: r.kind || 'legacy' };
         });
         return sendJson(res, 200, { ok: true, db: true, count: rows.length, map, rows });
       }
@@ -848,23 +853,48 @@ const server = http.createServer(async (req, res) => {
         if (!dbReady) return sendJson(res, 503, { ok: false, reason: '数据库没连上：' + dbError });
         const body = await bodyJson(req);
         const items = (Array.isArray(body.items) ? body.items : []).slice(0, 500);
+        const KINDS = { author: 1, modid: 1, zh: 1, en: 1, legacy: 1 };
         let saved = 0;
+        let skipped = 0;
+        const conflicts = [];
+        /* 先取已有键：同一个键但主页不同就不覆盖，避免两边同步互相打架 */
+        const keys = items.map(it => mapKey((it && (it.key || it.id || it.name)) || '')).filter(Boolean);
+        const existing = {};
+        if (keys.length) {
+          const [rows] = await pool.query(
+            'SELECT map_key, home FROM afdian_map WHERE map_key IN (' + keys.map(() => '?').join(',') + ')',
+            keys
+          );
+          rows.forEach(r => { existing[r.map_key] = r.home || ''; });
+        }
         for (const it of items) {
           const key = mapKey((it && (it.key || it.id || it.name)) || '');
           const home = String((it && it.home) || '').trim().slice(0, 400);
-          if (!key) continue;
-          if (!/^https?:\/\/([^/]+\.)?(afdian\.(com|net)|ifdian\.net)\//i.test(home)) continue;
+          if (!key) { skipped++; continue; }
+          if (!/^https?:\/\/([^/]+\.)?(afdian\.(com|net)|ifdian\.net)\//i.test(home)) { skipped++; continue; }
+          const kindRaw = String((it && it.kind) || 'legacy').toLowerCase();
+          const kind = KINDS[kindRaw] ? kindRaw : 'legacy';
+          const author = String((it && it.name) || '').slice(0, 120);
+          const source = String((it && it.source) || 'manual').slice(0, 20);
+          const old = existing[key];
+          if (old && old !== home) { conflicts.push(key); skipped++; continue; }
           try {
-            await pool.query(
-              'INSERT INTO afdian_map (map_key, author, home, source) VALUES (?, ?, ?, ?) ' +
-              'ON DUPLICATE KEY UPDATE author = VALUES(author), home = VALUES(home), source = VALUES(source)',
-              [key, String((it && it.name) || '').slice(0, 120), home,
-                String((it && it.source) || 'manual').slice(0, 20)]
-            );
+            if (old) {
+              await pool.query(
+                'UPDATE afdian_map SET author = ?, source = ?, kind = ? WHERE map_key = ?',
+                [author, source, kind, key]
+              );
+            } else {
+              await pool.query(
+                'INSERT INTO afdian_map (map_key, author, home, source, kind) VALUES (?, ?, ?, ?, ?)',
+                [key, author, home, source, kind]
+              );
+            }
+            existing[key] = home;
             saved++;
-          } catch (err) { /* 单条失败不影响其他 */ }
+          } catch (err) { skipped++; }
         }
-        return sendJson(res, 200, { ok: true, saved, skipped: items.length - saved });
+        return sendJson(res, 200, { ok: true, saved, skipped, conflicts });
       }
 
       if (urlPath === '/api/links/delete' && req.method === 'POST') {
@@ -1178,12 +1208,13 @@ const server = http.createServer(async (req, res) => {
         if (urlPath === '/api/admin/afdian-map' && req.method === 'GET') {
           if (!dbReady) return sendJson(res, 200, { ok: true, rows: [], reason: dbError });
           const [rows] = await pool.query(
-            'SELECT map_key, author, home, source, updated_at FROM afdian_map ORDER BY updated_at DESC LIMIT 2000'
+            'SELECT map_key, author, home, source, kind, updated_at FROM afdian_map ORDER BY updated_at DESC LIMIT 2000'
           );
           return sendJson(res, 200, {
             ok: true,
             rows: rows.map(r => ({
               key: r.map_key, name: r.author || '', home: r.home || '', source: r.source || '',
+              kind: r.kind || 'legacy',
               at: r.updated_at ? new Date(r.updated_at).getTime() : 0
             }))
           });
