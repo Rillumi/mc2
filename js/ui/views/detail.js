@@ -5,6 +5,9 @@
   const R = (MC.render = MC.render || {});
   const { esc, tile, icon, IC, fmtSize, picker, siteTag } = R;
 
+  /* 正在请求团队成员的 Modrinth 项目，避免同一次渲染重复请求 */
+  const authorPending = new Set();
+
   function depLine(info) {
     const map = {
       env: ['ok', '游戏自带', ''],
@@ -281,7 +284,7 @@
         esc(e.filePath || e.fileName || '') + '">复制路径</button></div></div>' +
         descSection(s, group.id, e) +
         mrSection(s, group.id, e) +
-        authorSection(e) +
+        authorSection(e, mproj) +
         recipeHtml(e) +
         (chosen ? updateSection(s, group.id, e) : '') +
         (rows.length > 1 ? '<div class="dsec-label">这个模组有 ' + rows.length + ' 份，进包的是</div>' +
@@ -342,7 +345,7 @@
   }
 
   /* 作者：来自 jar 元数据（fabric.mod.json / mods.toml / mcmod.info），所有人可见 */
-  function authorSection(e) {
+  function authorSection(e, mproj) {
     const AM = MC.afdianMap || { isAfdian: () => false, find: () => null };
     const authors = (e.authors || []).filter(Boolean);
     const links = (e.links || []).filter(l => l && l.url);
@@ -358,9 +361,32 @@
     afd.forEach(l => acts.push(btn('爱发电主页', l.url)));
     links.filter(l => !AM.isAfdian(l.url)).forEach(l => acts.push(btn(l.label || '作者主页', l.url)));
     if (pub && pub.home) acts.push(btn('爱发电主页（公开表）', pub.home));
+
+    /* Modrinth 账号页：只有团队里确实存在同名账号才给，避免跳到别人 */
+    let teamNote = '';
+    try {
+      const API = MC.api && MC.api.modrinth;
+      const pid = mproj && (mproj.project_id || mproj.id);
+      if (authors.length && pid && API && API.cachedMembers) {
+        const members = API.cachedMembers(pid);
+        if (members) {
+          const hits = API.matchAuthors(authors, members) || [];
+          hits.forEach(u => {
+            acts.push(btn('Modrinth · ' + u, 'https://modrinth.com/user/' + encodeURIComponent(u)));
+          });
+          if (!hits.length) {
+            teamNote = '<div class="hint">Modrinth 项目团队里没有和 jar 作者同名的账号，所以不提供账号链接，避免跳到别人。</div>';
+          }
+        } else if (!authorPending.has(pid)) {
+          authorPending.add(pid);
+          API.teamMembers(pid).then(() => MC.store.touch()).catch(() => {});
+        }
+      }
+    } catch (err) { /* 作者页可选，失败不影响详情 */ }
+
     return '<div class="dsec-label">作者<span class="dsrc">jar 里写的</span></div>' +
       (authors.length ? '<div class="hint">作者：<b>' + esc(authors.join('、')) + '</b></div>' : '') +
-      (acts.length ? '<div class="actions">' + acts.join('') + '</div>' : '');
+      (acts.length ? '<div class="actions">' + acts.join('') + '</div>' : '') + teamNote;
   }
 
   /* ---------- 爱发电：匹配到的作者主页 / 相关发电帖 ---------- */

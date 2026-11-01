@@ -176,6 +176,74 @@
     })[0];
   }
 
+  /* ---------- 团队成员：核对 jar 里的作者到底是不是 Modrinth 账号 ---------- */
+  const MEMBERS_KEY = 'modpilot.mr.members.v1';
+  let membersCache = null;
+
+  function readMembers() {
+    if (membersCache) return membersCache;
+    try {
+      const raw = JSON.parse(localStorage.getItem(MEMBERS_KEY) || '{}');
+      membersCache = raw && typeof raw === 'object' ? raw : {};
+    } catch (err) { membersCache = {}; }
+    return membersCache;
+  }
+
+  function saveMembers() {
+    try { localStorage.setItem(MEMBERS_KEY, JSON.stringify(membersCache)); } catch (err) { /* ignore */ }
+  }
+
+  function normName(s) {
+    return String(s || '').toLowerCase().replace(/[^a-z0-9]/g, '');
+  }
+
+  /** jar 里的作者名与团队账号名对照，只有归一化后完全相同才算同一个人 */
+  function matchAuthors(authors, members) {
+    const want = (authors || []).map(normName).filter(Boolean);
+    const out = [];
+    (members || []).forEach(m => {
+      const u = normName(m && m.username);
+      if (!u) return;
+      if (want.indexOf(u) >= 0) out.push(m.username);
+    });
+    return out;
+  }
+
+  /** 已缓存的团队成员；没有返回 null，不触发请求 */
+  function cachedMembers(projectId) {
+    if (!projectId) return null;
+    const c = readMembers();
+    return Object.prototype.hasOwnProperty.call(c, projectId) ? c[projectId] : null;
+  }
+
+  const memberPending = {};
+  /** 取项目团队成员（Modrinth 账号名），结果缓存；失败返回空数组 */
+  function teamMembers(projectId) {
+    if (!projectId) return Promise.resolve([]);
+    const hit = cachedMembers(projectId);
+    if (hit) return Promise.resolve(hit);
+    if (memberPending[projectId]) return memberPending[projectId];
+    memberPending[projectId] = (async () => {
+      try {
+        const proj = await project(projectId);
+        if (!proj || !proj.team) return [];
+        const raw = await get('/team/' + encodeURIComponent(proj.team) + '/members', 2);
+        const list = (raw || [])
+          .filter(m => m && m.user && m.user.username)
+          .map(m => ({ username: m.user.username, role: m.role || '' }));
+        const c = readMembers();
+        c[projectId] = list;
+        saveMembers();
+        return list;
+      } catch (err) {
+        return [];
+      } finally {
+        delete memberPending[projectId];
+      }
+    })();
+    return memberPending[projectId];
+  }
+
   async function download(url) {
     const res = await fetch(url, { mode: 'cors' });
     if (!res.ok) throw new Error('下载失败 ' + res.status);
@@ -183,5 +251,6 @@
   }
 
   MC.api = MC.api || {};
-  MC.api.modrinth = { get, project, search, versions, versionFilesUpdate, versionFiles, projectsByIds, pickVersion, download, loaderSlug };
+  MC.api.modrinth = { get, project, search, versions, versionFilesUpdate, versionFiles, projectsByIds, pickVersion, download, loaderSlug,
+    teamMembers, cachedMembers, matchAuthors };
 })(globalThis);
