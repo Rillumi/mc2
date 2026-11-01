@@ -15,6 +15,14 @@
     return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
   }
 
+  /* 中文 ≥2 字或英文 ≥4 字才算能用来匹配，避免「灵」「xk」这类太短的乱配 */
+  function strong(s) {
+    const n = norm(s);
+    if (!n) return false;
+    const cjk = (n.match(/[\u4e00-\u9fa5]/g) || []).length;
+    return cjk >= 2 || (cjk === 0 && n.length >= 4);
+  }
+
   function isAfdian(url) {
     return /afdian\.(net|com)[/?#]/i.test(String(url || ''));
   }
@@ -30,8 +38,14 @@
     for (const k of Object.keys(MAP)) {
       const hit = MAP[k];
       if (!hit || !hit.home) continue;
-      if (keys.indexOf(norm(k)) >= 0) return hit;
+      const nk = norm(k);
+      if (!nk) continue;
+      if (keys.indexOf(nk) >= 0) return hit;
       if (hit.name && keys.indexOf(norm(hit.name)) >= 0) return hit;
+      // 「天鹅小镇」vs「天鹅小镇系列」这种包容写法也算命中
+      if (strong(nk) && keys.some(x => x.length >= 2 && (x.indexOf(nk) >= 0 || nk.indexOf(x) >= 0))) return hit;
+      if (hit.name && strong(hit.name) && keys.some(x => x.length >= 2 &&
+        (x.indexOf(norm(hit.name)) >= 0 || norm(hit.name).indexOf(x) >= 0))) return hit;
     }
     return null;
   }

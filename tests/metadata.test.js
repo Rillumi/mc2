@@ -103,3 +103,16 @@ test('mods.toml 的 authors / displayURL 也能读出来', () => {
   assert.deepEqual(p.authors, ['A', 'B']);
   assert.equal(p.links[0].url, 'https://afdian.com/a/demo');
 });
+
+test('MCreator 模板留下的 mcreator.net 不当成作者主页', () => {
+  const toml = [
+    'modLoader="javafml"',
+    '[[mods]]',
+    'modId="demo"',
+    'version="1.0"',
+    'displayName="Demo"',
+    'displayURL="https://mcreator.net/"'
+  ].join('\n');
+  const p = MC.metadata.parseForgeToml(toml);
+  assert.equal(p.links.length, 0);
+});

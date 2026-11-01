@@ -118,6 +118,9 @@
     return String(s || '').split(/[,;，；]/).map(x => x.trim()).filter(Boolean);
   }
 
+  /* 很多 MCreator 生成的模组会把 displayURL 填成工具官网，这类不算作者主页 */
+  const JUNK_LINK = /^(https?:\/\/)?(www\.)?(mcreator\.net|example\.com|localhost)/i;
+
   function parseForgeToml(text) {
     const mods = [];
     for (const m of text.matchAll(/\[\[mods\]\]([\s\S]*?)(?=\[\[|$)/g)) {
@@ -155,7 +158,8 @@
       mcRange,
       provides: tomlArray(text, 'provides'),
       authors: mods.length ? mods[0].authors : [],
-      links: mods.length && mods[0].displayURL ? [{ label: '主页', url: mods[0].displayURL }] : []
+      links: mods.length && mods[0].displayURL && !JUNK_LINK.test(mods[0].displayURL)
+        ? [{ label: '主页', url: mods[0].displayURL }] : []
     };
   }
 
@@ -181,7 +185,9 @@
     });
     const links = [];
     const contact = o.contact || {};
-    if (contact.homepage) links.push({ label: '主页', url: String(contact.homepage) });
+    if (contact.homepage && !JUNK_LINK.test(String(contact.homepage))) {
+      links.push({ label: '主页', url: String(contact.homepage) });
+    }
     if (contact.sources) links.push({ label: '源码', url: String(contact.sources) });
     if (contact.issues) links.push({ label: '问题反馈', url: String(contact.issues) });
     return {
@@ -218,7 +224,8 @@
     return {
       mods, deps, provides: [],
       authors: mods.length ? mods[0].authors : [],
-      links: mods.length && mods[0].url ? [{ label: '主页', url: mods[0].url }] : []
+      links: mods.length && mods[0].url && !JUNK_LINK.test(mods[0].url)
+        ? [{ label: '主页', url: mods[0].url }] : []
     };
   }
 
@@ -443,6 +450,7 @@
       });
       (f.meta.links || []).forEach(l => {
         if (!l || !l.url || !/^https?:/i.test(l.url)) return;
+        if (JUNK_LINK.test(l.url)) return;
         if (links.some(x => x.url === l.url)) return;
         links.push({ label: l.label || '主页', url: l.url });
       });

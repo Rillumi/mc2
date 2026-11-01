@@ -16,14 +16,21 @@
     return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
   }
 
-  /** 能用来匹配的名字：去符号后，中文 ≥3 字或英文 ≥4 字，且不是泛词 */
+  /** 能用来匹配的名字：去符号后，中文 ≥2 字或英文 ≥4 字，且不是泛词 */
   function useful(s) {
     const n = norm(s);
     if (!n || STOP.has(n)) return '';
     const cjk = (n.match(/[\u4e00-\u9fa5]/g) || []).length;
-    if (cjk >= 2 && n.length >= 3) return n;
+    if (cjk >= 2) return n;
     if (cjk === 0 && n.length >= 4) return n;
     return '';
+  }
+
+  /** 作者名本身够不够独特（中文 ≥2 字或英文 ≥4 字），防止「灵」「xk」这种太短的乱配 */
+  function strong(s) {
+    if (!s) return false;
+    const cjk = (s.match(/[\u4e00-\u9fa5]/g) || []).length;
+    return cjk >= 2 || (cjk === 0 && s.length >= 4);
   }
 
   function S() { return MC.store.state; }
@@ -80,7 +87,8 @@
     const st = S();
     const data = st.afdian;
     if (!data || !data.creators || !data.creators.length || !entry) return [];
-    const keys = [entry.nameZh, entry.name, entry.id].map(useful).filter(Boolean);
+    const keys = [entry.nameZh, entry.name, entry.id, ...(entry.authors || [])]
+      .map(useful).filter(Boolean);
     if (!keys.length) return [];
     const idKey = useful(entry.id);
 
@@ -94,9 +102,11 @@
 
       if (idKey && (cname === idKey || cslug === idKey)) score = Math.max(score, 85);
       keys.forEach(k => {
-        // 作者名字本身就是这个模组（常见于个人作者，如 parchwing）
-        if (cname && cname.indexOf(k) >= 0 && k.length >= 3) score = Math.max(score, 78);
-        if (cdoing && cdoing.indexOf(k) >= 0 && k.length >= 4) score = Math.max(score, 65);
+        // 同名，或「天鹅小镇」vs「天鹅小镇系列」这种一边包含另一边
+        if (cname === k || cslug === k) score = Math.max(score, 88);
+        else if (strong(cname) && cname.length >= 2 && k.length >= 2 &&
+          (cname.indexOf(k) >= 0 || k.indexOf(cname) >= 0)) score = Math.max(score, 80);
+        if (cdoing && cdoing.indexOf(k) >= 0) score = Math.max(score, 65);
       });
 
       // 只认帖子标题，正文摘要容易误伤（比如别的帖子顺口提了一句）
