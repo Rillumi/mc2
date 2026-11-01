@@ -54,14 +54,21 @@
   }
 
   async function save(items) {
-    const r = await fetch('/api/afdian-map', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ items: items || [] })
-    });
-    if (!r.ok) throw new Error('HTTP ' + r.status);
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.reason || '写入失败');
+    let r;
+    try {
+      r = await fetch('/api/afdian-map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: items || [] })
+      });
+    } catch (err) {
+      throw new Error('连不上本地服务：要用启动器（启动.bat）打开页面，直接双击 index.html 没有后端');
+    }
+    if (r.status === 404) throw new Error('服务端还是旧版本，关掉窗口重新运行启动.bat');
+    let j = null;
+    try { j = await r.json(); } catch (err) { j = null; }
+    if (!r.ok) throw new Error((j && j.reason) || ('HTTP ' + r.status));
+    if (!j || !j.ok) throw new Error((j && j.reason) || '写入失败');
     await load();
     return j;
   }

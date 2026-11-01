@@ -5,7 +5,13 @@ cd /d "%~dp0"
 
 where node >nul 2>nul
 if not errorlevel 1 (
+  echo 正在启动 ModPilot，稍后会自动打开默认浏览器...
   node server.js
+  if errorlevel 1 (
+    echo.
+    echo 服务异常退出，把上面的报错发给我看看。
+    pause
+  )
   goto :end
 )
 
