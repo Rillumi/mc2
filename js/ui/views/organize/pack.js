@@ -98,19 +98,19 @@
   function packPickHtml(s) {
     const hasKey = !!(MC.api.curseforge && MC.api.curseforge.hasKey());
     const row = (fmt, title, note, tag, off) =>
-      '<button type="button" class="pickrow" data-act="pack" data-format="' + fmt + '"' + (off ? ' disabled' : '') + '>' +
+      '<button type="button" class="fmt-row" data-act="pack" data-format="' + fmt + '"' + (off ? ' disabled' : '') + '>' +
       '<span class="pk-ic">' + icon(IC.jar, '#7C63E8') + '</span>' +
       '<span class="pk-main"><b>' + title + '</b><small>' + note + '</small></span>' +
       (tag ? '<span class="pk-tag">' + tag + '</span>' : '') +
       '</button>';
 
-    return '<div class="sheet pick" role="dialog" aria-modal="true" aria-labelledby="pickTitle">' +
+    return '<div class="sheet packselect" role="dialog" aria-modal="true" aria-labelledby="pickTitle">' +
       '<header class="sheet-head">' +
       '<div class="sheet-title"><div><b id="pickTitle">选择整合包格式</b><small>点一行只生成这一份，不会一次出好几个</small></div></div>' +
       '<button type="button" class="icon-btn" data-act="close" aria-label="关闭">' +
       '<svg viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></svg></button>' +
       '</header>' +
-      '<div class="sheet-body"><div class="picklist">' +
+      '<div class="sheet-body"><div class="fmt-list">' +
       row('mrpack', '.mrpack', 'PCL 2.13+ / HMCL 直接导入，前置按清单在线下载', '推荐') +
       row('zip', '离线 zip', '前置也下载好放进 mods，解压就能用，不用联网', '离线') +
       row('curse', 'CurseForge 整合包', hasKey
