@@ -78,13 +78,16 @@
       if (format === 'manifest') {
         // 下载清单：每次都出，跟有没有 key 无关
         const local = localList();
-        deps.forEach(d => local.push({
-          name: d.project.title || d.modId,
-          version: (d.version && d.version.version_number) || '',
-          source: 'Modrinth',
-          url: 'https://modrinth.com/mod/' + (d.project.slug || d.project.id)
-        }));
         const online = [];
+        // 需要在线下载的：补的前置 / 换过的版本，都带直链，清单里单列一张表
+        deps.forEach(d => {
+          const f = d.version && d.version.files && d.version.files[0];
+          if (!f || !f.url) return;
+          online.push({
+            path: 'mods/' + (f.filename || ((d.project.slug || 'mod') + '.jar')),
+            url: f.url
+          });
+        });
         let original = '';
         (st.packSources || []).forEach(src => {
           (src.onlineList || []).forEach(o => online.push(o));

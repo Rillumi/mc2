@@ -19,12 +19,13 @@
 
   function gcard(s, it) {
     const e = it.entry;
+    const p = MC.flowCommon.projectForEntry(s, e, it.group);
     const hl = t => MC.search.highlight(t, s.guideQuery);
     const catTags = MC.catalog.tagsOf(e)
       .map(id => '<span class="tag">' + esc(MC.catalog.labelOf(id)) + '</span>').join('');
     const rec = typeof e.recipes === 'number' ? (e.recipes ? e.recipes + ' 个配方' : '没找到配方') : '';
     return '<div class="gcard" data-act="detail" data-group="' + esc(it.groupId) + '" role="button" tabindex="0" title="' + esc(e.fileName || '') + '">' +
-      tile(e.nameZh || e.name || e.id, true) +
+      tile(e.nameZh || e.name || e.id, true, p && p.icon_url) +
       '<div class="gmain">' +
       '<div class="gname"><span class="namezh">' + hl(e.nameZh || e.name || e.id) + '</span>' +
       (e.nameZh && e.name ? '<i class="alias">' + hl(e.name) + '</i>' : '') +
@@ -51,7 +52,7 @@
 
     const items = a.groups.map(g => {
       const row = chosenOf(s, g);
-      return row ? { groupId: g.id, entry: row.entry } : null;
+      return row ? { groupId: g.id, group: g, entry: row.entry } : null;
     }).filter(Boolean);
 
     const cats = MC.catalog.tagCounts(items.map(x => x.entry));

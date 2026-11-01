@@ -39,7 +39,7 @@
       '</div>';
   }
 
-  function diffRow(it) {
+  function diffRow(it, s) {
     const x = it.x;
     const k = it.kind;
     const a = k === 'onlyB' ? null : (k === 'onlyA' ? x.entry : x.a);
@@ -47,13 +47,14 @@
     const va = k === 'verdiff' ? x.va : (a && a.version);
     const vb = k === 'verdiff' ? x.vb : (b && b.version);
     const e = a || b;
+    const p = e ? MC.flowCommon.projectForEntry(s, e) : null;
     const tag = k === 'verdiff' ? '<span class="tag warn">版本不同</span>'
       : k === 'onlyA' ? '<span class="tag">只在当前包</span>'
         : k === 'onlyB' ? '<span class="tag src">只在另一个包</span>'
           : '<span class="tag ok">一致</span>';
     const mob = '当前 ' + (va || '—') + ' · 另一个 ' + (vb || '—');
     return '<div class="drow' + (k === 'verdiff' ? ' dv' : '') + '">' +
-      '<div class="dmod">' + tile(x.name, true) +
+      '<div class="dmod">' + tile(x.name, true, p && p.icon_url) +
       '<div class="t"><b>' + esc(x.name) + '</b><small>' + esc(x.id || '') +
       (e && e.size ? ' · ' + fmtSize(e.size) : '') + '</small>' +
       '<small class="dmod-m">' + esc(mob) + '</small></div></div>' +
@@ -84,11 +85,12 @@
     return out;
   }
 
-  function packRow(it) {
+  function packRow(it, s) {
     const x = it.x;
     const a = it.kind === 'onlyB' ? null : (it.kind === 'onlyA' ? x.entry : x.a);
     const b = it.kind === 'onlyA' ? null : (it.kind === 'onlyB' ? x.entry : x.b);
     const e = a || b;
+    const p = e ? MC.flowCommon.projectForEntry(s, e) : null;
     const cell = en => !en
       ? '<div class="dcell muted">—</div>'
       : '<div class="dcell"><span class="tag">' + ((en.assets && en.assets.length) || 0).toLocaleString() + ' 个文件</span>' +
@@ -99,7 +101,7 @@
     const mob = '当前 ' + (a ? ((a.assets && a.assets.length) || 0) + ' 个文件' : '—') +
       ' · 另一个 ' + (b ? ((b.assets && b.assets.length) || 0) + ' 个文件' : '—');
     return '<div class="drow">' +
-      '<div class="dmod">' + tile(x.name, true) +
+      '<div class="dmod">' + tile(x.name, true, p && p.icon_url) +
       '<div class="t"><b>' + esc(x.name) + '</b><small>' +
       (e && e.kind === 'shader' ? '光影' : '资源包') +
       (e && e.size ? ' · ' + fmtSize(e.size) : '') + '</small>' +
@@ -152,7 +154,7 @@
           const g = DIFF_GROUPS[it.kind];
           body += dGroupHead(g.cls, g.title, counts[it.kind], g.hint);
         }
-        body += diffRow(it);
+        body += diffRow(it, s);
       });
     }
     const pager = MC.pager.html('diff', pg, { anchor: '#diffTable', unit: '个模组' });
@@ -174,7 +176,7 @@
             : DIFF_GROUPS[it.kind];
           pbody += dGroupHead(g.cls, g.title, pcounts[it.kind], g.hint);
         }
-        pbody += packRow(it);
+        pbody += packRow(it, s);
       });
       packSec = '<div class="dpacks" id="diffPacks">' +
         '<div class="psec-head"><b>资源包 / 光影</b><span>' + pk.count + '</span>' +
