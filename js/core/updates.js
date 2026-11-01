@@ -15,6 +15,52 @@
     return !!p && (p.project_type === 'mod' || !p.project_type);
   }
 
+  /* ---------- 识别结果本地缓存：哈希对不上的模组，每扫一次都要重新联网太慢 ---------- */
+  const FOUND_KEY = 'modpilot.mr.found.v1';
+  const FOUND_TTL = 30 * 86400000;
+  const FOUND_MAX = 400;
+
+  function foundKey(e) {
+    const v = String((e && (e.id || e.name)) || '').toLowerCase().trim();
+    return v;
+  }
+
+  function readFound() {
+    try { return JSON.parse(localStorage.getItem(FOUND_KEY) || '{}') || {}; } catch (err) { return {}; }
+  }
+
+  function remember(entry, p) {
+    const k = foundKey(entry);
+    if (!k || !p || !p.id) return p;
+    try {
+      const map = readFound();
+      map[k] = {
+        at: Date.now(),
+        p: {
+          id: p.id, slug: p.slug, title: p.title, project_type: p.project_type,
+          icon_url: p.icon_url, downloads: p.downloads, followers: p.followers,
+          updated: p.updated, source_url: p.source_url, organization: p.organization, team: p.team
+        }
+      };
+      const keys = Object.keys(map);
+      if (keys.length > FOUND_MAX) {
+        keys.sort((a, b) => (map[b].at || 0) - (map[a].at || 0))
+          .slice(FOUND_MAX).forEach(x => { delete map[x]; });
+      }
+      localStorage.setItem(FOUND_KEY, JSON.stringify(map));
+    } catch (err) { /* 存不了就算了 */ }
+    return p;
+  }
+
+  function cachedFound(entry) {
+    const k = foundKey(entry);
+    if (!k) return null;
+    const hit = readFound()[k];
+    if (!hit || !hit.p || !hit.at) return null;
+    if (Date.now() - hit.at > FOUND_TTL) return null;
+    return hit.p;
+  }
+
   /* 不给 env 过滤，拿项目的全部版本，用文件名/版本号确认是不是同一份 */
   async function allVersions(pid) {
     try {
@@ -59,6 +105,10 @@
   }
 
   async function findProject(entry) {
+    // 0) 上次已经认出过这个 modId / 名字，直接复用，不再联网
+    const cached = cachedFound(entry);
+    if (cached) return cached;
+
     // 1) 哈希最可靠：jar 被改名也能对上真正的项目
     if (entry.sha1) {
       try {
@@ -66,7 +116,7 @@
         const v = map && map[entry.sha1];
         if (v && v.project_id) {
           const p = await MC.api.modrinth.project(v.project_id);
-          if (isMod(p)) return p;
+          if (isMod(p)) return remember(entry, p);
         }
       } catch (err) { /* 查不到就继续试别的 */ }
     }
@@ -75,7 +125,7 @@
     for (const slug of slugCandidates(entry)) {
       try {
         const p = await MC.api.modrinth.project(slug);
-        if (p && await confirmed(p, entry)) return p;
+        if (p && await confirmed(p, entry)) return remember(entry, p);
       } catch (err) { /* 继续试下一个写法 */ }
     }
 
@@ -88,7 +138,7 @@
         if (hit.project_type && hit.project_type !== 'mod') continue;
         if (!sameHit(entry, hit)) continue;
         const p = await MC.api.modrinth.project(hit.project_id);
-        if (p && await confirmed(p, entry)) return p;
+        if (p && await confirmed(p, entry)) return remember(entry, p);
       }
     } catch (err) { /* 搜不到就算了 */ }
     return null;
@@ -129,5 +179,5 @@
     };
   }
 
-  MC.updates = { check, projectUrl, findProject };
+  MC.updates = { check, projectUrl, findProject, cachedProject: cachedFound };
 })(globalThis);

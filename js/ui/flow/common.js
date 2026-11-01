@@ -26,6 +26,11 @@
     const mid = e && e.id ? String(e.id).toLowerCase() : '';
     const pid = mid ? (st.modProject || {})[mid] : '';
     if (pid && (st.projects || {})[pid]) return st.projects[pid];
+    /* 扫描前查过的识别结果（localStorage 缓存），下次扫描直接有图标 */
+    try {
+      const hit = MC.updates && MC.updates.cachedProject ? MC.updates.cachedProject(e) : null;
+      if (hit) return hit;
+    } catch (err) { /* ignore */ }
     return null;
   }
 
