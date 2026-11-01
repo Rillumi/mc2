@@ -1346,8 +1346,12 @@ const server = http.createServer(async (req, res) => {
 });
 
 function openBrowser(url) {
-  if (process.platform === 'win32') exec('start "" "' + url + '"');
-  else if (process.platform === 'darwin') exec('open "' + url + '"');
+  if (process.platform === 'win32') {
+    // 优先用 Edge 打开；没装 Edge 再退回系统默认浏览器
+    exec('start "" msedge "' + url + '"', err => {
+      if (err) exec('start "" "' + url + '"');
+    });
+  } else if (process.platform === 'darwin') exec('open "' + url + '"');
   else exec('xdg-open "' + url + '"');
 }
 
