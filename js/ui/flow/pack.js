@@ -15,13 +15,19 @@
     touch();
     try {
       const picked = MC.selector.selectedRows(st, st.analysis);
+      // 拖入的文件直接读；整合包扫出来的条目按包内路径回读
+      const readData = async e => {
+        if (e.file) return new Uint8Array(await e.file.arrayBuffer());
+        if (e.packName && e.packPath && MC.flowScan.readPackedBytes) {
+          return await MC.flowScan.readPackedBytes(e.packName, e.packPath);
+        }
+        return null;
+      };
       const localJars = [];
       for (const row of picked) {
-        if (!row.entry.file) continue;
-        localJars.push({
-          name: row.entry.fileName,
-          data: new Uint8Array(await row.entry.file.arrayBuffer())
-        });
+        const data = await readData(row.entry);
+        if (!data) continue;
+        localJars.push({ name: row.entry.fileName, data });
       }
       const adapted = Object.keys(st.adapt || {}).map(k => st.adapt[k])
         .filter(x => x.added && x.status === 'ok' && x.version && x.project);
@@ -30,8 +36,10 @@
       const extras = [];
       if (st.includePacks) {
         for (const o of (st.analysis.others || [])) {
-          if (!o.file || (o.kind !== 'resourcepack' && o.kind !== 'shader')) continue;
-          extras.push({ kind: o.kind, name: o.fileName, data: new Uint8Array(await o.file.arrayBuffer()) });
+          if (o.kind !== 'resourcepack' && o.kind !== 'shader') continue;
+          const data = await readData(o);
+          if (!data) continue;
+          extras.push({ kind: o.kind, name: o.fileName, data });
         }
       }
 

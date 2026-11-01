@@ -25,6 +25,7 @@
     st.rpOrder = [];
     st.rpPair = {};
     st.updates = {};
+    st.packSources = [];
   }
 
   /** 这个文件是整合包吗（.mrpack 或带 mods/ 清单的 .zip），是就返回类型 */
@@ -60,11 +61,12 @@
     let z = packZips.get(file);
     if (!z) {
       try { z = MC.zip.parseCentral(await file.arrayBuffer()); } catch (err) { return null; }
+      packZips.set(file, z);
     }
     const type = MC.modpack.detect(z.map);
     if (!type) return null;
 
-    const pack = { name: file.name, type, title: '', env: {}, online: 0, entries: [], skipped: 0, empty: false };
+    const pack = { name: file.name, file, type, title: '', env: {}, online: 0, entries: [], skipped: 0, empty: false };
     if (type === 'mrpack') {
       try {
         const idx = JSON.parse(await MC.zip.readEntry(z, 'modrinth.index.json') || '{}');
@@ -100,6 +102,8 @@
         const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
         const entry = newDiffEntry(name.split('/').pop(), name, bytes.length, pack.entries.length);
         entry.filePath = file.name + ' / ' + name;
+        entry.packName = file.name;
+        entry.packPath = name;
         const res = await inspectInto(entry, buf);
         if (res.kind === 'mod' || res.kind === 'resourcepack' || res.kind === 'shader') pack.entries.push(entry);
         else pack.skipped++;
@@ -112,7 +116,19 @@
     return pack;
   }
 
-  /* ---------- 把文件读成条目（整理页 / 对比页共用） ---------- */
+  /** 打包时按「整合包名 + 内部路径」回读 jar，避免把整包字节一直留在内存里 */
+  async function readPackedBytes(packName, path) {
+    const src = (S().packSources || []).find(p => p.name === packName);
+    if (!src || !src.file) return null;
+    let z = packZips.get(src.file);
+    if (!z) {
+      try { z = MC.zip.parseCentral(await src.file.arrayBuffer()); } catch (err) { return null; }
+      packZips.set(src.file, z);
+    }
+    return MC.zip.readEntryBytes(z, path);
+  }
+
+  /** 把文件读成条目（整理页 / 对比页共用） */
   async function buildEntries(files, note) {
     const st = S();
     const out = [];
@@ -203,6 +219,8 @@
     // 一键重扫 / 拖入整合包：整个替换，这样删掉的模组也会从列表消失
     if (hasPack) {
       resetAll(st);
+      // 记下源整合包，打包时按路径回读 jar 字节（条目不保留 File 对象）
+      st.packSources = scanned.map(p => ({ name: p.name, file: p.file }));
       // 整合包清单里写着加载器和 MC 版本，先套上再分析
       if (packEnv.loader && MC.store.DEFAULTS[packEnv.loader]) st.env.loader = packEnv.loader;
       if (packEnv.loaderVersion) st.env.loaderVersion = packEnv.loaderVersion;
@@ -402,5 +420,5 @@
       (nested.length ? '（其中 ' + nested.length + ' 个从整合包内解出）' : ''));
   }
 
-  MC.flowScan = { buildEntries, importFiles, expandModpack, newDiffEntry, importDiff };
+  MC.flowScan = { buildEntries, importFiles, expandModpack, newDiffEntry, importDiff, readPackedBytes };
 })(globalThis);
