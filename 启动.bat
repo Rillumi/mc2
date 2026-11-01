@@ -7,7 +7,6 @@ where node >nul 2>nul
 if not errorlevel 1 (
   echo 正在启动 ModPilot，稍后会自动打开默认浏览器...
   echo 默认地址：http://127.0.0.1:8737/index.html（端口被占会自动往后换，以窗口里显示的为准）
-  echo 后台地址：http://127.0.0.1:8737/admin（只能在本机打开）
   node server.js
   if errorlevel 1 (
     echo.
