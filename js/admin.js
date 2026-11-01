@@ -12,6 +12,7 @@
     { key: 'names', label: '中文名库' },
     { key: 'links', label: '链接库' },
     { key: 'cats', label: '分类库' },
+    { key: 'afdianmap', label: '爱发电映射表' },
     { key: 'afdian', label: '爱发电缓存' }
   ];
   const SITES = {
@@ -27,6 +28,7 @@
     primary: '',
     overview: null,
     afdian: null,
+    afdianMap: null,
     total: 0,
     rows: []
   };
@@ -99,6 +101,7 @@
       { n: o.names.total, label: '中文名记录', sub: '已命中 ' + o.names.hit + ' · 没查到 ' + o.names.miss },
       { n: o.links, label: '下载链接', sub: '手动保存的条目' },
       { n: o.cats, label: '分类记录', sub: (o.pcats || []).length + ' 种主分类' },
+      { n: o.afdianMap, label: '映射表记录', sub: '模组/作者 → 爱发电主页' },
       { n: o.afdian.creators, label: '爱发电作者', sub: o.afdian.posts + ' 条发电帖' }
     ];
     $('#stats').innerHTML = cards.map(c =>
@@ -154,17 +157,24 @@
     const t = view.tab;
     $('#clearBtn').textContent = t === 'names' ? '清空中文名库'
       : t === 'links' ? '清空链接库'
-        : t === 'cats' ? '清空分类库' : '清空爱发电缓存';
+        : t === 'cats' ? '清空分类库'
+          : t === 'afdianmap' ? '清空映射表' : '清空爱发电缓存';
     $('#missBtn').hidden = t !== 'names';
+    const noFile = t === 'afdianmap';
+    if ($('#expJson')) $('#expJson').hidden = noFile;
+    if ($('#expCsv')) $('#expCsv').hidden = noFile;
+    if ($('#impBtn')) $('#impBtn').hidden = noFile;
     $('#q').placeholder = t === 'names' ? '搜索 modId / 中文名 / 英文名 / 缩写'
       : t === 'links' ? '搜索模组名 / URL / 备注'
         : t === 'cats' ? '搜索 modId / 分类'
-          : '搜索作者名 / user_id / 简介';
+          : t === 'afdianmap' ? '搜索键 / 作者名 / 主页'
+            : '搜索作者名 / user_id / 简介';
   }
 
   /* ---------- 列表 ---------- */
   async function load() {
     if (view.tab === 'afdian') return loadAfdian();
+    if (view.tab === 'afdianmap') return loadAfdianMap();
     const tab = view.tab;
     const qs = new URLSearchParams();
     qs.set('page', String(st.pg[tab] || 1));
@@ -258,6 +268,50 @@
     return '<table class="adm-table">' + head + body + '</table>';
   }
 
+  /* ---------- 爱发电公开映射表 ---------- */
+  async function loadAfdianMap() {
+    $('#list').innerHTML = '<div class="adm-empty">正在读取…</div>';
+    try {
+      view.afdianMap = await api('/api/admin/afdian-map');
+      renderAfdianMap();
+    } catch (err) {
+      $('#list').innerHTML = '<div class="adm-empty">' + esc(err.message) + '</div>';
+      $('#pager').innerHTML = '';
+    }
+  }
+
+  function afdianMapList() {
+    const all = (view.afdianMap && view.afdianMap.rows) || [];
+    const q = view.q.toLowerCase();
+    if (!q) return all;
+    return all.filter(r => [r.key, r.name, r.home, r.source]
+      .some(v => String(v || '').toLowerCase().indexOf(q) >= 0));
+  }
+
+  function renderAfdianMap() {
+    const list = afdianMapList();
+    if (!list.length) {
+      $('#list').innerHTML = '<div class="adm-empty">' +
+        (view.afdianMap && (view.afdianMap.rows || []).length ? '没有匹配的记录' : '还没有映射记录（去工具页点「同步到公开映射表」）') + '</div>';
+      $('#pager').innerHTML = '';
+      return;
+    }
+    const pg = MC.pager.slice('afdianmap', list.length);
+    const rows = list.slice(pg.start, pg.end);
+    const head = '<tr><th>键（modId / 名字）</th><th>作者</th><th>爱发电主页</th><th>来源</th><th>更新时间</th><th></th></tr>';
+    const body = rows.map(r => '<tr>' +
+      '<td class="mono">' + esc(r.key) + '</td>' +
+      '<td class="cell-strong">' + esc(r.name || '—') + '</td>' +
+      '<td>' + (r.home
+        ? '<a class="adm-url" href="' + esc(r.home) + '" target="_blank" rel="noopener">' + esc(r.home) + '</a>'
+        : '<span class="muted">—</span>') + '</td>' +
+      '<td class="muted">' + esc(r.source || '—') + '</td>' +
+      '<td class="muted">' + fmtTime(r.at) + '</td>' +
+      '<td class="cell-act"><button class="btn line xs danger" type="button" data-act="del-map" data-id="' + esc(r.key) + '">删除</button></td></tr>').join('');
+    $('#list').innerHTML = '<table class="adm-table">' + head + body + '</table>';
+    $('#pager').innerHTML = MC.pager.html('afdianmap', pg, { unit: '条' });
+  }
+
   /* ---------- 爱发电 ---------- */
   async function loadAfdian() {
     $('#list').innerHTML = '<div class="adm-empty">正在读取…</div>';
@@ -309,6 +363,7 @@
   async function refresh() {
     await loadOverview();
     if (view.tab === 'afdian') view.afdian = null;
+    if (view.tab === 'afdianmap') view.afdianMap = null;
     await load();
   }
 
@@ -333,6 +388,13 @@
     await refresh();
   }
 
+  async function delMap(key) {
+    if (!confirm('从映射表删除「' + key + '」？')) return;
+    await postJson('/api/admin/afdian-map/delete', { key });
+    toast('已删除 ' + key);
+    await refresh();
+  }
+
   /* 人工设定的主分类记为 source=manual，主程序读库时优先用它，不再被 Modrinth 覆盖 */
   async function setCat(id, primary) {
     const row = view.rows.find(x => x.id === id) || {};
@@ -346,6 +408,7 @@
       names: ['/api/admin/names/clear', { mode: 'all' }, '清空整个中文名库（数据库 + 文件缓存）？主程序下次会重新去 MC百科查。'],
       links: ['/api/admin/links/clear', {}, '清空全部下载链接？'],
       cats: ['/api/admin/cats/clear', {}, '清空整个分类库？主程序会重新从 Modrinth 拉。'],
+      afdianmap: ['/api/admin/afdian-map/clear', {}, '清空整个爱发电公开映射表？所有人都会失去这份作者主页。'],
       afdian: ['/api/admin/afdian/clear', {}, '清空爱发电作者缓存？登录令牌会保留。']
     };
     const hit = map[tab];
@@ -443,8 +506,10 @@
     if (act === 'del-name') return delName(el.dataset.id).catch(err => toast(err.message));
     if (act === 'del-link') return delLink(el.dataset.id).catch(err => toast(err.message));
     if (act === 'del-cat') return delCat(el.dataset.id).catch(err => toast(err.message));
+    if (act === 'del-map') return delMap(el.dataset.id).catch(err => toast(err.message));
     if (act === 'pg') {
-      const total = view.tab === 'afdian' ? afdianList().length : view.total;
+      const total = view.tab === 'afdian' ? afdianList().length
+        : view.tab === 'afdianmap' ? afdianMapList().length : view.total;
       const pg = MC.pager.slice(view.tab, total);
       let n = pg.page;
       if (el.dataset.pg === 'prev') n = pg.page - 1;
@@ -471,7 +536,8 @@
 
   document.addEventListener('keydown', e => {
     if (e.target.matches('[data-act="pgjump"]') && e.key === 'Enter') {
-      const total = view.tab === 'afdian' ? afdianList().length : view.total;
+      const total = view.tab === 'afdian' ? afdianList().length
+        : view.tab === 'afdianmap' ? afdianMapList().length : view.total;
       const pg = MC.pager.slice(view.tab, total);
       const n = Number(e.target.value);
       if (!n) return;

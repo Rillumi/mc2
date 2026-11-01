@@ -979,13 +979,16 @@ const server = http.createServer(async (req, res) => {
           const names = await adminNames();
           let links = 0;
           let cats = 0;
+          let afMap = 0;
           let pcats = [];
           if (dbReady) {
             try {
               const [[lc]] = await pool.query('SELECT COUNT(*) n FROM links');
               const [[cc]] = await pool.query('SELECT COUNT(*) n FROM mod_cats');
+              const [[mc]] = await pool.query('SELECT COUNT(*) n FROM afdian_map');
               links = Number(lc.n) || 0;
               cats = Number(cc.n) || 0;
+              afMap = Number(mc.n) || 0;
               const [pc] = await pool.query("SELECT primary_cat, COUNT(*) n FROM mod_cats WHERE primary_cat <> '' GROUP BY primary_cat ORDER BY n DESC");
               pcats = pc.map(x => ({ cat: x.primary_cat, n: Number(x.n) }));
             } catch (err) { /* 先把能显示的显示出来 */ }
@@ -994,7 +997,7 @@ const server = http.createServer(async (req, res) => {
           return sendJson(res, 200, {
             ok: true, db: dbReady, dbError, database: cfg.database,
             names: { total: names.length, hit: names.filter(n => n.zh).length, miss: names.filter(n => !n.zh).length },
-            links, cats, pcats,
+            links, cats, pcats, afdianMap: afMap,
             sites: SITES.map(s => ({ key: s.key, label: s.label })),
             files: { zh: fileInfo(ZH_FILE), afdian: fileInfo(AFDIAN_FILE) },
             afdian: {
@@ -1168,6 +1171,34 @@ const server = http.createServer(async (req, res) => {
           d.creators = [];
           d.updatedAt = 0;
           afdianWrite();
+          return sendJson(res, 200, { ok: true });
+        }
+
+        /* 爱发电公开映射表（MySQL 里的共用数据） */
+        if (urlPath === '/api/admin/afdian-map' && req.method === 'GET') {
+          if (!dbReady) return sendJson(res, 200, { ok: true, rows: [], reason: dbError });
+          const [rows] = await pool.query(
+            'SELECT map_key, author, home, source, updated_at FROM afdian_map ORDER BY updated_at DESC LIMIT 2000'
+          );
+          return sendJson(res, 200, {
+            ok: true,
+            rows: rows.map(r => ({
+              key: r.map_key, name: r.author || '', home: r.home || '', source: r.source || '',
+              at: r.updated_at ? new Date(r.updated_at).getTime() : 0
+            }))
+          });
+        }
+
+        if (urlPath === '/api/admin/afdian-map/delete' && req.method === 'POST') {
+          if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+          const body = await bodyJson(req);
+          if (body.key) await pool.query('DELETE FROM afdian_map WHERE map_key = ?', [mapKey(body.key)]);
+          return sendJson(res, 200, { ok: true });
+        }
+
+        if (urlPath === '/api/admin/afdian-map/clear' && req.method === 'POST') {
+          if (!dbReady) return sendJson(res, 503, { ok: false, reason: dbError });
+          await pool.query('DELETE FROM afdian_map');
           return sendJson(res, 200, { ok: true });
         }
 
