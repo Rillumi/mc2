@@ -27,7 +27,7 @@
       for (const row of picked) {
         const data = await readData(row.entry);
         if (!data) continue;
-        localJars.push({ name: row.entry.fileName, data });
+        localJars.push({ name: row.entry.fileName, sha1: row.entry.sha1 || '', data });
       }
       const adapted = Object.keys(st.adapt || {}).map(k => st.adapt[k])
         .filter(x => x.added && x.status === 'ok' && x.version && x.project);
@@ -61,17 +61,21 @@
       }
 
       let result;
+      const localList = () => picked.map(row => {
+        const e = row.entry || {};
+        const p = MC.flowCommon.projectForEntry(st, e, row.group);
+        return {
+          name: e.nameZh || e.name || e.fileName || '?',
+          version: e.version || '',
+          source: p ? 'Modrinth' : '本地文件',
+          url: p ? 'https://modrinth.com/mod/' + (p.slug || p.id) : ''
+        };
+      });
+      const packTitle = (st.packSources[0] && st.packSources[0].name.replace(/\.(mrpack|zip)$/i, '')) ||
+        ('ModPilot ' + st.env.loader + ' ' + st.env.mc);
+
       if (format === 'list') {
-        const local = picked.map(row => {
-          const e = row.entry || {};
-          const p = MC.flowCommon.projectForEntry(st, e, row.group);
-          return {
-            name: e.nameZh || e.name || e.fileName || '?',
-            version: e.version || '',
-            source: p ? 'Modrinth' : '本地文件',
-            url: p ? 'https://modrinth.com/mod/' + (p.slug || p.id) : ''
-          };
-        });
+        const local = localList();
         deps.forEach(d => local.push({
           name: d.project.title || d.modId,
           version: (d.version && d.version.version_number) || '',
@@ -90,8 +94,57 @@
         st.progress = '正在生成下载清单…';
         touch();
         result = await MC.pack.buildListZip({
-          title: (st.packSources[0] && st.packSources[0].name.replace(/\.[^.]+$/, '')) || 'ModPilot 下载清单',
-          env: st.env, local, online: onlineClean, original
+          title: packTitle, env: st.env, local, online: onlineClean, original
+        });
+      } else if (format === 'curse') {
+        if (!MC.api.curseforge.hasKey()) {
+          toast('先设置 CurseForge key（打包卡下面「CurseForge key」那一行）');
+          return;
+        }
+        st.progress = '正在反查 CurseForge 指纹…';
+        touch();
+        const items = localJars.map(j => ({
+          fp: MC.murmur2.fingerprint(j.data),
+          name: j.name, size: j.data.length, sha1: j.sha1
+        }));
+        const hook = await MC.api.curseforge.lookup(items);
+        const matched = hook.matches || {};
+        const matchedIds = {};
+        Object.keys(matched).forEach(fp => {
+          if (matched[fp] && matched[fp].fileID) matchedIds[matched[fp].fileID] = 1;
+        });
+
+        // 清单里只留没打进包的：已经放进 overrides/mods 的不再让启动器下一次
+        const files = [];
+        const seenFile = {};
+        (st.packSources || []).forEach(src => (src.onlineList || []).forEach(o => {
+          if (!o.projectID || !o.fileID || matchedIds[o.fileID]) return;
+          const k = o.projectID + ':' + o.fileID;
+          if (seenFile[k]) return;
+          seenFile[k] = 1;
+          files.push({ projectID: o.projectID, fileID: o.fileID });
+        }));
+
+        // Modrinth 前置直接下好放进 overrides/mods，CF 清单里没有它们的位置
+        const jars = localJars.slice();
+        for (const dep of deps) {
+          const f = dep.version && dep.version.files && dep.version.files[0];
+          if (!f) continue;
+          st.progress = '正在下载 ' + (dep.project.title || dep.project.slug) + '…';
+          touch();
+          try {
+            const bytes = await MC.api.modrinth.download(f.url);
+            jars.push({ name: f.filename || ((dep.project.slug || 'mod') + '.jar'), data: bytes });
+          } catch { /* 下不下来就只能靠安装说明里留个记录 */ }
+        }
+        if (!hook.ok) toast('指纹反查没成功：' + hook.reason + '（清单里可能还留着已打包的模组）');
+
+        st.progress = '正在生成 CurseForge 整合包…';
+        touch();
+        result = await MC.pack.buildCurse({
+          title: packTitle, env: st.env, jars, extras, overrides, files,
+          local: localList(), online: files,
+          matched: Object.keys(matchedIds).length
         });
       } else if (format === 'mrpack') {
         st.progress = '正在生成 .mrpack…';

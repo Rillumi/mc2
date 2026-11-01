@@ -107,6 +107,28 @@
     'toggle-others'(el, st) {
       st.showOthers = !st.showOthers;
       touch();
+    },
+
+    cfkey() {
+      const cf = MC.api && MC.api.curseforge;
+      if (!cf) return;
+      const v = window.prompt(
+        '粘贴 CurseForge API key\n\n只存在这台电脑的 localStorage，不会上传、也不会进仓库。留空 = 清除。',
+        cf.key()
+      );
+      if (v === null) return;
+      cf.setKey(v);
+      touch();
+      C.toast(cf.hasKey() ? '已保存 key（只存在这台电脑）' : '已清除 key');
+    },
+
+    cftest() {
+      const cf = MC.api && MC.api.curseforge;
+      if (!cf) return;
+      C.toast('正在测试 key…');
+      cf.test().then(res => {
+        C.toast(res.ok ? 'CurseForge key 可用' : 'CurseForge key 有问题：' + res.reason);
+      });
     }
   });
 })(globalThis);

@@ -37,6 +37,7 @@
     ];
 
     const disabled = (!hasContent || s.busy) ? ' disabled' : '';
+    const cfKey = !!(MC.api && MC.api.curseforge && MC.api.curseforge.hasKey());
     const verLabel = s.env.loader === 'Fabric' ? 'Fabric Loader' : (s.env.loader + ' 版本');
 
     el.innerHTML =
@@ -85,10 +86,18 @@
       icon('<path d="M12 3v11m0 0 4-4m-4 4-4-4"/><path d="M4 16v4h16v-4"/>', '#fff') + '生成 .mrpack</button>' +
       '<button type="button" class="btn line full" data-act="pack" data-format="zip"' + disabled + '>生成普通 zip（mods 文件夹）</button>' +
       '<button type="button" class="btn line full" data-act="pack" data-format="list"' + (s.analysis ? '' : ' disabled') + '>生成下载清单（manifest.json + modlist.html）</button>' +
+      '<button type="button" class="btn line full" data-act="pack" data-format="curse"' + disabled + '>生成 CurseForge 整合包（按 projectID/fileID）</button>' +
+      '</div>' +
+
+      '<div class="cfkey" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:12px;color:var(--ink-3)">' +
+      '<span>CurseForge key：' + (cfKey ? '已设置（只存这台电脑）' : '未设置，指纹反查用不了') + '</span>' +
+      '<button type="button" class="btn xs line" data-act="cfkey">' + (cfKey ? '更换 / 清除' : '设置') + '</button>' +
+      (cfKey ? '<button type="button" class="btn xs line" data-act="cftest">测试</button>' : '') +
       '</div>' +
 
       '<div class="hintbox">.mrpack：PCL 2.13 以上直接导入，在线前置按清单自动下载，本地 jar 放进 overrides/mods。<br>' +
       '普通 zip：会把在线前置也下载好一起打包，离线也能用。<br>' +
+      'CurseForge 整合包：先按文件指纹反查 projectID/fileID，已经打进包的从清单里去掉，不会重复下载；Modrinth 前置直接下好放 overrides/mods。<br>' +
       '下载清单：只出清单不出 jar，manifest.json 是 CurseForge 结构（只有 projectID/fileID 的在线项写得进去），modlist.html 是人看的完整表。<br>' +
       '从整合包扫描进来的，会顺带复制原包的 config、defaultconfigs、kubejs、emotes、resourcepacks、shaderpacks 和 options.txt（不带 PCL、存档状态和 ffmpeg）。<br>' +
       '写进清单的加载器版本：<b>' + esc(s.env.loaderVersion || '未填') + '</b>（顶部「' + esc(verLabel) + '」可改）</div>';
