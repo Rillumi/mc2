@@ -8,8 +8,26 @@
   const GAME_MC = 432;
   const TIMEOUT = 12000;
 
+  /* localStorage 按端口隔离（8737/8738 各存各的），cookie 只按主机隔离，
+     所以两份都写：换端口后 key 还在 */
+  function cookieGet(name) {
+    try {
+      const m = document.cookie.match(new RegExp('(?:^|; )' + name + '=([^;]*)'));
+      return m ? decodeURIComponent(m[1]) : '';
+    } catch { return ''; }
+  }
+
+  function cookieSet(name, v) {
+    try {
+      document.cookie = v
+        ? name + '=' + encodeURIComponent(v) + '; path=/; max-age=31536000; SameSite=Lax'
+        : name + '=; path=/; max-age=0; SameSite=Lax';
+    } catch { /* ignore */ }
+  }
+
   function key() {
-    try { return localStorage.getItem(KEY) || ''; } catch { return ''; }
+    try { const v = localStorage.getItem(KEY); if (v) return v; } catch { /* ignore */ }
+    return cookieGet('modpilot_cf_key');
   }
 
   function hasKey() {
@@ -17,11 +35,12 @@
   }
 
   function setKey(k) {
+    const v = String(k == null ? '' : k).trim();
     try {
-      const v = String(k == null ? '' : k).trim();
       if (v) localStorage.setItem(KEY, v);
       else localStorage.removeItem(KEY);
     } catch { /* 隐私模式存不了就算了 */ }
+    cookieSet('modpilot_cf_key', v);
   }
 
   async function request(path, opts) {

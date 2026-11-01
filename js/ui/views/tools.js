@@ -291,14 +291,16 @@
     return '<div class="vpanel toolcard">' +
       '<div class="vhead"><h3>设置</h3></div>' +
       '<div class="vbody">' +
-      '<div class="hint">CurseForge API key：只存在这台电脑（localStorage），不上传、不进仓库。' +
+      '<div class="hint">CurseForge API key：只存在这台电脑的浏览器里，不上传、不进仓库。' +
       '生成 CurseForge 整合包时用它按文件指纹反查 mod 的 projectID/fileID。</div>' +
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:10px;font-size:13px">' +
       '<span>状态：' + (ok ? '已设置' : '未设置') + '</span>' +
       '<button type="button" class="btn line sm" data-act="cfkey">' + (ok ? '更换 / 清除' : '填 key') + '</button>' +
+      '<a class="btn line sm" href="https://console.curseforge.com/#/api-keys" target="_blank" rel="noopener">去申请 key</a>' +
       (ok ? '<button type="button" class="btn line sm" data-act="cftest">测试</button>' : '') +
       '</div>' +
-      '<div class="hint" style="margin-top:8px">免费申请：console.curseforge.com → API Keys → Create API Key。</div>' +
+      '<div class="hint" style="margin-top:8px">免费申请：console.curseforge.com → API Keys → Create API Key。' +
+      'key 同时存在 localStorage 和 cookie，换端口不会丢；只在这台电脑的浏览器里。</div>' +
       '<div class="hint" style="margin-top:12px">后台补图标：分析完成后按 modId 查 Modrinth，只拉项目元信息（图标 / 标题 / 链接），' +
       '不拉正文；请求间隔 320ms，失败自动跳过。模组多时会多跑一会儿网络请求。</div>' +
       '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px;font-size:13px">' +
