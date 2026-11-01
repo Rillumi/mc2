@@ -1408,6 +1408,7 @@ initDb().then(() => {
       const url = 'http://127.0.0.1:' + port + '/index.html';
       console.log('');
       console.log('  ModPilot 已启动：' + url);
+      console.log('  后台地址：http://127.0.0.1:' + port + '/admin');
       console.log('  关闭这个窗口就会停止本地服务。');
       console.log('');
       if (process.env.MODPILOT_NO_OPEN !== '1') openBrowser(url);
