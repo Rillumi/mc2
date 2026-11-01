@@ -217,6 +217,7 @@
     st.descTr[gid] = res.ok
       ? { status: 'ok', text: res.text }
       : { status: 'error', reason: res.reason || '连不上翻译接口' };
+    if (!res.ok && MC.uiBase) MC.uiBase.toast('机翻没成功：' + (res.reason || '连不上翻译接口'));
     touch();
   }
 
@@ -299,6 +300,7 @@
     st.bodyTr[gid] = res.ok
       ? { status: 'ok', text: res.text }
       : { status: 'error', reason: res.reason || '连不上翻译接口' };
+    if (!res.ok && MC.uiBase) MC.uiBase.toast('机翻没成功：' + (res.reason || '连不上翻译接口'));
     touch();
   }
 

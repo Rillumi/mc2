@@ -125,10 +125,10 @@
       note = '机翻只作参考，模组名和专有名词可能翻歪；想看原句点「作者原文」。';
     } else if (tr && tr.status === 'error') {
       body = '<div class="descbox raw">' + esc(e.description) + '</div>';
-      note = '机翻没成功（' + (tr.reason || '网络问题') + '），先显示原文。点一下「中文（机翻）」可以再试。';
+      note = '机翻没成功（' + (tr.reason || '网络问题') + '），先显示原文；点「中文（机翻）」可以重试。';
     } else {
       body = '<div class="descbox raw">' + esc(e.description) + '</div>';
-      note = '正在机翻…（第一次要连一下翻译接口，文本会发给 Google 翻译）';
+      note = '正在机翻…（第一次要连一下在线翻译接口，文本会发给 Google 翻译或备用源）';
     }
 
     return '<div class="dsec-label">这个模组是干什么的<span class="dsrc">来源：jar 里作者写的说明</span></div>' +
@@ -161,7 +161,7 @@
     if (lang === 'en' || !tr || tr.status !== 'ok') {
       body = '<div class="descbox raw">' + esc(m.text || '（空）') + '</div>';
       if (lang === 'zh') note = tr && tr.status === 'error'
-        ? '机翻没成功（' + (tr.reason || '网络问题') + '），先看英文。'
+        ? '机翻没成功（' + (tr.reason || '网络问题') + '），先看英文；点「中文（机翻）」可以重试。'
         : '正在机翻…（长文要分几段翻译，稍等一会儿）';
       else note = '这是 Modrinth 上的英文原文。';
     } else {
