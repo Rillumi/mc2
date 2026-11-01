@@ -73,6 +73,11 @@ function siteOf(url) {
   return 'personal';
 }
 
+/* 映射表键：去掉空格标点，只留字母数字和汉字，和前端 norm() 一致 */
+function mapKey(s) {
+  return String(s || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '').slice(0, 190);
+}
+
 async function initDb() {
   if (!fs.existsSync(path.join(ROOT, 'node_modules', 'mysql2'))) {
     dbError = '没装 mysql2（在项目目录运行 npm install mysql2）';
@@ -121,6 +126,14 @@ async function initDb() {
       cats VARCHAR(255) NOT NULL DEFAULT '',
       primary_cat VARCHAR(32) NOT NULL DEFAULT '',
       source VARCHAR(20) NOT NULL DEFAULT 'modrinth',
+      updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
+    // 爱发电公开映射表：模组/作者 → 作者主页（所有人共用，不属于某个账号）
+    await pool.query(`CREATE TABLE IF NOT EXISTS afdian_map (
+      map_key VARCHAR(190) PRIMARY KEY,
+      author VARCHAR(120) NOT NULL DEFAULT '',
+      home VARCHAR(400) NOT NULL DEFAULT '',
+      source VARCHAR(20) NOT NULL DEFAULT 'manual',
       updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4`);
     dbReady = true;
@@ -816,6 +829,42 @@ const server = http.createServer(async (req, res) => {
           } catch (err) { /* 单条失败不影响其他 */ }
         }
         return sendJson(res, 200, { ok: true, saved });
+      }
+
+      /* 爱发电公开映射表：所有人共用（键可以是 modId / 中文名 / 作者名） */
+      if (urlPath === '/api/afdian-map' && req.method === 'GET') {
+        if (!dbReady) return sendJson(res, 200, { ok: false, reason: dbError, map: {}, rows: [] });
+        const [rows] = await pool.query(
+          'SELECT map_key, author, home, source FROM afdian_map ORDER BY updated_at DESC LIMIT 2000'
+        );
+        const map = {};
+        rows.forEach(r => {
+          map[r.map_key] = { name: r.author || '', home: r.home || '', source: r.source || '' };
+        });
+        return sendJson(res, 200, { ok: true, db: true, count: rows.length, map, rows });
+      }
+
+      if (urlPath === '/api/afdian-map' && req.method === 'POST') {
+        if (!dbReady) return sendJson(res, 503, { ok: false, reason: '数据库没连上：' + dbError });
+        const body = await bodyJson(req);
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 500);
+        let saved = 0;
+        for (const it of items) {
+          const key = mapKey((it && (it.key || it.id || it.name)) || '');
+          const home = String((it && it.home) || '').trim().slice(0, 400);
+          if (!key) continue;
+          if (!/^https?:\/\/([^/]+\.)?(afdian\.(com|net)|ifdian\.net)\//i.test(home)) continue;
+          try {
+            await pool.query(
+              'INSERT INTO afdian_map (map_key, author, home, source) VALUES (?, ?, ?, ?) ' +
+              'ON DUPLICATE KEY UPDATE author = VALUES(author), home = VALUES(home), source = VALUES(source)',
+              [key, String((it && it.name) || '').slice(0, 120), home,
+                String((it && it.source) || 'manual').slice(0, 20)]
+            );
+            saved++;
+          } catch (err) { /* 单条失败不影响其他 */ }
+        }
+        return sendJson(res, 200, { ok: true, saved, skipped: items.length - saved });
       }
 
       if (urlPath === '/api/links/delete' && req.method === 'POST') {

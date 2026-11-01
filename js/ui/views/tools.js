@@ -221,6 +221,9 @@
       '<button type="button" class="btn grad sm" data-act="afdianrefresh"' + (a.busy ? ' disabled' : '') + '>' +
       (a.busy ? '更新中…' : '更新爱发电') + '</button>' +
       '<span class="hint">抓一次大约十几秒，会顺便拉到每位作者最近的发电帖。</span></div>' +
+      '<div class="actions" style="margin-top:8px">' +
+      '<button type="button" class="btn line sm" data-act="afdianmapsync">同步到公开映射表</button>' +
+      '<span class="hint">把这批作者主页写进 MySQL，其他人打开详情页也能看到「作者主页」。</span></div>' +
       '</div></div>';
   }
 

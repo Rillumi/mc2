@@ -36,5 +36,35 @@
     return null;
   }
 
-  MC.afdianMap = { find, isAfdian, MAP };
+  /* 后端（MySQL）里的共用表：键和本地表同一种写法，读回来直接并进 MAP */
+  let remote = {};
+
+  async function load() {
+    try {
+      const r = await fetch('/api/afdian-map', { cache: 'no-store' });
+      const j = await r.json();
+      if (j && j.ok && j.map) {
+        remote = j.map;
+        Object.keys(remote).forEach(k => {
+          if (!MAP[k]) MAP[k] = remote[k];
+        });
+      }
+    } catch (err) { /* 静态打开、没起服务时忽略 */ }
+    return remote;
+  }
+
+  async function save(items) {
+    const r = await fetch('/api/afdian-map', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items || [] })
+    });
+    if (!r.ok) throw new Error('HTTP ' + r.status);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.reason || '写入失败');
+    await load();
+    return j;
+  }
+
+  MC.afdianMap = { find, isAfdian, MAP, load, save, norm };
 })(globalThis);

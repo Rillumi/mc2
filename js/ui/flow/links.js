@@ -103,5 +103,21 @@
     }
   }
 
-  MC.flowLinks = { refreshAfdian, syncDbState, addLink, removeLink, bulkLinks };
+  /* ---------- 爱发电：把作者主页写进公开映射表（所有人共用） ---------- */
+  async function syncAfdianMap() {
+    const st = S();
+    const list = (st.afdian && st.afdian.creators) || [];
+    const items = list
+      .filter(c => c && c.home && c.name && MC.afdianMap.isAfdian(c.home))
+      .map(c => ({ key: c.name, name: c.name, home: c.home, source: 'afdian-sync' }));
+    if (!items.length) return toast('还没有作者名单，先点「更新爱发电」');
+    try {
+      const r = await MC.afdianMap.save(items);
+      toast(r.saved ? '已写进公开映射表 ' + r.saved + ' 条，其他人打开也能看到' : '没写进去（本地服务或数据库没起来）');
+    } catch (err) {
+      toast('写入映射表失败：' + (err.message || err));
+    }
+  }
+
+  MC.flowLinks = { refreshAfdian, syncAfdianMap, syncDbState, addLink, removeLink, bulkLinks };
 })(globalThis);

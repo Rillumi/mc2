@@ -67,6 +67,10 @@
 
     afdianrefresh() {
       C.refreshAfdian();
+    },
+
+    afdianmapsync() {
+      C.syncAfdianMap();
     }
   });
 })(globalThis);

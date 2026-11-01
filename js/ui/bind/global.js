@@ -46,6 +46,7 @@
     C.loadLoaderList();
     MC.linksdb.boot().then(C.syncDbState).catch(() => C.syncDbState());
     if (MC.afdian) MC.afdian.boot().catch(() => {});
+    if (MC.afdianMap) MC.afdianMap.load().then(() => touch()).catch(() => {});
   }
 
   MC.bindGlobal = { init };
