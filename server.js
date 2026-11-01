@@ -519,6 +519,33 @@ async function mcmodSearch(title, keys, alt) {
    爱发电没有公开文档，接口是从 AfdianToMarkdown 里扒出来的：
    /api/user/get-sponsoring 拿「TA 发电的」列表，/api/post/get-list 拿每位作者的发电帖。
    需要浏览器登录后的 auth_token，存在 data/afdian.json（不会提交到 git）。 */
+/* 项目识别缓存：浏览器 localStorage 按端口隔离，切端口/换浏览器就丢，
+   所以主存一份在 data/project-map.json（本机文件，不进 git）。 */
+const PROJECT_MAP_FILE = path.join(DATA_DIR, 'project-map.json');
+const PROJECT_MAP_MAX = 2000;
+let projectMapMem = null;
+let projectMapTimer = null;
+
+function projectMapAll() {
+  if (projectMapMem) return projectMapMem;
+  projectMapMem = {};
+  try {
+    const obj = JSON.parse(fs.readFileSync(PROJECT_MAP_FILE, 'utf8'));
+    if (obj && typeof obj === 'object') projectMapMem = obj;
+  } catch (err) { /* 还没有文件 */ }
+  return projectMapMem;
+}
+
+function projectMapSave() {
+  clearTimeout(projectMapTimer);
+  projectMapTimer = setTimeout(() => {
+    try {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+      fs.writeFileSync(PROJECT_MAP_FILE, JSON.stringify(projectMapMem || {}));
+    } catch (err) { /* 写不了就算了，下次再写 */ }
+  }, 500);
+}
+
 const AFDIAN_FILE = path.join(DATA_DIR, 'afdian.json');
 const AFDIAN_UA = ZH_UA;
 const afdianSleep = ms => new Promise(r => setTimeout(r, ms));
@@ -927,6 +954,41 @@ const server = http.createServer(async (req, res) => {
 
       if (urlPath === '/api/afdian/status' && req.method === 'GET') {
         return sendJson(res, 200, Object.assign({ ok: true }, afdianJob));
+      }
+
+      /* 项目识别缓存：GET 全量，POST 合并（key = modId 或名字，p = 精简项目信息） */
+      if (urlPath === '/api/project-map' && req.method === 'GET') {
+        return sendJson(res, 200, { ok: true, map: projectMapAll() });
+      }
+
+      if (urlPath === '/api/project-map' && req.method === 'POST') {
+        const body = await bodyJson(req);
+        const items = (Array.isArray(body.items) ? body.items : []).slice(0, 200);
+        const map = projectMapAll();
+        let saved = 0;
+        items.forEach(it => {
+          const key = String((it && it.key) || '').toLowerCase().trim().slice(0, 190);
+          const p = it && it.p;
+          if (!key || !p || !p.id) return;
+          const at = Number(it.at) || Date.now();
+          const old = map[key];
+          if (old && (old.at || 0) >= at) return;
+          map[key] = { at, p: {
+            id: p.id, slug: p.slug || '', title: p.title || '',
+            project_type: p.project_type || '', icon_url: p.icon_url || '',
+            downloads: p.downloads || 0, followers: p.followers || 0,
+            updated: p.updated || '', source_url: p.source_url || '',
+            organization: p.organization || '', team: p.team || ''
+          } };
+          saved++;
+        });
+        const keys = Object.keys(map);
+        if (keys.length > PROJECT_MAP_MAX) {
+          keys.sort((a, b) => (map[b].at || 0) - (map[a].at || 0))
+            .slice(PROJECT_MAP_MAX).forEach(k => { delete map[k]; });
+        }
+        if (saved) projectMapSave();
+        return sendJson(res, 200, { ok: true, saved, count: Object.keys(map).length });
       }
 
       /* 中文名库：items = [{ id, title, slug }]，返回 { names: { id: { zh, en, abbr, url } } }

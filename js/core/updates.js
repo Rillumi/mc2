@@ -29,27 +29,69 @@
     try { return JSON.parse(localStorage.getItem(FOUND_KEY) || '{}') || {}; } catch (err) { return {}; }
   }
 
+  function trim(map) {
+    const keys = Object.keys(map);
+    if (keys.length > FOUND_MAX) {
+      keys.sort((a, b) => (map[b].at || 0) - (map[a].at || 0))
+        .slice(FOUND_MAX).forEach(x => { delete map[x]; });
+    }
+    return map;
+  }
+
   function remember(entry, p) {
     const k = foundKey(entry);
     if (!k || !p || !p.id) return p;
+    const rec = {
+      at: Date.now(),
+      p: {
+        id: p.id, slug: p.slug, title: p.title, project_type: p.project_type,
+        icon_url: p.icon_url, downloads: p.downloads, followers: p.followers,
+        updated: p.updated, source_url: p.source_url, organization: p.organization, team: p.team
+      }
+    };
     try {
       const map = readFound();
-      map[k] = {
-        at: Date.now(),
-        p: {
-          id: p.id, slug: p.slug, title: p.title, project_type: p.project_type,
-          icon_url: p.icon_url, downloads: p.downloads, followers: p.followers,
-          updated: p.updated, source_url: p.source_url, organization: p.organization, team: p.team
-        }
-      };
-      const keys = Object.keys(map);
-      if (keys.length > FOUND_MAX) {
-        keys.sort((a, b) => (map[b].at || 0) - (map[a].at || 0))
-          .slice(FOUND_MAX).forEach(x => { delete map[x]; });
-      }
-      localStorage.setItem(FOUND_KEY, JSON.stringify(map));
+      map[k] = rec;
+      localStorage.setItem(FOUND_KEY, JSON.stringify(trim(map)));
     } catch (err) { /* 存不了就算了 */ }
+    pushServer(k, rec);
     return p;
+  }
+
+  /* ---------- 服务端同步：localStorage 按端口/浏览器隔离，主存一份到 data/project-map.json ---------- */
+  let hydrated = null;
+
+  function hydrate() {
+    if (hydrated) return hydrated;
+    hydrated = (async () => {
+      try {
+        const r = await fetch('/api/project-map', { cache: 'no-store' });
+        if (!r.ok) return;
+        const j = await r.json();
+        const map = j && j.map;
+        if (!map || typeof map !== 'object') return;
+        const local = readFound();
+        let changed = false;
+        Object.keys(map).forEach(k => {
+          const it = map[k];
+          if (!it || !it.at || !it.p || !it.p.id) return;
+          const old = local[k];
+          if (!old || (it.at || 0) > (old.at || 0)) { local[k] = { at: it.at || 0, p: it.p }; changed = true; }
+        });
+        if (changed) localStorage.setItem(FOUND_KEY, JSON.stringify(trim(local)));
+      } catch (err) { /* 没起后端就只用本地 */ }
+    })();
+    return hydrated;
+  }
+
+  function pushServer(k, rec) {
+    try {
+      fetch('/api/project-map', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ items: [{ key: k, p: rec.p, at: rec.at }] })
+      }).catch(() => {});
+    } catch (err) { /* ignore */ }
   }
 
   function cachedFound(entry) {
@@ -105,6 +147,9 @@
   }
 
   async function findProject(entry) {
+    // 先把服务端那份缓存并进来，第一次扫描就能命中，不必重新联网
+    await hydrate();
+
     // 0) 上次已经认出过这个 modId / 名字，直接复用，不再联网
     const cached = cachedFound(entry);
     if (cached) return cached;
@@ -179,5 +224,6 @@
     };
   }
 
-  MC.updates = { check, projectUrl, findProject, cachedProject: cachedFound };
+  MC.updates = { check, projectUrl, findProject, cachedProject: cachedFound, ready: hydrate };
+  hydrate();
 })(globalThis);
