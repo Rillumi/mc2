@@ -134,7 +134,10 @@
         if (missed.length < 8) missed.push(row.entry.nameZh || row.entry.name || row.entry.id || '');
         return;
       }
-      [[row.entry.id, 'modid'], [row.entry.nameZh, 'zh'], [row.entry.name, 'en']].forEach(([k, kind]) => {
+      /* 类型按内容判断：modId 归 modid，含汉字的算中文名，其余算英文名 */
+      const nameKind = k => (/[\u4e00-\u9fa5]/.test(String(k || '')) ? 'zh' : 'en');
+      [[row.entry.id, 'modid'], [row.entry.nameZh, nameKind(row.entry.nameZh)],
+        [row.entry.name, nameKind(row.entry.name)]].forEach(([k, kind]) => {
         if (!k) return;
         const before = items.length;
         push({ key: k, name: c.name || k, home: c.home, source: 'afdian-mod', kind });
