@@ -6,7 +6,38 @@
   const MC = (root.MC = root.MC || {});
 
   function projectUrl(p) {
-    return 'https://modrinth.com/mod/' + encodeURIComponent(String((p && (p.slug || p.id)) || ''));
+    const t = (p && p.project_type) === 'resourcepack' ? 'resourcepack'
+      : (p && p.project_type) === 'shader' ? 'shader' : 'mod';
+    return 'https://modrinth.com/' + t + '/' + encodeURIComponent(String((p && (p.slug || p.id)) || ''));
+  }
+
+  function isMod(p) {
+    return !!p && (p.project_type === 'mod' || !p.project_type);
+  }
+
+  /* 不给 env 过滤，拿项目的全部版本，用文件名/版本号确认是不是同一份 */
+  async function allVersions(pid) {
+    try {
+      const data = await MC.api.modrinth.get('/project/' + encodeURIComponent(pid) + '/version');
+      return Array.isArray(data) ? data : [];
+    } catch (err) {
+      return [];
+    }
+  }
+
+  function fileMatch(entry, list) {
+    const fn = String((entry && entry.fileName) || '').toLowerCase();
+    const ver = String((entry && entry.version) || '');
+    return (list || []).some(v =>
+      (fn && (v.files || []).some(f => String(f.filename || '').toLowerCase() === fn)) ||
+      (ver && String(v.version_number || '') === ver)
+    );
+  }
+
+  /* 项目确实发布了这个文件（或这个版本号），才认它是同一个模组 */
+  async function confirmed(proj, entry) {
+    if (!isMod(proj)) return false;
+    return fileMatch(entry, await allVersions(proj.id || proj.slug));
   }
 
   function slugCandidates(entry) {
@@ -28,30 +59,47 @@
   }
 
   async function findProject(entry) {
+    // 1) 哈希最可靠：jar 被改名也能对上真正的项目
+    if (entry.sha1) {
+      try {
+        const map = await MC.api.modrinth.versionFiles([entry.sha1]);
+        const v = map && map[entry.sha1];
+        if (v && v.project_id) {
+          const p = await MC.api.modrinth.project(v.project_id);
+          if (isMod(p)) return p;
+        }
+      } catch (err) { /* 查不到就继续试别的 */ }
+    }
+
+    // 2) 常见写法当 slug 试；同名但类型不同的项目（例如同名的资源包）在这里被挡掉
     for (const slug of slugCandidates(entry)) {
       try {
         const p = await MC.api.modrinth.project(slug);
-        if (p) return p;
+        if (p && await confirmed(p, entry)) return p;
       } catch (err) { /* 继续试下一个写法 */ }
     }
 
-    // 兜底：按名字搜一次，只认同一个模组的，避免把别的模组当成同一个
+    // 3) 兜底：按名字搜，只认同名、且确实发布过这份文件的 mod 项目
     const name = String((entry && entry.name) || '').trim();
     if (!name) return null;
     try {
-      const hits = await MC.api.modrinth.search(name, { limit: 5, facets: [['project_type:mod']] });
-      const hit = (hits || []).find(h => sameHit(entry, h));
-      if (hit) return { id: hit.project_id, slug: hit.slug, title: hit.title };
+      const hits = await MC.api.modrinth.search(name, { limit: 8, facets: [['project_type:mod']] });
+      for (const hit of (hits || []).slice(0, 5)) {
+        if (hit.project_type && hit.project_type !== 'mod') continue;
+        if (!sameHit(entry, hit)) continue;
+        const p = await MC.api.modrinth.project(hit.project_id);
+        if (p && await confirmed(p, entry)) return p;
+      }
     } catch (err) { /* 搜不到就算了 */ }
     return null;
   }
 
   /** 返回 { status: current|newer|notfound|nomatch|error, latest?, url?, reason? } */
-  async function check(entry, env) {
+  async function check(entry, env, known) {
     if (!entry || !entry.id) return { status: 'notfound' };
-    let proj;
+    let proj = known || null;
     try {
-      proj = await findProject(entry);
+      if (!proj) proj = await findProject(entry);
     } catch (err) {
       return { status: 'error', reason: err && err.message ? err.message : String(err) };
     }

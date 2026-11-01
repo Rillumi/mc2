@@ -19,7 +19,9 @@
     touch();
     let res;
     try {
-      res = await MC.updates.check(row.entry, st.env);
+      // 哈希已经对上的项目直接给它，省掉按 slug/名字瞎猜（modId 常和 slug 不一致）
+      const known = FC.projectForEntry(st, row.entry, g);
+      res = await MC.updates.check(row.entry, st.env, known);
     } catch (err) {
       res = { status: 'error', reason: err && err.message ? err.message : String(err) };
     }
@@ -106,7 +108,8 @@
           const t = retry[cursor++];
           let res;
           try {
-            res = await MC.updates.check(t.row.entry, st.env);
+            const known = FC.projectForEntry(st, t.row.entry, t.g);
+            res = await MC.updates.check(t.row.entry, st.env, known);
           } catch (err) {
             res = { status: 'error', reason: err && err.message ? err.message : String(err) };
           }

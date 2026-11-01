@@ -212,7 +212,11 @@
     const items = rows.map(r => ({
       value: r.uid, current: chosen ? chosen.uid : '', text: MC.selector.label(r.entry), meta: r.entry.fileName
     }));
-    const mrl = 'https://modrinth.com/mod/' + encodeURIComponent(String(e.id || '').toLowerCase());
+    const mproj = MC.flowCommon.projectForEntry(s, e, group);
+    // 有哈希对上的项目就用它的真实地址；没有就去 Modrinth 搜索，别拿 modId 硬拼链接
+    // （modId 不一定等于 slug，例如 carryon 是另一个同名资源包）
+    const mrl = mproj ? MC.flowCommon.packUrl(mproj)
+      : ('https://modrinth.com/mods?q=' + encodeURIComponent(e.name || e.id || ''));
     // 有 MC百科条目地址就用它；没查到中文名就退回站内搜索（modId 比中文名更容易命中）
     const mcmod = e.nameZhFrom || ('https://www.mcmod.cn/s?key=' + encodeURIComponent(e.id || e.name || ''));
 
@@ -257,8 +261,6 @@
       '<div class="actions"><button type="button" class="btn line xs" data-act="gotools">打开批量导入</button></div>' +
       '</div>';
 
-    const mproj = MC.flowCommon.projectForEntry(s, e, group);
-
     return '<div class="sheet detail" role="dialog" aria-modal="true" aria-label="模组详情">' +
       '<div class="sheet-head">' +
         '<div class="sheet-title">' + tile(e.nameZh || e.name || group.displayId, true, mproj && mproj.icon_url) +
@@ -288,7 +290,8 @@
       '<div class="sheet-foot">' +
         '<button type="button" class="btn line" data-act="toggle-exclude" data-group="' + esc(group.id) + '">' +
         (s.excluded[group.id] ? '恢复进包' : '不要这个') + '</button>' +
-        '<a class="btn line" href="' + esc(mrl) + '" target="_blank" rel="noopener">' + icon(IC.link) + 'Modrinth 页面</a>' +
+        '<a class="btn line" href="' + esc(mrl) + '" target="_blank" rel="noopener">' + icon(IC.link) +
+        (mproj ? 'Modrinth 页面' : 'Modrinth 搜索') + '</a>' +
         '<a class="btn line" href="' + esc(mcmod) + '" target="_blank" rel="noopener" title="' +
         esc(e.nameZhFrom ? 'MC百科条目' : '在 MC百科搜索') + '">' + icon(IC.link) + '在 MC百科查看</a>' +
         '<button type="button" class="btn grad" data-act="close">看完了</button>' +
