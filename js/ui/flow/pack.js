@@ -68,7 +68,7 @@
           return {
             name: e.nameZh || e.name || e.fileName || '?',
             version: e.version || '',
-            source: p ? 'Modrinth' : '本地 jar',
+            source: p ? 'Modrinth' : '本地文件',
             url: p ? 'https://modrinth.com/mod/' + (p.slug || p.id) : ''
           };
         });
@@ -84,11 +84,14 @@
           (src.onlineList || []).forEach(o => online.push(o));
           if (!original && src.modlistHtml) original = src.modlistHtml;
         });
+        // 文件名已经打进包里的在线项去掉，免得清单里出现两份
+        const usedNames = picked.map(r => (r.entry && r.entry.fileName) || '');
+        const onlineClean = MC.pack.dedupe ? MC.pack.dedupe(online, usedNames) : online;
         st.progress = '正在生成下载清单…';
         touch();
         result = await MC.pack.buildListZip({
           title: (st.packSources[0] && st.packSources[0].name.replace(/\.[^.]+$/, '')) || 'ModPilot 下载清单',
-          env: st.env, local, online, original
+          env: st.env, local, online: onlineClean, original
         });
       } else if (format === 'mrpack') {
         st.progress = '正在生成 .mrpack…';

@@ -38,3 +38,13 @@ test('清单里的文本会转义', () => {
   const text = P.modlistText({ title: '<b>x</b>', env, local: [], online: [] });
   assert.match(text, /&lt;b&gt;x&lt;\/b&gt;/);
 });
+
+test('在线项去重：已打包的同名去掉，重复项只留一条', () => {
+  const online = [
+    { path: 'mods/a.jar', url: 'u1' },
+    { path: 'mods/a.jar', url: 'u1' },
+    { projectID: 1, fileID: 2 },
+    { projectID: 1, fileID: 2 }
+  ];
+  assert.deepEqual(P.dedupe(online, ['a.jar']), [{ projectID: 1, fileID: 2 }]);
+});

@@ -232,6 +232,13 @@
     const hasPack = scanned.length > 0;
     const single = !hasPack && (opts.single || st.mode === 'single');
 
+    // 之前扫的是整合包，现在拖的是普通文件夹：整份换掉，
+    // 否则旧包的在线清单会留在 packSources 里，导出清单时混进来（看着像重复项）
+    if (!hasPack && !single && (st.packSources || []).length) {
+      resetAll(st);
+      toast('已从整合包切回文件夹，重新分析');
+    }
+
     // 一键重扫 / 拖入整合包：整个替换，这样删掉的模组也会从列表消失
     if (hasPack) {
       resetAll(st);

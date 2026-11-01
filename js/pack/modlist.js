@@ -35,6 +35,21 @@
     }, null, 2);
   }
 
+  /** 去掉重复的在线项：文件名和已打包的重了、或两个包写了同一项 */
+  function dedupe(online, fileNames) {
+    const used = {};
+    (fileNames || []).forEach(n => { if (n) used[String(n).toLowerCase()] = 1; });
+    const seen = {};
+    return (online || []).filter(o => {
+      const base = o.path ? String(o.path).split('/').pop().toLowerCase() : '';
+      if (base && used[base]) return false;
+      const key = o.projectID ? 'id:' + o.projectID + ':' + o.fileID : 'url:' + (o.url || o.path || '');
+      if (seen[key]) return false;
+      seen[key] = 1;
+      return true;
+    });
+  }
+
   function html(opt) {
     const local = opt.local || [];
     const online = opt.online || [];
@@ -116,4 +131,5 @@
   MC.pack.buildListZip = buildListZip;
   MC.pack.manifestText = manifest;
   MC.pack.modlistText = html;
+  MC.pack.dedupe = dedupe;
 })(globalThis);
