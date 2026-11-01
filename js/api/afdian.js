@@ -113,7 +113,11 @@
       (c.posts || []).forEach(p => {
         const title = norm(p.title);
         keys.forEach(k => {
-          if (title && title.indexOf(k) >= 0) {
+          // 标题里带完整名字，或中文名的前 4 个字（「天鹅小镇家具」←「天鹅小镇系列」）
+          const cjkKey = (k.match(/[\u4e00-\u9fa5]/g) || []).length >= 2;
+          const hit = title && (title.indexOf(k) >= 0 ||
+            (cjkKey && k.length >= 4 && title.indexOf(k.slice(0, 4)) >= 0));
+          if (hit) {
             const s = 90 + Math.min(k.length, 20) / 100;
             if (s > score) { score = s; post = p; }
           }

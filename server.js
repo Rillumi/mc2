@@ -1378,10 +1378,16 @@ const server = http.createServer(async (req, res) => {
 
 function openBrowser(url) {
   if (process.platform === 'win32') {
-    // 优先用 Edge 打开；没装 Edge 再退回系统默认浏览器
-    exec('start "" msedge "' + url + '"', err => {
-      if (err) exec('start "" "' + url + '"');
-    });
+    // 优先直接运行 Edge 的 exe（不依赖 PATH，也不会让 cmd 报路径错误）；找不到再用默认浏览器
+    const edge = [
+      'C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe',
+      'C:\\Program Files\\Microsoft\\Edge\\Application\\msedge.exe'
+    ].find(p => require('node:fs').existsSync(p));
+    if (edge) {
+      exec('"' + edge + '" "' + url + '"');
+      return;
+    }
+    exec('start "" "' + url + '"');
   } else if (process.platform === 'darwin') exec('open "' + url + '"');
   else exec('xdg-open "' + url + '"');
 }

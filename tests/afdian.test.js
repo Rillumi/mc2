@@ -26,6 +26,17 @@ test('两个字的中文作者名（灵耶）也能匹配', () => {
   assert.equal(find({ name: '机械动力' }).length, 0);
 });
 
+test('作者名对不上，但帖子标题里有模组名也能匹配（天鹅小镇）', () => {
+  withCreators([{
+    name: '某工作室', home: 'https://afdian.com/a/studio',
+    posts: [{ id: 'p1', title: '天鹅小镇系列 1.20.1 更新' }]
+  }]);
+  const hits = find({ name: '天鹅小镇-家具', id: 'swan_furniture' });
+  assert.equal(hits.length, 1);
+  assert.equal(hits[0].creator.name, '某工作室');
+  assert.equal(hits[0].post.title, '天鹅小镇系列 1.20.1 更新');
+});
+
 test('英文作者名太短（xk）不乱配', () => {
   withCreators([{ name: 'xk', home: 'https://afdian.com/a/xk', posts: [] }]);
   assert.equal(find({ name: 'xk装饰', id: 'xk_deco' }).length, 0);

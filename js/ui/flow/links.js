@@ -106,14 +106,44 @@
   /* ---------- 爱发电：把作者主页写进公开映射表（所有人共用） ---------- */
   async function syncAfdianMap() {
     const st = S();
-    const list = (st.afdian && st.afdian.creators) || [];
-    const items = list
-      .filter(c => c && c.home && c.name && MC.afdianMap.isAfdian(c.home))
-      .map(c => ({ key: c.name, name: c.name, home: c.home, source: 'afdian-sync' }));
+    const creators = (st.afdian && st.afdian.creators) || [];
+    const items = [];
+    const seen = {};
+    let modCount = 0;
+    const push = it => {
+      const k = String(it.key || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
+      if (!k || seen[k]) return;
+      seen[k] = 1;
+      items.push(it);
+    };
+
+    creators.forEach(c => {
+      if (!c || !c.home || !c.name || !MC.afdianMap.isAfdian(c.home)) return;
+      push({ key: c.name, name: c.name, home: c.home, source: 'afdian-creator' });
+    });
+
+    /* 每个模组单独存一条：别人拿到同一个 modId，就算作者名对不上也能反查到主页 */
+    (st.analysis ? st.analysis.groups || [] : []).forEach(g => {
+      const row = FC.chosenOf(st, g);
+      if (!row || !row.entry) return;
+      let hit = [];
+      try { hit = MC.afdian.find(row.entry, 1); } catch (err) { hit = []; }
+      const c = hit[0] && hit[0].creator;
+      if (!c || !c.home || !MC.afdianMap.isAfdian(c.home)) return;
+      [row.entry.id, row.entry.nameZh, row.entry.name].forEach(n => {
+        if (!n) return;
+        const before = items.length;
+        push({ key: n, name: c.name || n, home: c.home, source: 'afdian-mod' });
+        if (items.length > before) modCount++;
+      });
+    });
+
     if (!items.length) return toast('还没有作者名单，先点「更新爱发电」');
     try {
       const r = await MC.afdianMap.save(items);
-      toast(r.saved ? '已写进公开映射表 ' + r.saved + ' 条，其他人打开也能看到' : '没写进去（本地服务或数据库没起来）');
+      toast(r.saved
+        ? '已写进公开映射表 ' + r.saved + ' 条（作者 ' + creators.length + ' 位、模组 ' + modCount + ' 个），其他人打开也能看到'
+        : '没写进去（本地服务或数据库没起来）');
     } catch (err) {
       toast('写入映射表失败：' + (err.message || err));
     }
