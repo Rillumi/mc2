@@ -51,6 +51,16 @@
     touch();
   }
 
+  function suggestOrder() {
+    const st = S();
+    const adv = st.packAdvice;
+    if (!adv || !(adv.suggested || []).length) return toast('还没有可排序的资源包，先扫一遍');
+    st.rpOrder = adv.suggested.slice();
+    if (MC.pager) MC.pager.reset('packs');
+    touch();
+    toast('已按建议排序：界面/音效/汉化在上，基础材质在下');
+  }
+
   function exportPackOrder() {
     const st = S();
     const packs = MC.render.orderedPacks(st);
@@ -94,5 +104,5 @@
     }
   }
 
-  MC.flowTools = { importLogs, autoLog, movePack, exportPackOrder, exportPackOptions };
+  MC.flowTools = { importLogs, autoLog, movePack, suggestOrder, exportPackOrder, exportPackOptions };
 })(globalThis);

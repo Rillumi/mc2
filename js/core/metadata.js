@@ -66,11 +66,28 @@
   function parsePackMeta(text) {
     let o = {};
     try { o = (parseJson(text) || {}).pack || {}; } catch { o = {}; }
-    let fmt = o.pack_format;
-    if (!fmt && o.supported_formats) {
-      fmt = Array.isArray(o.supported_formats) ? o.supported_formats[0] : o.supported_formats.min_inclusive;
+    let fmt = Number(o.pack_format) || 0;
+    let fmtMin = fmt;
+    let fmtMax = fmt;
+    const sf = o.supported_formats;
+    if (sf) {
+      if (Array.isArray(sf)) {
+        const list = sf.map(Number).filter(Boolean);
+        if (list.length) { fmtMin = Math.min.apply(null, list); fmtMax = Math.max.apply(null, list); }
+      } else {
+        const lo = Number(sf.min_inclusive) || 0;
+        const hi = Number(sf.max_inclusive) || 0;
+        if (lo) fmtMin = lo;
+        if (hi) fmtMax = hi;
+      }
+      if (!fmt) fmt = fmtMin;
     }
-    return { packFormat: fmt || 0, description: plainText(o.description).slice(0, 400) };
+    return {
+      packFormat: fmt || 0,
+      fmtMin: fmtMin || 0,
+      fmtMax: fmtMax || fmtMin || 0,
+      description: plainText(o.description).slice(0, 400)
+    };
   }
 
   /* 资源包覆盖的文件路径 + 分类计数（判断两个包是否撞车就靠它） */
@@ -406,6 +423,8 @@
           kind: 'resourcepack',
           info: {
             packFormat: meta.packFormat,
+            fmtMin: meta.fmtMin,
+            fmtMax: meta.fmtMax,
             description: meta.description,
             assets: scan.assets,
             assetCounts: scan.assetCounts

@@ -35,6 +35,10 @@
       C.movePack(el.dataset.uid, 1);
     },
 
+    'rpsort'() {
+      C.suggestOrder();
+    },
+
     'rpexport-order'() {
       C.exportPackOrder();
     },

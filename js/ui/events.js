@@ -25,7 +25,7 @@
     autoLog: FT.autoLog, analyzeAndResolve: FA.analyzeAndResolve, loadLoaderList: FE.loadLoaderList, loadMcList: FE.loadMcList, syncEnvInputs: FE.syncEnvInputs,
     checkAllUpdates: FU.checkAllUpdates, checkOneUpdate: FU.checkOneUpdate, exportGuide: FU.exportGuide, findConnector: FE.findConnector,
     refreshAfdian: FL.refreshAfdian, syncAfdianMap: FL.syncAfdianMap, addLink: FL.addLink, removeLink: FL.removeLink, bulkLinks: FL.bulkLinks,
-    movePack: FT.movePack, exportPackOrder: FT.exportPackOrder, exportPackOptions: FT.exportPackOptions, buildPack: FP.buildPack,
+    movePack: FT.movePack, suggestOrder: FT.suggestOrder, exportPackOrder: FT.exportPackOrder, exportPackOptions: FT.exportPackOptions, buildPack: FP.buildPack,
     chosenOf: FC.chosenOf, projectForEntry: FC.projectForEntry,
     applyZhNames: FM.applyZhNames,
     ensureDesc: FM.ensureDesc, ensureMrDesc: FM.ensureMrDesc, ensureBodyTr: FM.ensureBodyTr,

@@ -31,7 +31,109 @@
       .filter(Boolean).map(norm).filter(k => k.length >= 5);
   }
 
-  /* 同一个资源包的多个版本：有 Modrinth 项目就按项目归组，没有就按去掉版本号的文件名 */
+  const ROLE_LABEL = {
+    base: '基础材质',
+    modpatch: '模组补丁',
+    patch: '局部补丁',
+    ui: '界面/字体',
+    sound: '音效',
+    lang: '语言/汉化',
+    unknown: '未分类'
+  };
+  const ROLE_RANK = { ui: 0, sound: 0, lang: 0, patch: 1, modpatch: 2, base: 3, unknown: 4 };
+
+  /* pack_format ↔ 游戏版本，只是参考表；表里没有的版本一律说“无法判断” */
+  const FMT_MC = [
+    [1, '1.6.1', '1.8.9'], [2, '1.9', '1.10.2'], [3, '1.11', '1.12.2'],
+    [4, '1.13', '1.14.4'], [5, '1.15', '1.16.1'], [6, '1.16.2', '1.16.5'],
+    [7, '1.17', '1.17.1'], [8, '1.18', '1.18.2'], [9, '1.19', '1.19.2'],
+    [12, '1.19.3', '1.19.3'], [13, '1.19.4', '1.19.4'], [15, '1.20', '1.20.1'],
+    [18, '1.20.2', '1.20.2'], [22, '1.20.3', '1.20.4'], [32, '1.20.5', '1.20.6'],
+    [34, '1.21', '1.21.1'], [42, '1.21.2', '1.21.3'], [46, '1.21.4', '1.21.4'],
+    [55, '1.21.5', '1.21.5'], [63, '1.21.6', '1.21.6'], [64, '1.21.7', '1.21.8'],
+    [69, '1.21.9', '1.21.10']
+  ];
+
+  function verKey(v) {
+    const m = /(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(v || ''));
+    return m ? [Number(m[1]), Number(m[2]), Number(m[3] || 0)] : null;
+  }
+
+  function cmpVer(a, b) {
+    return (a[0] - b[0]) || (a[1] - b[1]) || (a[2] - b[2]);
+  }
+
+  function mcRow(mc) {
+    const k = verKey(mc);
+    if (!k) return null;
+    return FMT_MC.find(row => {
+      const lo = verKey(row[1]);
+      const hi = verKey(row[2]);
+      return lo && hi && cmpVer(k, lo) >= 0 && cmpVer(k, hi) <= 0;
+    }) || null;
+  }
+
+  function fmtLabel(fmt) {
+    const row = FMT_MC.find(r => r[0] === Number(fmt));
+    return row ? row[1] + (row[1] === row[2] ? '' : '–' + row[2]) : '格式 ' + fmt;
+  }
+
+  /** 用 pack_format 粗判兼容：ok / old（包偏旧）/ new（包偏新）/ unknown */
+  function compat(p, mc) {
+    const lo = Number(p.fmtMin) || Number(p.packFormat) || 0;
+    const hi = Number(p.fmtMax) || lo;
+    if (!lo) return { state: 'unknown', text: '没有 pack.mcmeta 格式号' };
+    const row = mcRow(mc);
+    if (!row) return { state: 'unknown', text: fmtLabel(lo) + '，你的 ' + mc + ' 不在参考表里' };
+    const target = row[0];
+    if (target >= lo && target <= hi) {
+      return { state: 'ok', text: fmtLabel(target) + ' 可用' };
+    }
+    if (target < lo) {
+      return { state: 'new', text: '包是给 ' + fmtLabel(lo) + ' 的，比你的 ' + mc + ' 新' };
+    }
+    return { state: 'old', text: '包是给 ' + fmtLabel(hi) + ' 的，比你的 ' + mc + ' 旧' };
+  }
+
+  /** 按覆盖的文件猜它是什么角色：只做建议，不据此自动下结论 */
+  function classify(p, modNs) {
+    const assets = p.assets || [];
+    const n = assets.length;
+    if (!n) return { role: 'unknown', why: '没有读到资源文件' };
+    const ns = {};
+    let vanillaTex = 0, gui = 0, lang = 0, sound = 0, model = 0, font = 0;
+    assets.forEach(path => {
+      const m = /^assets\/([^/]+)\/(.*)$/i.exec(path);
+      if (!m) return;
+      const id = m[1].toLowerCase();
+      const rest = m[2].toLowerCase();
+      ns[id] = (ns[id] || 0) + 1;
+      if (id !== 'minecraft') return;
+      if (/^textures\/(block|item|entity|environment|particle|painting)\//.test(rest)) vanillaTex++;
+      else if (/^textures\/gui\//.test(rest)) gui++;
+      else if (/^lang\//.test(rest)) lang++;
+      else if (/^sounds\//.test(rest)) sound++;
+      else if (/^models\//.test(rest)) model++;
+      else if (/^font\//.test(rest)) font++;
+    });
+    const modIds = Object.keys(ns).filter(id => id !== 'minecraft' && modNs.has(id));
+    if (modIds.length) {
+      return { role: 'modpatch', why: '改了模组 ' + modIds.slice(0, 2).join('、') + ' 的资源' };
+    }
+    if (sound / n > 0.6) return { role: 'sound', why: '大部分是音效文件' };
+    if (lang / n > 0.5) return { role: 'lang', why: '大部分是语言文件，像是汉化' };
+    if (font / n > 0.25 || gui / n > 0.4) return { role: 'ui', why: '主要是界面或字体' };
+    const main = vanillaTex + model;
+    const name = baseName(p.fileName).toLowerCase();
+    const bigName = /(faithful|patrix|umso|stay\s*true|vanilla|default|原版|高清|32x|64x|128x|256x|512x)/.test(name);
+    if (main >= 300 || (bigName && main >= 100)) {
+      return { role: 'base', why: main.toLocaleString() + ' 个原版方块/物品/模型文件' };
+    }
+    if (main >= 40) return { role: 'patch', why: main.toLocaleString() + ' 个原版贴图，范围较小' };
+    return { role: 'patch', why: n.toLocaleString() + ' 个文件，像是局部修改' };
+  }
+
+  /** 同一个资源包的多个版本：有 Modrinth 项目就按项目归组，没有就按去掉版本号的文件名 */
   function stripVer(name) {
     return String(name || '')
       .replace(/(?:^|[-_ ])(?:v|ver|version)?\s*\d+(?:[._]\d+)*(?:[-_ ]*(?:release|beta|alpha)\d*)?$/i, '')
@@ -108,7 +210,7 @@
    * @param packs [{uid, fileName, size, assets, project, url}]
    * @param mods  [{uid, id, name, groupId, project}]
    */
-  function analyze(packsAll, mods) {
+  function analyze(packsAll, mods, opts) {
     const order = [];
     const tips = [];
     const byUid = {};
@@ -170,6 +272,13 @@
     });
     const conflicts = Array.from(pairMap.values()).sort((x, y) => y.count - x.count);
 
+    // 多个包同时改同一个文件：按文件列出涉及哪些包，方便决定谁该在上面
+    const pathGroups = Array.from(byPath.entries())
+      .filter(([, uids]) => uids.length >= 2)
+      .sort((a, b) => b[1].length - a[1].length)
+      .slice(0, 40)
+      .map(([path, uids]) => ({ path, uids }));
+
     // 模组和资源包属于同一个 Modrinth 项目 → 装重了
     const modByPid = new Map();
     mods.forEach(m => {
@@ -229,10 +338,104 @@
       });
     });
 
+    // 按覆盖内容猜角色，并给出一个建议顺序（仅建议，点击才应用）
+    const advice = packs.map(p => {
+      const c = classify(p, new Set(nsMap.keys()));
+      return {
+        uid: p.uid,
+        role: c.role,
+        label: ROLE_LABEL[c.role] || c.role,
+        why: c.why,
+        files: (p.assets || []).length,
+        compat: compat(p, (opts && opts.mc) || ''),
+        target: null
+      };
+    });
+    const adviceOf = new Map(advice.map(a => [a.uid, a]));
+
+    // 局部补丁通常只改某个基础材质包里已有的文件 → 通过这些同路径文件找出“它是谁的补丁”
+    const baseSets = new Map(
+      packs.filter(p => adviceOf.get(p.uid) && adviceOf.get(p.uid).role === 'base')
+        .map(p => [p.uid, { set: new Set(p.assets || []), pack: p }])
+    );
+    if (baseSets.size) {
+      packs.forEach(p => {
+        const a = adviceOf.get(p.uid);
+        if (!a || a.role !== 'patch') return;
+        const assets = p.assets || [];
+        if (!assets.length) return;
+        let best = null;
+        baseSets.forEach((b, baseUid) => {
+          if (baseUid === p.uid) return;
+          let hit = 0;
+          assets.forEach(x => { if (b.set.has(x)) hit++; });
+          const ratio = hit / assets.length;
+          if (hit >= 20 && ratio >= 0.3 && (!best || ratio > best.ratio)) {
+            best = {
+              baseUid,
+              baseName: (b.pack.project && b.pack.project.title) || baseName(b.pack.fileName),
+              hit,
+              ratio
+            };
+          }
+        });
+        if (best) a.target = best;
+      });
+    }
+
+    const roleOf = new Map(advice.map(a => [a.uid, a.role]));
+    const posOf = new Map(packs.map((p, i) => [p.uid, i]));
+    const roleSorted = packs.slice().sort((a, b) => {
+      const ra = ROLE_RANK[roleOf.get(a.uid)] || 0;
+      const rb = ROLE_RANK[roleOf.get(b.uid)] || 0;
+      if (ra !== rb) return ra - rb;
+      // 同类里，基础材质包越大越靠下；其余保持原顺序
+      if (roleOf.get(a.uid) === 'base') {
+        return (a.assets || []).length - (b.assets || []).length;
+      }
+      return posOf.get(a.uid) - posOf.get(b.uid);
+    });
+    // 作者明文写过的上下关系优先，角色只用来排没写到的部分
+    const suggested = (order.length ? sortByRules(roleSorted, order).order : roleSorted).map(p => p.uid);
+
     return {
-      order, tips, conflicts, sameProject, byUid, packs, dups, modOverlaps,
+      order, tips, conflicts, pathGroups, sameProject, byUid, packs, dups,
+      modOverlaps, advice, suggested,
       sorted: sorted.order, applied: sorted.applied, ignored: sorted.ignored
     };
+  }
+
+  /** 按当前显示顺序检查“基础包是不是压住了它的补丁” */
+  function checkOrder(packs, advice, uids) {
+    const roleOf = new Map((advice || []).map(a => [a.uid, a.role]));
+    const pos = new Map((uids || []).map((uid, i) => [uid, i]));
+    const baseSets = new Map(
+      packs.filter(p => roleOf.get(p.uid) === 'base')
+        .map(p => [p.uid, { set: new Set(p.assets || []), name: (p.project && p.project.title) || baseName(p.fileName) }])
+    );
+    const out = [];
+    if (!baseSets.size) return out;
+    packs.forEach(p => {
+      if (roleOf.get(p.uid) !== 'patch') return;
+      const assets = p.assets || [];
+      if (!assets.length || !pos.has(p.uid)) return;
+      baseSets.forEach((b, baseUid) => {
+        if (baseUid === p.uid || !pos.has(baseUid)) return;
+        // 基础包排得更靠上 → 补丁的同路径文件会被盖掉
+        if (pos.get(baseUid) >= pos.get(p.uid)) return;
+        let hit = 0;
+        assets.forEach(x => { if (b.set.has(x)) hit++; });
+        if (hit < 20 || hit / assets.length < 0.3) return;
+        out.push({
+          packUid: p.uid,
+          packName: (p.project && p.project.title) || baseName(p.fileName),
+          baseUid,
+          baseName: b.name,
+          hit
+        });
+      });
+    });
+    return out;
   }
 
   /**
@@ -283,5 +486,5 @@
     return { order: out, applied, ignored };
   }
 
-  MC.packs = { analyze, sortByRules, dedupe, orderSentences, resolveName };
+  MC.packs = { analyze, sortByRules, dedupe, orderSentences, resolveName, checkOrder, compat };
 })(globalThis);

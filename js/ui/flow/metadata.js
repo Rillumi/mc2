@@ -223,7 +223,8 @@
       return {
         uid: o.uid, fileName: o.fileName, size: o.size,
         assets: o.assets || [], project, url: FC.packUrl(project),
-        description: o.description || '', packFormat: o.packFormat || 0
+        description: o.description || '', packFormat: o.packFormat || 0,
+        fmtMin: o.fmtMin || o.packFormat || 0, fmtMax: o.fmtMax || o.packFormat || 0
       };
     });
     const mods = [];
@@ -239,7 +240,7 @@
         project, groupId: g.id
       });
     });
-    const advice = MC.packs.analyze(packs, mods);
+    const advice = MC.packs.analyze(packs, mods, { mc: (st.env && st.env.mc) || '' });
     st.packAdvice = advice;
     if (advice.sorted && advice.sorted.length) st.rpOrder = advice.sorted;
   }

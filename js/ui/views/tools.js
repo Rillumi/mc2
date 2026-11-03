@@ -22,19 +22,47 @@
   function rpRow(s, o, index, total) {
     const adv = s.packAdvice || {};
     const tips = (adv.byUid && adv.byUid[o.uid] && adv.byUid[o.uid].tips) || [];
+    const ai = (adv.advice || []).find(a => a.uid === o.uid) || null;
+    const assets = o.assets || [];
+    const compat = (ai && ai.compat) || null;
     const meta = [
+      ai ? ai.label : '',
       o.packFormat ? '格式 ' + o.packFormat : '',
       fmtSize(o.size),
-      o.assets && o.assets.length ? '覆盖 ' + o.assets.length.toLocaleString() + ' 个文件' : ''
+      assets.length ? '覆盖 ' + assets.length.toLocaleString() + ' 个文件' : ''
     ].filter(Boolean).join(' · ');
+    const compatTag = compat && compat.state === 'old'
+      ? '<span class="tag warn" title="' + esc(compat.text) + '">版本偏旧</span>'
+      : (compat && compat.state === 'new'
+        ? '<span class="tag bad" title="' + esc(compat.text) + '">版本偏新</span>'
+        : '');
+    const targetNote = ai && ai.target
+      ? '<div class="hint">像是【' + esc(ai.target.baseName) + '】的补丁：' +
+        ai.target.hit + ' 个文件和它改了同一路径（' +
+        Math.round(ai.target.ratio * 100) + '%），按建议排序会排到它上面。</div>'
+      : '';
+    const compatNote = compat && compat.state !== 'ok' && compat.state !== 'unknown'
+      ? '<div class="hint err">' + esc(compat.text) + '（按 pack_format 粗判）</div>'
+      : '';
+    const detail = assets.length
+      ? '<details class="rpdetail"><summary>查看改了的文件（' + assets.length.toLocaleString() + '）</summary>' +
+        '<ul>' + assets.slice(0, 30).map(x => '<li><code>' + esc(x) + '</code></li>').join('') +
+        '</ul>' + (assets.length > 30 ? '<div class="hint">只列前 30 个，共 ' + assets.length.toLocaleString() + ' 个。</div>' : '') +
+        '</details>'
+      : '';
     return '<div class="rprow">' +
       '<span class="rpnum">' + (index + 1) + '</span>' +
       '<div class="rpbody">' +
       '<div class="rpname">' + esc(o.fileName) +
+      (ai ? '<span class="tag rprole' + (ai.role === 'base' ? ' base' : '') + '" title="' + esc(ai.why) + '">' + esc(ai.label) + '</span>' : '') +
+      compatTag +
       (o.project ? '<span class="tag src">Modrinth</span>' : '') + '</div>' +
       '<div class="rpmeta">' + esc(meta) + '</div>' +
+      (ai && ai.why ? '<div class="hint">判断依据：' + esc(ai.why) + '</div>' : '') +
+      targetNote + compatNote +
       (o.description ? '<div class="rpdesc">' + esc(o.description) + '</div>' : '') +
       tips.map(t => '<div class="ript"><span>作者原话</span>' + esc(t) + '</div>').join('') +
+      detail +
       '</div>' +
       '<div class="rpacts">' +
       '<div class="rpbtns">' +
@@ -118,11 +146,44 @@
         '</div>'
       : '';
 
+    const paths = (adv.pathGroups || []).length
+      ? '<div class="rpconf"><b>被多个包同时修改的文件 ' + adv.pathGroups.length + ' 个</b>' +
+        adv.pathGroups.slice(0, 20).map(g => {
+          const ordered = g.uids.slice().sort((a, b) =>
+            packs.findIndex(x => x.uid === a) - packs.findIndex(x => x.uid === b));
+          return '<div class="riptline"><code>' + esc(g.path) + '</code>：' +
+            ordered.map((uid, i) => esc(nameOf(uid)) + (i === 0 ? '（生效）' : '')).join(' → ') +
+            '</div>';
+        }).join('') +
+        (adv.pathGroups.length > 20 ? '<div class="hint">只列了前 20 个，共 ' + adv.pathGroups.length + ' 个。</div>' : '') +
+        '</div>'
+      : '';
+
+    const orderWarns = (MC.packs && adv.advice)
+      ? MC.packs.checkOrder(adv.packs || packs, adv.advice, packs.map(p => p.uid))
+      : [];
+    const orderWarn = orderWarns.length
+      ? '<div class="rpconf"><b>顺序可能压反了 ' + orderWarns.length + ' 处</b>' +
+        orderWarns.map(w =>
+          '<div class="riptline">基础材质【' + esc(w.baseName) + '】现在压在补丁【' + esc(w.packName) +
+          '】上面，补丁改的 ' + w.hit + ' 个文件会被盖住；把补丁移到基础包上面，或点右上角「按建议排序」。</div>').join('') +
+        '</div>'
+      : '';
+
+    const compatBad = (adv.advice || []).filter(a => a.compat && (a.compat.state === 'old' || a.compat.state === 'new'));
+    const compatBlock = compatBad.length
+      ? '<div class="rpconf"><b>版本对不上 ' + compatBad.length + ' 个</b>' +
+        compatBad.map(a =>
+          '<div class="riptline">【' + esc(nameOf(a.uid)) + '】' + esc(a.compat.text) + '。</div>').join('') +
+        '<div class="hint">按 pack_format / supported_formats 和参考表粗判；表里没有的版本只能看游戏里是否标红。</div></div>'
+      : '';
+
     const guide = '<details class="rptips rpguide"><summary>排序攻略 · 怎么叠才不乱</summary>' +
       '<div class="riptline">加载从列表最下面开始，上面的包逐层覆盖下面的同路径文件；上面没有的文件才用下面的。</div>' +
       '<div class="riptline">推荐从下往上：原版/模组资源 → 大型基础材质 → 模组贴图补丁 → UI/字体/声音 → 自己改的单文件。</div>' +
       '<div class="riptline">把基础材质包放到最上面，会让下面的补丁全部失效，这是“改了没反应”的常见原因。</div>' +
       '<div class="riptline">只有同一个文件路径才算冲突；两个包改不同文件，可以同时开。</div>' +
+      '<div class="riptline">游戏自带 Default（默认）、Programmer Art（旧材质）、High Contrast（高对比度）；vanilla 是底层，不能移出清单。</div>' +
       '<div class="riptline">版本不兼容时游戏里会标红；1.20.2 之后的包可以用 supported_formats 声明兼容范围。</div>' +
       '</details>';
 
@@ -134,11 +195,12 @@
 
     return '<div class="vpanel toolcard"><div class="vhead"><h3>资源包顺序</h3>' +
       '<span class="adnote">' + packs.length + ' 个' + (dups.length ? ' · 合并 ' + dups.length + ' 组同款' : '') + '</span>' +
+      '<button type="button" class="btn line sm" data-act="rpsort">按建议排序</button>' +
       '<button type="button" class="btn line sm" data-act="rpexport-order">导出顺序清单</button>' +
       '<button type="button" class="btn line sm" data-act="rpexport-options">导出 options.txt 片段</button></div>' +
       '<div class="vbody"><div class="rpnum-note">越靠上，游戏里优先级越高；两个包改同一个文件时，只有上面的生效。</div>' +
-      guide + logic + orderNote + '<div class="rplist" id="rpList">' + rows + '</div>' + pagerHtml +
-      dupsNote + ignoredNote + conf + modov + same + '</div></div>';
+      guide + logic + orderNote + orderWarn + compatBlock + '<div class="rplist" id="rpList">' + rows + '</div>' + pagerHtml +
+      dupsNote + ignoredNote + paths + conf + modov + same + '</div></div>';
   }
 
   function logCard(s) {
