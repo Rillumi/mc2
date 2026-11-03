@@ -36,10 +36,9 @@
       : (compat && compat.state === 'new'
         ? '<span class="tag bad" title="' + esc(compat.text) + '">版本偏新</span>'
         : '');
-    const targetNote = ai && ai.target
-      ? '<div class="hint">像是【' + esc(ai.target.baseName) + '】的补丁：' +
-        ai.target.hit + ' 个文件和它改了同一路径（' +
-        Math.round(ai.target.ratio * 100) + '%），按建议排序会排到它上面。</div>'
+    const declaredNote = ai && ai.declared
+      ? '<div class="hint">作者原文：' + esc(ai.declared.why) + ' → 指的是【' +
+        esc(ai.declared.baseName) + '】，按建议排序会排到它上面。</div>'
       : '';
     const compatNote = compat && compat.state !== 'ok' && compat.state !== 'unknown'
       ? '<div class="hint err">' + esc(compat.text) + '（按 pack_format 粗判）</div>'
@@ -59,7 +58,7 @@
       (o.project ? '<span class="tag src">Modrinth</span>' : '') + '</div>' +
       '<div class="rpmeta">' + esc(meta) + '</div>' +
       (ai && ai.why ? '<div class="hint">判断依据：' + esc(ai.why) + '</div>' : '') +
-      targetNote + compatNote +
+      declaredNote + compatNote +
       (o.description ? '<div class="rpdesc">' + esc(o.description) + '</div>' : '') +
       tips.map(t => '<div class="ript"><span>作者原话</span>' + esc(t) + '</div>').join('') +
       detail +
@@ -99,6 +98,7 @@
       (rules.length
         ? '先用 Modrinth 正文里作者写明的上下关系（' + rules.length + ' 条）排出先后，没写到的保持扫描顺序。'
         : '没有从 Modrinth 正文找到排序说明，当前按扫描到的文件顺序排列；你可以按自己的需要上下调。') +
+      '作者在描述/正文里把某个包标成 addon、patch 或 requires 的，按建议排序会把它放到对应基础包上面。' +
       '两个包改到同一个文件时，只有上面的生效。' +
       '</span></div>';
 
@@ -163,10 +163,38 @@
       ? MC.packs.checkOrder(adv.packs || packs, adv.advice, packs.map(p => p.uid))
       : [];
     const orderWarn = orderWarns.length
-      ? '<div class="rpconf"><b>顺序可能压反了 ' + orderWarns.length + ' 处</b>' +
+      ? '<div class="rpconf"><b>顺序压反了 ' + orderWarns.length + ' 处</b>' +
         orderWarns.map(w =>
-          '<div class="riptline">基础材质【' + esc(w.baseName) + '】现在压在补丁【' + esc(w.packName) +
-          '】上面，补丁改的 ' + w.hit + ' 个文件会被盖住；把补丁移到基础包上面，或点右上角「按建议排序」。</div>').join('') +
+          '<div class="riptline">作者声明【' + esc(w.packName) + '】是【' + esc(w.baseName) +
+          '】的补丁，但现在【' + esc(w.baseName) + '】排在它上面，补丁会被盖住；把【' +
+          esc(w.packName) + '】移上去。</div>').join('') +
+        '</div>'
+      : '';
+
+    const rels = adv.relations || [];
+    const relList = rels.filter(r => r.inter >= 20 || Math.max(r.ra, r.rb) >= 0.3).slice(0, 10);
+    const kindText = r => r.kind === 'peer' ? '同类大量重叠' : (r.kind === 'subset' ? '单向包含' : '少量交叉');
+    const relBlock = relList.length
+      ? '<div class="rpdups"><b>包与包的重叠关系</b>' +
+        relList.map(r => {
+          const seq = r.kind === 'subset'
+            ? (r.ra > r.rb ? '（【' + esc(nameOf(r.a)) + '】的文件几乎都在【' + esc(nameOf(r.b)) + '】里）'
+              : '（【' + esc(nameOf(r.b)) + '】的文件几乎都在【' + esc(nameOf(r.a)) + '】里）')
+            : '';
+          return '<div class="riptline">【' + esc(nameOf(r.a)) + '】↔【' + esc(nameOf(r.b)) + '】：共享 ' +
+            r.inter.toLocaleString() + ' 个文件（' + Math.round(r.ra * 100) + '% / ' +
+            Math.round(r.rb * 100) + '%），' + kindText(r) + seq + '。</div>';
+        }).join('') +
+        '<div class="hint">共享路径不代表它是别人的补丁；只有作者写明 addon / requires 才算归属。</div></div>'
+      : '';
+    const peers = rels.filter(r => r.kind === 'peer');
+    const peerBlock = peers.length
+      ? '<div class="rpconf"><b>同类竞争 ' + peers.length + ' 组，建议只开一个</b>' +
+        peers.slice(0, 8).map(r =>
+          '<div class="riptline">【' + esc(nameOf(r.a)) + '】和【' + esc(nameOf(r.b)) + '】互相覆盖 ' +
+          r.inter.toLocaleString() + ' 个文件（' + Math.round(r.ra * 100) + '% / ' + Math.round(r.rb * 100) +
+          '%）。两个都开时，下面的会被上面大量盖住。</div>').join('') +
+        (peers.length > 8 ? '<div class="hint">只列了前 8 组，共 ' + peers.length + ' 组。</div>' : '') +
         '</div>'
       : '';
 
@@ -183,6 +211,8 @@
       '<div class="riptline">推荐从下往上：原版/模组资源 → 大型基础材质 → 模组贴图补丁 → UI/字体/声音 → 自己改的单文件。</div>' +
       '<div class="riptline">把基础材质包放到最上面，会让下面的补丁全部失效，这是“改了没反应”的常见原因。</div>' +
       '<div class="riptline">只有同一个文件路径才算冲突；两个包改不同文件，可以同时开。</div>' +
+      '<div class="riptline">共享路径不代表谁是补丁；只有作者在描述/正文里写明 addon、patch、requires 时才算归属。</div>' +
+      '<div class="riptline">两个基础材质包互相覆盖很多时属于同类竞争，通常只该开一个。</div>' +
       '<div class="riptline">游戏自带 Default（默认）、Programmer Art（旧材质）、High Contrast（高对比度）；vanilla 是底层，不能移出清单。</div>' +
       '<div class="riptline">版本不兼容时游戏里会标红；1.20.2 之后的包可以用 supported_formats 声明兼容范围。</div>' +
       '</details>';
@@ -199,8 +229,8 @@
       '<button type="button" class="btn line sm" data-act="rpexport-order">导出顺序清单</button>' +
       '<button type="button" class="btn line sm" data-act="rpexport-options">导出 options.txt 片段</button></div>' +
       '<div class="vbody"><div class="rpnum-note">越靠上，游戏里优先级越高；两个包改同一个文件时，只有上面的生效。</div>' +
-      guide + logic + orderNote + orderWarn + compatBlock + '<div class="rplist" id="rpList">' + rows + '</div>' + pagerHtml +
-      dupsNote + ignoredNote + paths + conf + modov + same + '</div></div>';
+      guide + logic + orderNote + orderWarn + peerBlock + compatBlock + '<div class="rplist" id="rpList">' + rows + '</div>' + pagerHtml +
+      dupsNote + ignoredNote + paths + relBlock + conf + modov + same + '</div></div>';
   }
 
   function logCard(s) {

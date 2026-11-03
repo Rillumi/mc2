@@ -27,8 +27,13 @@
 
   function namesOf(pack) {
     const p = pack.project || {};
-    return [p.title, p.slug, baseName(pack.fileName)]
-      .filter(Boolean).map(norm).filter(k => k.length >= 5);
+    const keys = [];
+    [p.title, p.slug, baseName(pack.fileName)].filter(Boolean).forEach(name => {
+      keys.push(norm(name));
+      // 去掉 _v1.11.1 / _1.20+ 这类版本段，本地包没匹配到项目时也能认
+      keys.push(norm(String(name).replace(/(?:^|[-_ .])v?\d+(?:[._]\d+)+/gi, ' ')));
+    });
+    return keys.filter(k => k.length >= 5);
   }
 
   const ROLE_LABEL = {
@@ -197,6 +202,62 @@
 
   const ORDER_WORDS = /(above|below|on top of|under|放在|覆盖在)/i;
   const PACK_WORDS = /(resource\s*pack|resourcepack|pack list|pack order|packs?\b|资源包)/i;
+  const REL_WORDS = /(addon|add-on|add on|patch|compatibility|compat|requires?|needs?|depends?|补丁|扩展|附属|兼容|前置|需要|依赖|基于)/i;
+
+  /** 作者自己写的文字：pack.mcmeta 描述、项目标题、简介、正文 */
+  function textSources(p) {
+    const proj = p.project || {};
+    return [p.description, proj.title, proj.summary, proj.body].filter(Boolean);
+  }
+
+  /** 只从“含 addon/patch/requires 等词”的句子里找基础包，找不到就不猜 */
+  function declaredBase(p, packs) {
+    const others = packs.filter(x => x.uid !== p.uid);
+    if (!others.length) return null;
+    for (const src of textSources(p)) {
+      const parts = plain(src).split(/[.!?。！？]+/).map(s => s.trim()).filter(Boolean);
+      for (const s of parts) {
+        if (!REL_WORDS.test(s)) continue;
+        const hit = resolveName(s, others);
+        if (!hit) continue;
+        return {
+          baseUid: hit.uid,
+          baseName: (hit.project && hit.project.title) || baseName(hit.fileName),
+          why: s.slice(0, 160)
+        };
+      }
+    }
+    return null;
+  }
+
+  /**
+   * 只看重叠方向，不猜归属：
+   * subset = 小包几乎全在大包内；peer = 两边大量互相覆盖（同类竞争）；partial = 少量交叉
+   */
+  function relations(packs) {
+    const sets = new Map(packs.map(p => [p.uid, new Set(p.assets || [])]));
+    const out = [];
+    for (let i = 0; i < packs.length; i++) {
+      for (let j = i + 1; j < packs.length; j++) {
+        const a = packs[i];
+        const b = packs[j];
+        const sa = sets.get(a.uid).size;
+        const sb = sets.get(b.uid).size;
+        if (!sa || !sb) continue;
+        let inter = 0;
+        sets.get(b.uid).forEach(x => { if (sets.get(a.uid).has(x)) inter++; });
+        if (!inter) continue;
+        const ra = inter / sa;
+        const rb = inter / sb;
+        let kind = 'partial';
+        if ((ra >= 0.85 && sa <= sb * 0.25) || (rb >= 0.85 && sb <= sa * 0.25)) kind = 'subset';
+        else if (ra >= 0.5 && rb >= 0.5) kind = 'peer';
+        out.push({ a: a.uid, b: b.uid, inter, ra, rb, kind });
+      }
+    }
+    return out.sort((x, y) => y.inter - x.inter);
+  }
+
 
   function orderSentences(body) {
     return plain(body)
@@ -338,7 +399,7 @@
       });
     });
 
-    // 按覆盖内容猜角色，并给出一个建议顺序（仅建议，点击才应用）
+    // 按覆盖内容猜角色；归属只认作者原文，不靠路径重叠猜
     const advice = packs.map(p => {
       const c = classify(p, new Set(nsMap.keys()));
       return {
@@ -348,40 +409,10 @@
         why: c.why,
         files: (p.assets || []).length,
         compat: compat(p, (opts && opts.mc) || ''),
-        target: null
+        declared: declaredBase(p, packs)
       };
     });
-    const adviceOf = new Map(advice.map(a => [a.uid, a]));
-
-    // 局部补丁通常只改某个基础材质包里已有的文件 → 通过这些同路径文件找出“它是谁的补丁”
-    const baseSets = new Map(
-      packs.filter(p => adviceOf.get(p.uid) && adviceOf.get(p.uid).role === 'base')
-        .map(p => [p.uid, { set: new Set(p.assets || []), pack: p }])
-    );
-    if (baseSets.size) {
-      packs.forEach(p => {
-        const a = adviceOf.get(p.uid);
-        if (!a || a.role !== 'patch') return;
-        const assets = p.assets || [];
-        if (!assets.length) return;
-        let best = null;
-        baseSets.forEach((b, baseUid) => {
-          if (baseUid === p.uid) return;
-          let hit = 0;
-          assets.forEach(x => { if (b.set.has(x)) hit++; });
-          const ratio = hit / assets.length;
-          if (hit >= 20 && ratio >= 0.3 && (!best || ratio > best.ratio)) {
-            best = {
-              baseUid,
-              baseName: (b.pack.project && b.pack.project.title) || baseName(b.pack.fileName),
-              hit,
-              ratio
-            };
-          }
-        });
-        if (best) a.target = best;
-      });
-    }
+    const rels = relations(packs);
 
     const roleOf = new Map(advice.map(a => [a.uid, a.role]));
     const posOf = new Map(packs.map((p, i) => [p.uid, i]));
@@ -395,44 +426,36 @@
       }
       return posOf.get(a.uid) - posOf.get(b.uid);
     });
-    // 作者明文写过的上下关系优先，角色只用来排没写到的部分
-    const suggested = (order.length ? sortByRules(roleSorted, order).order : roleSorted).map(p => p.uid);
+    // 作者明文写过的上下关系优先；作者声明的 addon 也要排在它的基础包上面
+    const declaredRules = advice.filter(a => a.declared)
+      .map(a => ({ above: a.uid, below: a.declared.baseUid, why: a.declared.why }));
+    const rules = order.concat(declaredRules);
+    const suggested = rules.length
+      ? sortByRules(roleSorted, rules).order
+      : roleSorted.map(p => p.uid);
 
     return {
       order, tips, conflicts, pathGroups, sameProject, byUid, packs, dups,
-      modOverlaps, advice, suggested,
+      modOverlaps, advice, suggested, relations: rels,
       sorted: sorted.order, applied: sorted.applied, ignored: sorted.ignored
     };
   }
 
-  /** 按当前显示顺序检查“基础包是不是压住了它的补丁” */
+  /** 作者声明“这是 X 的补丁”，但当前排在 X 下面 → 一定会被 X 盖住 */
   function checkOrder(packs, advice, uids) {
-    const roleOf = new Map((advice || []).map(a => [a.uid, a.role]));
     const pos = new Map((uids || []).map((uid, i) => [uid, i]));
-    const baseSets = new Map(
-      packs.filter(p => roleOf.get(p.uid) === 'base')
-        .map(p => [p.uid, { set: new Set(p.assets || []), name: (p.project && p.project.title) || baseName(p.fileName) }])
-    );
+    const byUid = new Map((packs || []).map(p => [p.uid, p]));
     const out = [];
-    if (!baseSets.size) return out;
-    packs.forEach(p => {
-      if (roleOf.get(p.uid) !== 'patch') return;
-      const assets = p.assets || [];
-      if (!assets.length || !pos.has(p.uid)) return;
-      baseSets.forEach((b, baseUid) => {
-        if (baseUid === p.uid || !pos.has(baseUid)) return;
-        // 基础包排得更靠上 → 补丁的同路径文件会被盖掉
-        if (pos.get(baseUid) >= pos.get(p.uid)) return;
-        let hit = 0;
-        assets.forEach(x => { if (b.set.has(x)) hit++; });
-        if (hit < 20 || hit / assets.length < 0.3) return;
-        out.push({
-          packUid: p.uid,
-          packName: (p.project && p.project.title) || baseName(p.fileName),
-          baseUid,
-          baseName: b.name,
-          hit
-        });
+    (advice || []).forEach(a => {
+      if (!a.declared || !pos.has(a.uid) || !pos.has(a.declared.baseUid)) return;
+      if (pos.get(a.declared.baseUid) >= pos.get(a.uid)) return;
+      const p = byUid.get(a.uid) || {};
+      out.push({
+        packUid: a.uid,
+        packName: (p.project && p.project.title) || baseName(p.fileName),
+        baseUid: a.declared.baseUid,
+        baseName: a.declared.baseName,
+        why: a.declared.why
       });
     });
     return out;

@@ -4,8 +4,8 @@ const test = require('node:test');
 require('../js/core/packs.js');
 const P = globalThis.MC.packs;
 
-function pack(uid, fileName, assets) {
-  return { uid, fileName, size: 1, assets, project: null, url: '' };
+function pack(uid, fileName, assets, extra) {
+  return Object.assign({ uid, fileName, size: 1, assets, project: null, url: '' }, extra || {});
 }
 
 function tex(n, prefix) {
@@ -48,31 +48,37 @@ test('建议排序把基础材质压在最下面', () => {
   assert.ok(at('patch') > at('sound'));
 });
 
-test('能认出局部补丁属于哪个基础材质包', () => {
-  const baseAssets = tex(320);
-  const patchAssets = baseAssets.slice(0, 40);
+test('作者描述写明 addon 时才认补丁归属', () => {
+  const faAssets = tex(477);
+  const addonAssets = faAssets.slice(0, 19).concat(
+    Array.from({ length: 199 }, (_, i) => 'assets/minecraft/optifine/random/entity/horse/r' + i + '.png'));
   const packs = [
-    pack('base', 'Base32x.zip', baseAssets),
-    pack('patch', 'TinyFix.zip', patchAssets)
+    pack('fa', 'FreshAnimations_v1.11.1_1.20+.zip', faAssets),
+    pack('ad', 'Fresh Better Horses v1.0 1.21.zip', addonAssets, {
+      description: 'Made By CanineGray Fresh Animations addon!'
+    })
   ];
   const a = P.analyze(packs, []);
-  const ai = a.advice.find(x => x.uid === 'patch');
-  assert.equal(ai.target.baseUid, 'base');
-  assert.equal(ai.target.hit, 40);
-  assert.ok(a.suggested.indexOf('patch') < a.suggested.indexOf('base'));
+  const ai = a.advice.find(x => x.uid === 'ad');
+  assert.equal(ai.declared.baseUid, 'fa');
+  assert.ok(a.suggested.indexOf('ad') < a.suggested.indexOf('fa'));
+  assert.equal(P.checkOrder(a.packs, a.advice, ['ad', 'fa']).length, 0);
+  assert.equal(P.checkOrder(a.packs, a.advice, ['fa', 'ad']).length, 1);
 });
 
-test('基础包压在补丁上面时会提示顺序反了', () => {
-  const baseAssets = tex(320);
-  const packs = [
-    pack('base', 'Base32x.zip', baseAssets),
-    pack('patch', 'TinyFix.zip', baseAssets.slice(0, 40))
-  ];
-  const a = P.analyze(packs, []);
-  const bad = P.checkOrder(a.packs, a.advice, ['base', 'patch']);
-  assert.equal(bad.length, 1);
-  assert.equal(bad[0].packUid, 'patch');
-  assert.equal(P.checkOrder(a.packs, a.advice, ['patch', 'base']).length, 0);
+test('重叠只分单向包含和同类竞争，不写谁的补丁', () => {
+  const big = tex(320);
+  const small = big.slice(0, 60);
+  const a = P.analyze([pack('big', 'Big.zip', big), pack('small', 'SmallFix.zip', small)], []);
+  assert.equal(a.relations[0].kind, 'subset');
+  assert.equal(a.relations[0].inter, 60);
+  assert.equal(a.relations[0].a, 'big');
+  assert.equal(a.relations[0].b, 'small');
+
+  const x = tex(300);
+  const y = x.slice(0, 280).concat(tex(20, 'z'));
+  const b = P.analyze([pack('x', 'XPack.zip', x), pack('y', 'YPack.zip', y)], []);
+  assert.equal(b.relations[0].kind, 'peer');
 });
 
 test('pack_format 能粗判版本新旧，未知版本不硬下结论', () => {
