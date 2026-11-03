@@ -307,6 +307,11 @@
       '<span>状态：' + (lite ? '已开启' : '已关闭') + '</span>' +
       '<button type="button" class="btn line sm" data-act="preflite">' + (lite ? '关闭' : '开启') + '</button>' +
       '</div>' +
+      '<div class="hint" style="margin-top:12px">遇到说不清的问题，导出诊断报告再发出来。' +
+      '只含文件名、扫描统计、接口状态和最近一次打包校验，不写电脑的完整路径。</div>' +
+      '<div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-top:8px">' +
+      '<button type="button" class="btn line sm" data-act="diag">导出诊断报告</button>' +
+      '</div>' +
       '</div></div>';
   }
 

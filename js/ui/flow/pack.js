@@ -238,6 +238,19 @@
       const problems = results.reduce((a, r) => a.concat((r.verify && r.verify.problems) || []), []);
       if (problems.length) notes.push('校验发现 ' + problems.length + ' 个问题');
       if (notes.length) line += '；' + notes.join('；');
+      st.lastPack = {
+        at: Date.now(),
+        files: results.map(r => ({
+          name: r.filename,
+          ok: !!(r.verify && r.verify.ok),
+          checked: (r.verify && r.verify.checked) || 0,
+          total: (r.verify && r.verify.total) || 0
+        })),
+        skipped: skippedFiles.slice(0, 20).join('、'),
+        overrideFailed: overrideFailed,
+        depFailed: depFailed.slice(0, 10).join('、'),
+        problems: problems
+      };
       toast(line);
 
       if (problems.length) {
