@@ -322,6 +322,8 @@
       if (u.status === 'checking') { chip = '<span class="tag">查更新…</span>'; text = '正在查…'; }
       else if (u.status === 'newer') { chip = '<span class="tag warn">有新版 ' + esc(u.latest) + '</span>'; text = '本地 ' + esc(u.installed || e.version || '?') + '，Modrinth 最新 ' + esc(u.latest) + '。'; }
       else if (u.status === 'current') { chip = '<span class="tag ok">已是最新</span>'; text = 'Modrinth 上当前环境的最新版是 ' + esc(u.latest || '') + '。'; }
+      else if (u.status === 'older') { chip = '<span class="tag ok">本地版本更高</span>'; text = '本地 ' + esc(u.installed || e.version || '?') + '，Modrinth 最新 ' + esc(u.latest) + '。平台可能还没同步这个版本，不需要降级。'; }
+      else if (u.status === 'ambiguous') { chip = '<span class="tag">版本号无法比较</span>'; text = '本地 ' + esc(u.installed || e.version || '?') + '，Modrinth 最新 ' + esc(u.latest) + '。两个版本号没法可靠比较，建议去项目页确认。'; }
       else if (u.status === 'notfound') { chip = '<span class="tag">Modrinth 未收录</span>'; text = '这个 modId 在 Modrinth 查不到，可能只在 CurseForge 或作者自己的页面发布。'; }
       else if (u.status === 'nomatch') { chip = '<span class="tag">没有适配版本</span>'; text = '项目在 Modrinth，但没有 ' + esc(s.env.loader) + ' ' + esc(s.env.mc) + ' 的版本。'; }
       else if (u.status === 'skip') { chip = '<span class="tag">已跳过</span>'; text = '这个模组在当前加载器/游戏版本下不可用，没查更新。'; }

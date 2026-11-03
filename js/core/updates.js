@@ -213,9 +213,14 @@
     const latest = MC.api.modrinth.pickVersion(versions, '');
     if (!latest) return { status: 'nomatch', url: projectUrl(proj), project: proj.title };
 
-    const cmp = entry.version ? MC.version.compare(latest.version_number, entry.version) : 1;
+    let status = 'newer';
+    if (entry.version) {
+      const info = MC.version.compareInfo(latest.version_number, entry.version);
+      if (info.ambiguous) status = 'ambiguous';
+      else status = info.cmp > 0 ? 'newer' : info.cmp < 0 ? 'older' : 'current';
+    }
     return {
-      status: cmp > 0 ? 'newer' : 'current',
+      status,
       latest: latest.version_number,
       installed: entry.version || '',
       url: projectUrl(proj),

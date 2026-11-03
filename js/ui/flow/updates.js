@@ -75,6 +75,7 @@
     let newer = 0;
     let notFound = 0;
     let skip = 0;
+    let ambiguous = 0;
     for (const t of targets) {
       const gid = t.g.id;
       if (!t.row) { st.updates[gid] = { status: 'skip' }; skip++; continue; }
@@ -83,8 +84,11 @@
       const v = latestByHash.get(t.row.entry.sha1);
       if (!v) { st.updates[gid] = { status: 'notfound' }; notFound++; continue; }
       const latest = v.version_number || '';
-      const cmp = t.row.entry.version ? MC.version.compare(latest, t.row.entry.version) : 1;
-      const status = cmp > 0 ? 'newer' : 'current';
+      let status = 'newer';
+      if (t.row.entry.version) {
+        const info = MC.version.compareInfo(latest, t.row.entry.version);
+        status = info.ambiguous ? 'ambiguous' : info.cmp > 0 ? 'newer' : info.cmp < 0 ? 'older' : 'current';
+      }
       st.updates[gid] = {
         status,
         latest,
@@ -94,6 +98,7 @@
         at: Date.now()
       };
       if (status === 'newer') newer++;
+      if (status === 'ambiguous') ambiguous++;
     }
 
     st.updateDone = hashed.length;
@@ -138,6 +143,7 @@
     toast('检查完成：' + newer + ' 个有新版本' +
       (notFound ? '，' + notFound + ' 个 Modrinth 没收录' : '') +
       (skip ? '，' + skip + ' 个没有可用版本' : '') +
+      (ambiguous ? '，' + ambiguous + ' 个版本号无法可靠比较' : '') +
       (retry.length ? '，' + retry.length + ' 个按名字查过' : ''));
   }
 

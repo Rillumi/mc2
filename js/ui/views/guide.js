@@ -10,6 +10,8 @@
     if (u.status === 'checking') return '<span class="tag">查更新…</span>';
     if (u.status === 'newer') return '<span class="tag warn">新版 ' + esc(u.latest) + '</span>';
     if (u.status === 'current') return '<span class="tag ok">已是最新</span>';
+    if (u.status === 'older') return '<span class="tag ok">本地更高</span>';
+    if (u.status === 'ambiguous') return '<span class="tag">版本无法比较</span>';
     if (u.status === 'notfound') return '<span class="tag">Modrinth 未收录</span>';
     if (u.status === 'nomatch') return '<span class="tag">无适配版本</span>';
     if (u.status === 'skip') return '<span class="tag">已跳过（不可用）</span>';

@@ -18,6 +18,14 @@ test('尾部 0 与语义相等', () => {
   assert.ok(V.equals('1.0.0Re', '1.0.0'));
 });
 
+test('解析不出来时返回 ambiguous，不假装相等', () => {
+  assert.deepEqual(V.compareInfo('Latest', 'Unknown'), { cmp: 0, ambiguous: true });
+  assert.equal(V.compareInfo('Latest', '1.0.0').ambiguous, true);
+  assert.equal(V.compareInfo('', '1.0.0').ambiguous, true);
+  assert.deepEqual(V.compareInfo('1.0.1', '1.0.0'), { cmp: 1, ambiguous: false });
+  assert.deepEqual(V.compareInfo('1.0.0', '1.0.0'), { cmp: 0, ambiguous: false });
+});
+
 test('预发布低于正式版', () => {
   assert.equal(V.compare('1.0.0-beta.2', '1.0.0'), -1);
   assert.equal(V.compare('1.0.0-pre161', '1.0.0'), -1);

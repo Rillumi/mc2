@@ -155,8 +155,7 @@
    * 语义比较：数字核心 → 预发布（正式版最大）→ 修订号。
    * 变体（slim/all/生日版等）不参与比较。
    */
-  function compare(a, b) {
-    const x = parse(a), y = parse(b);
+  function cmpParsed(x, y) {
     const c = cmpCore(x.core, y.core);
     if (c) return c;
 
@@ -169,6 +168,20 @@
     const ry = y.rev ? y.rev.num : 0;
     if (rx !== ry) return rx > ry ? 1 : -1;
     return 0;
+  }
+
+  /**
+   * 比较并带可信度：任何一边解析不出来就返回 ambiguous，不把“看不懂”当成相等。
+   * @returns {{cmp: number, ambiguous: boolean}}
+   */
+  function compareInfo(a, b) {
+    const x = parse(a), y = parse(b);
+    if (x.ambiguous || y.ambiguous) return { cmp: 0, ambiguous: true };
+    return { cmp: cmpParsed(x, y), ambiguous: false };
+  }
+
+  function compare(a, b) {
+    return compareInfo(a, b).cmp;
   }
 
   function equals(a, b) {
@@ -195,6 +208,6 @@
 
   MC.version = {
     vparts, cmp, checkConstraint, mcMatches, isPrerelease, compareForPick,
-    parse, compare, equals, canonical
+    parse, compare, compareInfo, equals, canonical
   };
 })(globalThis);

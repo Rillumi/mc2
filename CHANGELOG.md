@@ -8,6 +8,15 @@ git log --oneline
 
 ## 2026-11-03
 
+### 版本与更新
+- 版本比较新增 `compareInfo`：任何一侧解析不出来就返回 `ambiguous`，不再把「看不懂」当成相等（`js/core/version.js`）
+- 更新状态从两态扩为 `newer` / `current` / `older` / `ambiguous`，界面同步显示「本地版本更高」「版本号无法比较」；检查更新提示里单独统计无法比较的数量
+- 新增测试：解析不出来时返回 ambiguous，不假装相等
+
+### 工程入口
+- `package.json` 增加 `start` / `test` 脚本（`npm start`、`npm test`）
+- 新增 `README.md`：快速开始、可选 MySQL 与 CurseForge key、目录结构、已知边界
+
 ### 打包与导出
 - 生成后自动回读校验（`js/pack/verify.js`）：重新解析 zip，检查 `.mrpack` / CurseForge 清单字段、在线项数量、包内 jar 数量，逐个解压并核对 sha1；通过提示「校验通过 n/n」，有问题弹窗列出具体条目（包仍会下载，不丢工作）
 - 打包时读不到文件不再静默跳过：记录文件名并在提示里显示；原包内容复制失败、前置下载失败同样计数提示
