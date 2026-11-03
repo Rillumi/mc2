@@ -235,6 +235,7 @@
       if (project) mods.push({
         uid: row.uid, id: row.entry.id, name: row.entry.name,
         version: row.entry.version, sha1: row.entry.sha1,
+        ids: row.entry.allIds || [row.entry.id],
         project, groupId: g.id
       });
     });

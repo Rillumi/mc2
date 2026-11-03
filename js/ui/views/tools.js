@@ -100,9 +100,31 @@
       ? '<div class="rpconf"><b>同文件冲突 ' + adv.conflicts.length + ' 对</b>' +
         adv.conflicts.slice(0, 8).map(c =>
           '<div class="riptline">' + esc(nameOf(c.a)) + ' 与 ' + esc(nameOf(c.b)) + ' 都改了 ' +
-          c.count + ' 个文件，例如 <code>' + esc(c.samples[0] || '') + '</code>。上面的会盖住下面的。</div>').join('') +
+          c.count + ' 个文件' +
+          (c.samples && c.samples.length
+            ? '，例如 ' + c.samples.map(x => '<code>' + esc(x) + '</code>').join('、')
+            : '') + '。上面的会盖住下面的。</div>').join('') +
+        (adv.conflicts.length > 8 ? '<div class="hint">只列了前 8 对，共 ' + adv.conflicts.length + ' 对。</div>' : '') +
         '</div>'
       : '<div class="rpconf ok"><b>没有发现资源包互相覆盖的文件</b><span class="hint">按文件路径逐条比对过，各改各的就不会冲突。</span></div>';
+
+    const modov = (adv.modOverlaps || []).length
+      ? '<div class="rpconf"><b>覆盖了模组自带的资源 ' + adv.modOverlaps.length + ' 处</b>' +
+        adv.modOverlaps.slice(0, 6).map(x =>
+          '<div class="riptline">资源包【' + esc(x.packName) + '】改了模组「' + esc(x.modName) + '」命名空间 ' +
+          esc(x.ns) + ' 下的 ' + x.count + ' 个文件' +
+          (x.samples && x.samples.length ? '，例如 <code>' + esc(x.samples[0]) + '</code>' : '') +
+          '。作者做的兼容/汉化补丁也会这样，属于有意覆盖；否则可能让模组贴图或界面错乱。</div>').join('') +
+        '</div>'
+      : '';
+
+    const guide = '<details class="rptips rpguide"><summary>排序攻略 · 怎么叠才不乱</summary>' +
+      '<div class="riptline">加载从列表最下面开始，上面的包逐层覆盖下面的同路径文件；上面没有的文件才用下面的。</div>' +
+      '<div class="riptline">推荐从下往上：原版/模组资源 → 大型基础材质 → 模组贴图补丁 → UI/字体/声音 → 自己改的单文件。</div>' +
+      '<div class="riptline">把基础材质包放到最上面，会让下面的补丁全部失效，这是“改了没反应”的常见原因。</div>' +
+      '<div class="riptline">只有同一个文件路径才算冲突；两个包改不同文件，可以同时开。</div>' +
+      '<div class="riptline">版本不兼容时游戏里会标红；1.20.2 之后的包可以用 supported_formats 声明兼容范围。</div>' +
+      '</details>';
 
     const same = (adv.sameProject || []).length
       ? '<div class="rpsame"><b>可能装重了</b>' + adv.sameProject.map(x =>
@@ -115,8 +137,8 @@
       '<button type="button" class="btn line sm" data-act="rpexport-order">导出顺序清单</button>' +
       '<button type="button" class="btn line sm" data-act="rpexport-options">导出 options.txt 片段</button></div>' +
       '<div class="vbody"><div class="rpnum-note">越靠上，游戏里优先级越高；两个包改同一个文件时，只有上面的生效。</div>' +
-      logic + orderNote + '<div class="rplist" id="rpList">' + rows + '</div>' + pagerHtml +
-      dupsNote + ignoredNote + conf + same + '</div></div>';
+      guide + logic + orderNote + '<div class="rplist" id="rpList">' + rows + '</div>' + pagerHtml +
+      dupsNote + ignoredNote + conf + modov + same + '</div></div>';
   }
 
   function logCard(s) {

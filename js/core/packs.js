@@ -192,8 +192,45 @@
     });
 
     const sorted = sortByRules(packs, order);
+
+    // 资源包覆盖了某个已装模组的命名空间（assets/<modid>/…）
+    // 只做路径级判断：可能是作者有意做的兼容/汉化补丁，也可能让模组贴图错乱
+    const nsMap = new Map();
+    mods.forEach(m => {
+      (m.ids || [m.id]).forEach(ns => {
+        if (ns) nsMap.set(String(ns).toLowerCase(), m);
+      });
+    });
+    const modOverlaps = [];
+    packs.forEach(p => {
+      const hits = new Map();
+      (p.assets || []).forEach(path => {
+        const m = /^assets\/([^/]+)\//i.exec(path);
+        if (!m) return;
+        const mod = nsMap.get(m[1].toLowerCase());
+        if (!mod) return;
+        if (!hits.has(mod.uid)) {
+          hits.set(mod.uid, {
+            modUid: mod.uid, modName: mod.name || mod.id,
+            ns: m[1], count: 0, samples: []
+          });
+        }
+        const h = hits.get(mod.uid);
+        h.count++;
+        if (h.samples.length < 3) h.samples.push(path);
+      });
+      hits.forEach(h => {
+        modOverlaps.push({
+          packUid: p.uid,
+          packName: (p.project && p.project.title) || baseName(p.fileName),
+          modUid: h.modUid, modName: h.modName, ns: h.ns,
+          count: h.count, samples: h.samples
+        });
+      });
+    });
+
     return {
-      order, tips, conflicts, sameProject, byUid, packs, dups,
+      order, tips, conflicts, sameProject, byUid, packs, dups, modOverlaps,
       sorted: sorted.order, applied: sorted.applied, ignored: sorted.ignored
     };
   }
