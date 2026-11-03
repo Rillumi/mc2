@@ -76,7 +76,8 @@
     const st = S();
     const packs = MC.render.orderedPacks(st);
     if (!packs.length) return toast('这个包里没有资源包');
-    const list = ['vanilla'].concat(packs.map(p => 'file/' + p.fileName));
+    // options.txt 里第一项优先级最低，所以要把“最上面”的包放到数组末尾
+    const list = ['vanilla'].concat(packs.slice().reverse().map(p => 'file/' + p.fileName));
     const line = 'resourcePacks:["' + list.join('","') + '"]';
     saveBlob(new Blob([line + '\n'], { type: 'text/plain;charset=utf-8' }), 'resourcepacks-options.txt');
     toast('已导出 options.txt 片段，贴到 .minecraft/options.txt 里');
