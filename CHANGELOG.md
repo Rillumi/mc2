@@ -12,6 +12,7 @@ git log --oneline
 - 版本比较新增 `compareInfo`：任何一侧解析不出来就返回 `ambiguous`，不再把「看不懂」当成相等（`js/core/version.js`）
 - 更新状态从两态扩为 `newer` / `current` / `older` / `ambiguous`，界面同步显示「本地版本更高」「版本号无法比较」；检查更新提示里单独统计无法比较的数量
 - 新增测试：解析不出来时返回 ambiguous，不假装相等
+- `compareForPick` 改用同一套 `parse` 语义：正式版优先、版本高优先、解析不出来排最后；旧 `cmp()` 只保留给约束/区间判断
 
 ### 导入
 - 支持 PCL 等启动器导出的「外壳 zip」：外层没有整合包标记、但里面恰好只有一个 `.mrpack` 时，自动拆出内层并提示；对比导入也支持直接拖 `.mrpack`

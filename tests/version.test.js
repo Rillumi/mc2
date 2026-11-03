@@ -26,6 +26,17 @@ test('解析不出来时返回 ambiguous，不假装相等', () => {
   assert.deepEqual(V.compareInfo('1.0.0', '1.0.0'), { cmp: 0, ambiguous: false });
 });
 
+test('挑候选：正式版优先、版本高的优先、看不懂的排后面', () => {
+  assert.deepEqual(
+    ['1.0.0-beta.2', '1.0.0', '1.0.1'].sort(V.compareForPick),
+    ['1.0.1', '1.0.0', '1.0.0-beta.2']
+  );
+  assert.deepEqual(
+    ['Latest', '1.0.0'].sort(V.compareForPick),
+    ['1.0.0', 'Latest']
+  );
+});
+
 test('预发布低于正式版', () => {
   assert.equal(V.compare('1.0.0-beta.2', '1.0.0'), -1);
   assert.equal(V.compare('1.0.0-pre161', '1.0.0'), -1);

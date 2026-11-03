@@ -198,12 +198,17 @@
     return s;
   }
 
-  /** 候选排序：正式版优先 → 版本号高优先 */
+  /** 候选排序：正式版优先 → 版本号高优先；判新旧和挑候选共用同一套 parse 语义 */
   function compareForPick(versionA, versionB) {
-    const pa = isPrerelease(versionA) ? 1 : 0;
-    const pb = isPrerelease(versionB) ? 1 : 0;
+    const x = parse(versionA), y = parse(versionB);
+    const ua = x.ambiguous ? 1 : 0;
+    const ub = y.ambiguous ? 1 : 0;
+    if (ua !== ub) return ua - ub;
+
+    const pa = x.pre || isPrerelease(versionA) ? 1 : 0;
+    const pb = y.pre || isPrerelease(versionB) ? 1 : 0;
     if (pa !== pb) return pa - pb;
-    return cmp(versionB, versionA);
+    return -cmpParsed(x, y);
   }
 
   MC.version = {
