@@ -15,6 +15,13 @@ test('从中央目录认出整合包类型', () => {
   assert.equal(MP.detect(map(['pack.mcmeta', 'assets/a.png'])), '');
 });
 
+test('识别 PCL 外壳：里面恰好只有一个 .mrpack', () => {
+  assert.equal(MP.detect(map(['modpack.mrpack', 'Plain Craft Launcher.exe', 'PCL/Setup.ini'])), '');
+  assert.equal(MP.wrapperPath(map(['modpack.mrpack', 'Plain Craft Launcher.exe', 'PCL/Setup.ini'])), 'modpack.mrpack');
+  assert.equal(MP.wrapperPath(map(['a.mrpack', 'b.mrpack'])), '');
+  assert.equal(MP.wrapperPath(map(['mods/a.jar'])), '');
+});
+
 test('只列出 mods/ 与 overrides/mods/ 下的 jar', () => {
   const paths = MP.jarPaths(map([
     'mods/a.jar', 'mods/b.JAR', 'mods/sub/c.jar',

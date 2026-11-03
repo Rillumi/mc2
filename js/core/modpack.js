@@ -59,5 +59,16 @@
     return out;
   }
 
-  MC.modpack = { detect, jarPaths, envFromMrpack, envFromCurse };
+  /** PCL 等启动器导出的外壳 zip：没有整合包标记，但里面恰好只有一个 .mrpack */
+  function wrapperPath(map) {
+    let found = '';
+    for (const name of map.keys()) {
+      if (!/\.mrpack$/i.test(name)) continue;
+      if (found) return ''; // 多于一个，不猜
+      found = name;
+    }
+    return found;
+  }
+
+  MC.modpack = { detect, jarPaths, envFromMrpack, envFromCurse, wrapperPath };
 })(globalThis);

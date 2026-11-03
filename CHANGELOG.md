@@ -13,6 +13,10 @@ git log --oneline
 - 更新状态从两态扩为 `newer` / `current` / `older` / `ambiguous`，界面同步显示「本地版本更高」「版本号无法比较」；检查更新提示里单独统计无法比较的数量
 - 新增测试：解析不出来时返回 ambiguous，不假装相等
 
+### 导入
+- 支持 PCL 等启动器导出的「外壳 zip」：外层没有整合包标记、但里面恰好只有一个 `.mrpack` 时，自动拆出内层并提示；对比导入也支持直接拖 `.mrpack`
+- 新增 `wrapperPath` 测试：只认唯一 `.mrpack`，多个时不猜
+
 ### 工程入口
 - `package.json` 增加 `start` / `test` 脚本（`npm start`、`npm test`）
 - 新增 `README.md`：快速开始、可选 MySQL 与 CurseForge key、目录结构、已知边界

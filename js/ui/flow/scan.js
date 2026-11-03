@@ -120,6 +120,33 @@
     return pack;
   }
 
+  /** PCL 等启动器导出的外壳 zip：里面恰好只有一个 .mrpack，拆出来当普通整合包 */
+  async function unwrapPack(file) {
+    if (!/\.zip$/i.test(file.name)) return file;
+    let z = packZips.get(file);
+    if (!z) {
+      try { z = MC.zip.parseCentral(await file.arrayBuffer()); } catch (err) { return file; }
+      packZips.set(file, z);
+    }
+    if (MC.modpack.detect(z.map)) return file;
+    const inner = MC.modpack.wrapperPath(z.map);
+    if (!inner) return file;
+    const bytes = await MC.zip.readEntryBytes(z, inner);
+    if (!bytes) return file;
+    const buf = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
+    let iz;
+    try { iz = MC.zip.parseCentral(buf); } catch (err) { return file; }
+    if (MC.modpack.detect(iz.map) !== 'mrpack') return file;
+    const name = inner.split('/').pop() || 'modpack.mrpack';
+    const virtual = typeof File === 'function'
+      ? new File([buf], name, { type: 'application/zip' })
+      : Object.assign(new Blob([buf]), { name });
+    packZips.set(virtual, iz);
+    packZips.delete(file);
+    toast('已从「' + file.name + '」里取出整合包：' + name);
+    return virtual;
+  }
+
   /** 打包时按「整合包名 + 内部路径」回读 jar，避免把整包字节一直留在内存里 */
   async function readPackedBytes(packName, path) {
     const src = (S().packSources || []).find(p => p.name === packName);
@@ -207,6 +234,9 @@
 
     // 拖进来的可能是整个整合包：先认出来，再解出里面的 jar
     // 文件夹里内嵌的整合包默认跳过（只扫 jar），不然会把包内在线清单混进来
+    const unwrapped = [];
+    for (const f of list) unwrapped.push(await unwrapPack(f));
+    list = unwrapped;
     const packs = [];
     let plain = [];
     const nested = [];
@@ -349,8 +379,9 @@
   async function expandModpack(files) {
     const st = S();
     const out = [];
-    for (const file of files) {
-      if (!/\.zip$/i.test(file.name)) continue;
+    for (const raw of files) {
+      const file = await unwrapPack(raw);
+      if (!/\.(zip|mrpack)$/i.test(file.name)) continue;
       let z;
       try { z = MC.zip.parseCentral(await file.arrayBuffer()); } catch (err) { continue; }
       const jarNames = [];
@@ -431,13 +462,14 @@
 
   async function importDiff(files) {
     const st = S();
-    const list = Array.from(files || []).filter(f => /\.(jar|zip)$/i.test(f.name));
+    const list = Array.from(files || []).filter(f => /\.(jar|zip|mrpack)$/i.test(f.name));
     if (!list.length) {
       st.scan = null;
       touch();
-      return toast('没找到 .jar / .zip 文件');
+      return toast('没找到 .jar / .zip / .mrpack 文件');
     }
-    const built = await buildEntries(list, '正在读取另一个包');
+    const jarOnly = list.filter(f => /\.jar$/i.test(f.name));
+    const built = jarOnly.length ? await buildEntries(jarOnly, '正在读取另一个包') : { entries: [] };
     const nested = await expandModpack(list);
     st.progress = '';
     st.diff = {
