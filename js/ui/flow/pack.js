@@ -24,27 +24,43 @@
         return null;
       };
       const localJars = [];
+      const skippedFiles = [];
       for (const row of picked) {
         const data = await readData(row.entry);
-        if (!data) continue;
+        if (!data) {
+          skippedFiles.push((row.entry && row.entry.fileName) || '(未知文件)');
+          continue;
+        }
         localJars.push({ name: row.entry.fileName, sha1: row.entry.sha1 || '', data });
       }
       const adapted = Object.keys(st.adapt || {}).map(k => st.adapt[k])
         .filter(x => x.added && x.status === 'ok' && x.version && x.project);
       const deps = st.deps.filter(d => d.added && d.status === 'ok' && d.version && d.project).concat(adapted);
 
+      // 能对上源的 sha1：包内文件要逐个核对，防止写错字节
+      const knownHashes = localJars.map(j => j.sha1).filter(Boolean);
+      deps.forEach(d => {
+        const f = d.version && d.version.files && d.version.files[0];
+        if (f && f.hashes && f.hashes.sha1) knownHashes.push(f.hashes.sha1);
+      });
+      const depFailed = [];
+
       const extras = [];
       if (st.includePacks) {
         for (const o of (st.analysis.others || [])) {
           if (o.kind !== 'resourcepack' && o.kind !== 'shader') continue;
           const data = await readData(o);
-          if (!data) continue;
+          if (!data) {
+            skippedFiles.push('资源包/光影 ' + (o.fileName || '?'));
+            continue;
+          }
           extras.push({ kind: o.kind, name: o.fileName, data });
         }
       }
 
       // 原整合包里的 config / defaultconfigs / kubejs / resourcepacks 等一并带走
       const overrides = [];
+      let overrideFailed = 0;
       if (format !== 'manifest') {
         for (const src of (st.packSources || [])) {
           if (!MC.flowScan.listPacked || !MC.overrides) continue;
@@ -56,6 +72,7 @@
             }
             const data = await MC.flowScan.readPackedBytes(src.name, plan[i].src);
             if (data) overrides.push({ path: plan[i].path, data });
+            else overrideFailed++;
           }
         }
       }
@@ -162,7 +179,9 @@
             try {
               const bytes = await MC.api.modrinth.download(f.url);
               jars.push({ name: f.filename || ((dep.project.slug || 'mod') + '.jar'), data: bytes });
-            } catch { /* 下不下来就只能靠安装说明里留个记录 */ }
+            } catch (err) {
+              depFailed.push(dep.project.title || dep.project.slug || f.url);
+            }
           }
           if (!hook.ok) toast('指纹反查没成功：' + hook.reason + '（清单里可能还留着已打包的模组）');
 
@@ -185,8 +204,49 @@
           onProgress: text => { st.progress = text; touch(); }
         }));
       }
+      // 生成后回读：清单结构、条目数、包内 jar 的 sha1 都对一遍
+      if (MC.pack.verify) {
+        for (const r of results) {
+          const meta = Object.assign({}, r.meta || {}, { hashes: knownHashes });
+          r.verify = await MC.pack.verify(r.blob, meta, (i, n, name) => {
+            st.progress = '正在校验包内文件 ' + i + '/' + n + '：' + name;
+            touch();
+          });
+        }
+      }
+
       results.forEach(r => saveBlob(r.blob, r.filename));
-      toast('已生成 ' + results.map(r => r.filename).join(' 和 '));
+
+      const names = results.map(r => r.filename).join(' 和 ');
+      const v = results[0] && results[0].verify;
+      let line = '已生成 ' + names;
+      if (v && v.ok) {
+        line += v.total
+          ? ' · 校验通过（' + v.checked + '/' + v.total + ' 个 jar）'
+          : ' · 校验通过（清单结构完整）';
+      }
+      const notes = [];
+      if (skippedFiles.length) {
+        notes.push('跳过 ' + skippedFiles.length + ' 个读不到的文件：' +
+          skippedFiles.slice(0, 3).join('、') + (skippedFiles.length > 3 ? ' 等' : ''));
+      }
+      if (overrideFailed) notes.push('原包内容有 ' + overrideFailed + ' 个没复制进来');
+      if (depFailed.length) {
+        notes.push('前置下载失败 ' + depFailed.length + ' 个：' +
+          depFailed.slice(0, 3).join('、') + (depFailed.length > 3 ? ' 等' : ''));
+      }
+      const problems = results.reduce((a, r) => a.concat((r.verify && r.verify.problems) || []), []);
+      if (problems.length) notes.push('校验发现 ' + problems.length + ' 个问题');
+      if (notes.length) line += '；' + notes.join('；');
+      toast(line);
+
+      if (problems.length) {
+        console.warn('打包校验问题：', problems);
+        const shown = problems.slice(0, 12);
+        alert('文件已生成，但回读校验发现问题（' + problems.length + ' 个）：\n\n' +
+          shown.join('\n') + (problems.length > shown.length ? '\n…' : '') +
+          '\n\n包仍然已下载，可以先检查这些问题再发给别人。');
+      }
 
     } catch (err) {
       console.error(err);

@@ -41,12 +41,13 @@
       if (dv.getUint32(off, true) !== 0x02014b50) break;
       const method = dv.getUint16(off + 10, true);
       const compSize = dv.getUint32(off + 20, true);
+      const size = dv.getUint32(off + 24, true);
       const nameLen = dv.getUint16(off + 28, true);
       const extraLen = dv.getUint16(off + 30, true);
       const commentLen = dv.getUint16(off + 32, true);
       const localOff = dv.getUint32(off + 42, true);
       const name = new TextDecoder('utf-8').decode(u8.subarray(off + 46, off + 46 + nameLen));
-      if (localOff !== 0xFFFFFFFF) map.set(name, { method, compSize, localOff });
+      if (localOff !== 0xFFFFFFFF) map.set(name, { method, compSize, size, localOff });
       off += 46 + nameLen + extraLen + commentLen;
     }
     return { map, dv, u8 };

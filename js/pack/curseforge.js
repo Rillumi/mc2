@@ -101,7 +101,10 @@
 
     const base = 'ModPilot-' + String((opt.env && opt.env.loader) || 'pack').toLowerCase() +
       '-' + ((opt.env && opt.env.mc) || 'x');
-    return { blob: await MC.zipWriter.build(zip), filename: base + '-CurseForge.zip' };
+    return {
+      blob: await MC.zipWriter.build(zip), filename: base + '-CurseForge.zip',
+      meta: { format: 'curseforge', jars: (opt.jars || []).length, online: (opt.files || []).length }
+    };
   }
 
   MC.pack = MC.pack || {};

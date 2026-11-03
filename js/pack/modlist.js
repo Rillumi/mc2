@@ -139,7 +139,8 @@
     if (opt.original) files.push({ path: '原包模组列表.html', data: enc.encode(opt.original) });
     return {
       blob: await MC.zipWriter.build(files),
-      filename: baseName(opt.env) + '-下载清单.zip'
+      filename: baseName(opt.env) + '-下载清单.zip',
+      meta: { format: 'list', jars: 0, online: (opt.online || []).filter(o => o && o.projectID && o.fileID).length }
     };
   }
 

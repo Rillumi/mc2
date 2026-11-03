@@ -211,7 +211,8 @@
     let plain = [];
     const nested = [];
     for (const f of list) {
-      const inFolder = !!(f.webkitRelativePath || f.modpilotPath);
+      // 单独拖进来的文件也会带 modpilotPath，只有从文件夹里带出来的才算内嵌包
+      const inFolder = !!(f.webkitRelativePath || (f.modpilotPath && opts.fromFolder));
       const type = await packType(f);
       if (!type) { plain.push(f); continue; }
       if (inFolder) { nested.push(f.name); continue; }

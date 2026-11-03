@@ -116,7 +116,11 @@
       data: enc.encode(notice(env, (opts.localJars || []).length, files.length, opts.skipped, (opts.overrides || []).length, opts.offline))
     });
 
-    return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '.mrpack' };
+    return {
+      blob: await MC.zipWriter.build(zipFiles),
+      filename: baseName(env) + '.mrpack',
+      meta: { format: 'mrpack', jars: (opts.localJars || []).length, online: files.length }
+    };
   }
 
   /** 普通 zip：所有 jar 实打实放进去，离线也能装 */
@@ -159,7 +163,11 @@
       data: enc.encode(notice(env, (opts.localJars || []).length, downloaded, skipped, (opts.overrides || []).length))
     });
 
-    return { blob: await MC.zipWriter.build(zipFiles), filename: baseName(env) + '-普通包.zip' };
+    return {
+      blob: await MC.zipWriter.build(zipFiles),
+      filename: baseName(env) + '-普通包.zip',
+      meta: { format: 'zip', jars: jars.length, online: downloaded, skipped }
+    };
   }
 
   MC.pack = { buildMrpack, buildPlainZip, dependencies, baseName };
