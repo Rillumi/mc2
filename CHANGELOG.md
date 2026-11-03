@@ -16,6 +16,7 @@ git log --oneline
 ### 工程入口
 - `package.json` 增加 `start` / `test` 脚本（`npm start`、`npm test`）
 - 新增 `README.md`：快速开始、可选 MySQL 与 CurseForge key、目录结构、已知边界
+- 新增 `tests/verify.test.js`（10 项）：正常包通过、jar 数量不符、哈希对不上、缺清单 / 坏 JSON、在线项缺哈希或 ID、清单混入 jar、离线 zip 缺说明、非 zip 输入
 
 ### 打包与导出
 - 生成后自动回读校验（`js/pack/verify.js`）：重新解析 zip，检查 `.mrpack` / CurseForge 清单字段、在线项数量、包内 jar 数量，逐个解压并核对 sha1；通过提示「校验通过 n/n」，有问题弹窗列出具体条目（包仍会下载，不丢工作）
