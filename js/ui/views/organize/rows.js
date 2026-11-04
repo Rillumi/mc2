@@ -144,6 +144,11 @@
     const scanning = scanBar(s);
 
     if (!s.mods.length) {
+      const online = (s.packSources || []).reduce((n, p) => n + (p.onlineList || []).length, 0);
+      if (online) {
+        el.innerHTML = scanning || '<div class="empty"><b>已导入 ' + online + ' 个在线文件</b><br>原包没有内置模组文件，可在右侧重新导出整合包或生成下载清单。<br>分析前置和本地版本需要先在启动器安装整合包，再导入 mods 文件夹。</div>';
+        return;
+      }
       el.innerHTML = scanning || '<div class="empty"><b>还没有扫描</b><br>把 mods 文件夹拖进来，或者点「只查一个模组」单独分析一个 jar。<br>全部在本地读取，文件不会上传。</div>';
       if (title) title.textContent = s.scan ? '正在读取…' : '整理方案';
       return;

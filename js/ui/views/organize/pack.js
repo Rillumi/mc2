@@ -23,7 +23,8 @@
         const f = d.version.files && d.version.files[0];
         return n + ((f && f.size) || 0);
       }, 0) + (packsOn ? packBytes : 0);
-    const hasContent = total + (packsOn ? packList.length : 0);
+    const sourceOnline = (s.packSources || []).reduce((n, p) => n + (p.onlineList || []).length, 0);
+    const hasContent = total + sourceOnline + (packsOn ? packList.length : 0);
 
     const open = s.deps.filter(d => !(d.added && d.status === 'ok' && d.version));
     const excluded = MC.selector.excludedGroups(s, a).length;
@@ -44,6 +45,7 @@
       '<div class="sum">包里 <b>' + total + '</b> 个模组 · 约 ' + fmtSize(size) +
       (added.length ? ' · 含 ' + added.length + ' 个前置' : '') +
       (adapted.length ? ' · 换 ' + adapted.length + ' 个版本' : '') +
+      (sourceOnline ? ' · 原包在线文件 ' + sourceOnline + ' 项' : '') +
       (excluded ? ' · 排除 ' + excluded + ' 个' : '') +
       (packsOn ? ' · 另带 ' + packList.length + ' 个资源包/光影' : '') + '</div>' +
 

@@ -12,3 +12,4 @@ Desktop.ini
 data/
 node_modules/
 db.config.json
+.tmp/

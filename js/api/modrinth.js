@@ -162,18 +162,18 @@
     return out;
   }
 
-  /** 在符合环境的版本里，按依赖给出的版本区间挑一个；挑不到就取最新的正式版 */
+  /** 只在满足依赖区间的候选里选择；没有匹配时返回 null。 */
   function pickVersion(list, range) {
     if (!list || !list.length) return null;
     const V = MC.version;
     const inRange = range ? list.filter(v => V.mcMatches(range, v.version_number)) : list;
-    const pool = inRange.length ? inRange : list;
+    const pool = inRange;
     const rank = v => (v.version_type === 'release' ? 0 : v.version_type === 'beta' ? 1 : 2);
     return pool.slice().sort((a, b) => {
       const d = rank(a) - rank(b);
       if (d) return d;
       return String(b.date_published || '').localeCompare(String(a.date_published || ''));
-    })[0];
+    })[0] || null;
   }
 
   /* ---------- 团队成员：核对 jar 里的作者到底是不是 Modrinth 账号 ---------- */

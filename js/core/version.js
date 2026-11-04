@@ -24,8 +24,16 @@
     let op = '';
     const m = token.match(/^(>=|<=|>|<|=|~|\^)?\s*(.+)$/);
     if (m) { op = m[1] || ''; token = m[2].trim(); }
+    if (/^(?:\d+\.)*[x*]$/i.test(token)) {
+      if (op && op !== '=') return false;
+      const prefix = token.split('.').slice(0, -1).map(Number);
+      const actual = vparts(target);
+      return prefix.every((n, i) => actual[i] === n);
+    }
     const t = vparts(target), v = vparts(token);
-    const c = cmp(target, token);
+    const info = compareInfo(target, token);
+    if (info.ambiguous) return false;
+    const c = info.cmp;
     switch (op) {
       case '>=': return c >= 0;
       case '<=': return c <= 0;
@@ -33,7 +41,8 @@
       case '<': return c < 0;
       case '=': return c === 0;
       case '~': return c >= 0 && t[0] === v[0] && t[1] === v[1];
-      case '^': return c >= 0 && t[0] === v[0];
+      case '^': return c >= 0 && t[0] === v[0] &&
+        (v[0] !== 0 || (t[1] === v[1] && (v[1] !== 0 || t[2] === v[2])));
       default:
         if (String(token).split('.').length >= 3) return c === 0;
         return t[0] === v[0] && (t[1] === undefined || v[1] === undefined || t[1] === v[1]);
@@ -60,7 +69,8 @@
       if (parts.length === 1) return cmp(target, parts[0]) === 0;
       return true;
     }
-    return r.split(/\s+/).every(tok => checkConstraint(tok, target));
+    return r.split(/\s*\|\|\s*/).some(part =>
+      part.replace(/(>=|<=|>|<|=|~|\^)\s+/g, '$1').split(/\s+/).every(tok => checkConstraint(tok, target)));
   }
 
   function isPrerelease(v) {
@@ -108,14 +118,14 @@
     s = s.replace(/mc[ ._-]?\d+(?:\.\d+)*x?/g, ' ');
     s = s.replace(LOADER_RE, ' ');
 
-    // 3) 找所有数字段；把 MC 版本样式的段排除（但全是 MC 样式时保留第一个）
+    // 3) 元数据版本可能恰好与 MC 版本相同，不能仅凭形状删掉核心。
+    // 显式 mc 前缀已在上面移除；其余取第一个数字段，后续数字属于预发布/修订。
     const nums = [];
     const numRe = /\d+(?:\.\d+)*/g;
     while ((m = numRe.exec(s))) {
       nums.push({ text: m[0], index: m.index });
     }
-    const nonMc = nums.filter(n => !MC_VER_RE.test(n.text));
-    const pick = nonMc.length ? nonMc[0] : nums[0];
+    const pick = nums[0];
     if (!pick) { out.ambiguous = true; return out; }
 
     out.core = pick.text.split('.').map(Number);

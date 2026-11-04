@@ -100,6 +100,8 @@
         dep.status = 'ok';
       } else {
         dep.project = res.project || null;
+        dep.version = null;
+        dep.versions = [];
         dep.reason = res.reason || '没匹配上';
         dep.added = false;
         dep.status = 'none';
@@ -134,6 +136,9 @@
           downloads: res.project.downloads || 0
         });
       } else {
+        dep.added = false;
+        dep.version = null;
+        dep.versions = [];
         dep.status = 'none';
         dep.reason = res.reason || '这个项目用不了';
       }

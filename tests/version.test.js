@@ -80,3 +80,20 @@ test('canonical 去掉环境与变体', () => {
   assert.equal(V.canonical('2.6.5-forge+mc1.20.1-Patch.2'), '2.6.5+patch2');
   assert.equal(V.canonical('1.0.0-slim'), '1.0.0');
 });
+
+test('模组自身版本恰好与 MC 版本同形时，保留核心与预发布编号', () => {
+  assert.deepEqual(V.parse('1.20.1-beta.2').core, [1, 20, 1]);
+  assert.equal(V.compare('1.20.1-beta.2', '1.20.1'), -1);
+  assert.equal(V.compare('1.21.0-rc.3', '1.21.0'), -1);
+  assert.equal(V.compare('1.20.1-Patch.2', '1.20.1-Patch.10'), -1);
+  assert.equal(V.compare('mc1.20.1-2.6.5-beta.2', '2.6.5'), -1);
+});
+
+test('前置区间支持预发布语义、或条件、空格和 0.x caret 边界', () => {
+  assert.equal(V.mcMatches('>=1.0.0', '1.0.0-beta.2'), false);
+  assert.equal(V.mcMatches('>= 2.0.0', '1.0.0'), false);
+  assert.equal(V.mcMatches('1.19.x || 1.20.x', '1.20.1'), true);
+  assert.equal(V.mcMatches('^0.2.1', '0.3.0'), false);
+  assert.equal(V.mcMatches('^0.0.1', '0.0.2'), false);
+  assert.equal(V.mcMatches('^0.2.1', '0.2.4'), true);
+});

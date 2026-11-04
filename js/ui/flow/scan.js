@@ -74,7 +74,10 @@
         pack.title = idx.name || '';
         const mods = (idx.files || []).filter(f => /^mods\//i.test(String(f.path || '')));
         pack.online = mods.length;
-        pack.onlineList = mods.map(f => ({ path: String(f.path || ''), url: (f.downloads || [])[0] || '' }));
+        // 回导需要完整的哈希、下载地址、环境和大小，不能只留下展示用链接。
+        pack.onlineList = (idx.files || []).map(f => Object.assign({}, f, {
+          path: String(f.path || ''), url: (f.downloads || [])[0] || ''
+        }));
       } catch (err) { /* 清单坏了也照样解 jar */ }
     } else if (type === 'curseforge') {
       try {
@@ -89,7 +92,7 @@
 
     const jars = MC.modpack.jarPaths(z.map);
     if (!jars.length) {
-      pack.empty = true;
+      pack.empty = !pack.onlineList.length;
       return pack;
     }
 
@@ -114,7 +117,9 @@
       } catch (err) { /* 单个 jar 坏了不影响其他 */ }
       st.scan.done = i + 1;
     }
-    pack.online = Math.max(0, pack.online - jars.length);
+    const localNames = new Set(jars.map(p => p.split('/').pop().toLowerCase()));
+    pack.online = pack.onlineList.filter(f => !f.path ||
+      (/^mods\//i.test(f.path) && !localNames.has(f.path.split('/').pop().toLowerCase()))).length;
     st.scan = null;
     touch();
     return pack;
@@ -334,7 +339,8 @@
     if (!entries.length) {
       st.scan = null;
       touch();
-      return toast('没有读到可分析的模组');
+      // 纯在线清单也允许重新导出，无需先把所有 jar 下载到本地。
+      if (!hasPack || !scanned.some(p => p.onlineList.length)) return toast('没有读到可分析的模组');
     }
     st.mods.push(...entries);
     if (opts.handle && !single && !hasPack && MC.libraryPanel) MC.libraryPanel.save(opts.handle, st);

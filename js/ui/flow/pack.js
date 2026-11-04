@@ -37,12 +37,36 @@
         .filter(x => x.added && x.status === 'ok' && x.version && x.project);
       const deps = st.deps.filter(d => d.added && d.status === 'ok' && d.version && d.project).concat(adapted);
 
+      const localNames = new Set(localJars.map(j => j.name.toLowerCase()));
+      const localHashes = new Set(localJars.map(j => j.sha1).filter(Boolean));
+      const onlineFiles = [];
+      const seenOnline = new Map();
+      for (const src of (st.packSources || [])) {
+        for (const f of (src.onlineList || [])) {
+          if (f.path && /^mods\//i.test(f.path) && localNames.has(f.path.split('/').pop().toLowerCase())) continue;
+          if (f.hashes && localHashes.has(f.hashes.sha1)) continue;
+          const key = f.path || (f.projectID + ':' + f.fileID);
+          const old = seenOnline.get(key);
+          if (old) {
+            if (JSON.stringify(old.hashes) !== JSON.stringify(f.hashes)) throw new Error('原包在线文件冲突：' + key);
+            continue;
+          }
+          seenOnline.set(key, f);
+          onlineFiles.push(f);
+        }
+      }
+      if (format !== 'manifest') {
+        const unconvertible = onlineFiles.some(f => format === 'curse' ? !f.projectID || !f.fileID : !f.path);
+        if (unconvertible) throw new Error('原包在线清单不能直接转换为此格式，请选择原包格式或导出下载清单');
+      }
+
       // 能对上源的 sha1：包内文件要逐个核对，防止写错字节
       const knownHashes = localJars.map(j => j.sha1).filter(Boolean);
       deps.forEach(d => {
         const f = d.version && d.version.files && d.version.files[0];
         if (f && f.hashes && f.hashes.sha1) knownHashes.push(f.hashes.sha1);
       });
+      onlineFiles.forEach(f => { if (f.hashes && f.hashes.sha1) knownHashes.push(f.hashes.sha1); });
       const depFailed = [];
 
       const extras = [];
@@ -77,7 +101,9 @@
         }
       }
 
-      let result;
+      if (skippedFiles.length || overrideFailed) {
+        throw new Error('有 ' + (skippedFiles.length + overrideFailed) + ' 个源文件读不到，已停止导出，请重新导入后重试');
+      }
       const localList = () => picked.map(row => {
         const e = row.entry || {};
         const p = MC.flowCommon.projectForEntry(st, e, row.group);
@@ -88,7 +114,8 @@
           url: p ? 'https://modrinth.com/mod/' + (p.slug || p.id) : ''
         };
       });
-      const packTitle = (st.packSources[0] && st.packSources[0].name.replace(/\.(mrpack|zip)$/i, '')) ||
+      const source = (st.packSources || [])[0];
+      const packTitle = (source && source.name.replace(/\.(mrpack|zip)$/i, '')) ||
         ('ModPilot ' + st.env.loader + ' ' + st.env.mc);
 
       const results = [];
@@ -161,26 +188,26 @@
           // 清单里只留没打进包的：已经放进 overrides/mods 的不再让启动器下一次
           const files = [];
           const seenFile = {};
-          (st.packSources || []).forEach(src => (src.onlineList || []).forEach(o => {
+          onlineFiles.forEach(o => {
             if (!o.projectID || !o.fileID || matchedIds[o.fileID]) return;
             const k = o.projectID + ':' + o.fileID;
             if (seenFile[k]) return;
             seenFile[k] = 1;
             files.push({ projectID: o.projectID, fileID: o.fileID });
-          }));
+          });
 
           // Modrinth 前置直接下好放进 overrides/mods，CF 清单里没有它们的位置
           const jars = localJars.slice();
           for (const dep of deps) {
             const f = dep.version && dep.version.files && dep.version.files[0];
-            if (!f) continue;
+            if (!f) throw new Error('前置缺少下载文件：' + dep.project.title);
             st.progress = '正在下载 ' + (dep.project.title || dep.project.slug) + '…';
             touch();
             try {
               const bytes = await MC.api.modrinth.download(f.url);
               jars.push({ name: f.filename || ((dep.project.slug || 'mod') + '.jar'), data: bytes });
             } catch (err) {
-              depFailed.push(dep.project.title || dep.project.slug || f.url);
+              throw new Error('前置下载失败：' + (dep.project.title || dep.project.slug));
             }
           }
           if (!hook.ok) toast('指纹反查没成功：' + hook.reason + '（清单里可能还留着已打包的模组）');
@@ -195,12 +222,12 @@
       } else if (format === 'mrpack') {
         st.progress = '正在生成 .mrpack…';
         touch();
-        results.push(await MC.pack.buildMrpack({ env: st.env, localJars, deps, extras, overrides }));
+        results.push(await MC.pack.buildMrpack({ env: st.env, localJars, deps, extras, overrides, onlineFiles }));
       } else {
         st.progress = '正在打包离线 zip…';
         touch();
         results.push(await MC.pack.buildPlainZip({
-          env: st.env, localJars, deps, extras, overrides,
+          env: st.env, localJars, deps, extras, overrides, onlineFiles,
           onProgress: text => { st.progress = text; touch(); }
         }));
       }
@@ -215,6 +242,8 @@
         }
       }
 
+      const failedChecks = results.flatMap(r => (r.verify && r.verify.problems) || []);
+      if (failedChecks.length) throw new Error('回读校验未通过，已停止导出：' + failedChecks.slice(0, 3).join('；'));
       results.forEach(r => saveBlob(r.blob, r.filename));
 
       const names = results.map(r => r.filename).join(' 和 ');
@@ -253,16 +282,9 @@
       };
       toast(line);
 
-      if (problems.length) {
-        console.warn('打包校验问题：', problems);
-        const shown = problems.slice(0, 12);
-        alert('文件已生成，但回读校验发现问题（' + problems.length + ' 个）：\n\n' +
-          shown.join('\n') + (problems.length > shown.length ? '\n…' : '') +
-          '\n\n包仍然已下载，可以先检查这些问题再发给别人。');
-      }
-
     } catch (err) {
       console.error(err);
+      st.lastPack = { at: Date.now(), files: [], problems: [err && err.message ? err.message : String(err)] };
       toast('打包失败：' + (err && err.message ? err.message : err));
     } finally {
       st.busy = false;

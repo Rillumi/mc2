@@ -83,7 +83,7 @@
         if (!Array.isArray(files)) {
           problems.push('modrinth.index.json 的 files 不是数组');
         } else {
-          if (meta.online && files.length !== meta.online) {
+          if (meta.online != null && files.length !== meta.online) {
             problems.push('在线项数量不对：清单 ' + files.length + ' 条，预期 ' + meta.online + ' 条');
           }
           files.forEach((f, i) => {
@@ -102,7 +102,7 @@
         if (!Array.isArray(mf.files)) {
           problems.push('manifest.json 的 files 不是数组');
         } else {
-          if (meta.online && mf.files.length !== meta.online) {
+          if (meta.online != null && mf.files.length !== meta.online) {
             problems.push('在线项数量不对：manifest ' + mf.files.length + ' 条，预期 ' + meta.online + ' 条');
           }
           mf.files.forEach((f, i) => {

@@ -69,10 +69,35 @@
     const used = new Set();
     const files = [];
 
+    function addOnline(f) {
+      const path = String(f.path || '').replace(/\\/g, '/');
+      if (!path || path.startsWith('/') || path.split('/').some(p => !p || p === '.' || p === '..') || /[:\x00]/.test(path)) {
+        throw new Error('在线文件路径不合法：' + path);
+      }
+      if (!f.hashes || !/^[a-f0-9]{40}$/i.test(f.hashes.sha1 || '') || !/^[a-f0-9]{128}$/i.test(f.hashes.sha512 || '')) {
+        throw new Error(path + ' 缺少有效 sha1/sha512，请重新导入原包');
+      }
+      if (!Array.isArray(f.downloads) || !f.downloads.length || f.downloads.some(u => !/^https:\/\//i.test(u))) {
+        throw new Error(path + ' 缺少 HTTPS 下载地址');
+      }
+      if (!Number.isSafeInteger(f.fileSize) || f.fileSize < 0) throw new Error(path + ' 缺少有效文件大小');
+      const old = files.find(x => x.path.toLowerCase() === path.toLowerCase());
+      if (old) {
+        if (old.hashes.sha1.toLowerCase() !== f.hashes.sha1.toLowerCase()) throw new Error('在线文件路径冲突：' + path);
+        return;
+      }
+      files.push({ path, hashes: f.hashes, downloads: f.downloads.slice(), fileSize: f.fileSize,
+        ...(f.env ? { env: f.env } : {}) });
+      used.add(path.split('/').pop().toLowerCase());
+    }
+
+    (opts.onlineFiles || []).forEach(addOnline);
+
     (opts.deps || []).forEach(dep => {
       const f = dep.version && dep.version.files && dep.version.files[0];
-      if (!f || !f.hashes || !f.hashes.sha1 || !f.hashes.sha512) return;
-      files.push({
+      if (!f) throw new Error('前置缺少下载文件：' + dep.project.title);
+      if (f.hashes && files.some(x => x.hashes.sha1.toLowerCase() === String(f.hashes.sha1).toLowerCase())) return;
+      addOnline({
         path: 'mods/' + uniqueJarName(f.filename || ((dep.project.slug || 'mod') + '.jar'), used),
         hashes: { sha1: f.hashes.sha1, sha512: f.hashes.sha512 },
         env: { client: 'required', server: 'required' },
@@ -130,6 +155,22 @@
     const jars = [];
     const skipped = [];
     let downloaded = 0;
+    const originalFiles = [];
+
+    for (const f of (opts.onlineFiles || [])) {
+      if (!f.path || /(?:^|[\\/])\.\.?(?:[\\/]|$)|^[/\\]|[:\x00]/.test(f.path)) throw new Error('在线文件路径不合法');
+      const url = (f.downloads || [])[0] || f.url;
+      if (!/^https:\/\//i.test(url || '')) throw new Error(f.path + ' 没有可用的下载地址');
+      if (opts.onProgress) opts.onProgress('正在下载原包文件 ' + f.path + '…');
+      const bytes = await MC.api.modrinth.download(url);
+      if (!f.hashes || !f.hashes.sha1) throw new Error(f.path + ' 缺少哈希，请重新导入原包');
+      const digest = new Uint8Array(await crypto.subtle.digest('SHA-1', bytes));
+      const hash = Array.from(digest, b => b.toString(16).padStart(2, '0')).join('');
+      if (hash !== f.hashes.sha1.toLowerCase() || bytes.length !== f.fileSize) throw new Error(f.path + ' 下载内容校验失败');
+      originalFiles.push({ path: f.path, data: bytes });
+      used.add(f.path.split('/').pop().toLowerCase());
+      downloaded++;
+    }
 
     (opts.localJars || []).forEach(jar => {
       jars.push({ name: uniqueJarName(jar.name, used), data: jar.data });
@@ -137,18 +178,18 @@
 
     for (const dep of (opts.deps || [])) {
       const f = dep.version && dep.version.files && dep.version.files[0];
-      if (!f) continue;
+      if (!f) throw new Error('前置缺少下载文件：' + dep.project.title);
       if (opts.onProgress) opts.onProgress('正在下载 ' + (dep.project.title || dep.project.slug) + '…');
       try {
         const bytes = await MC.api.modrinth.download(f.url);
         downloaded++;
         jars.push({ name: uniqueJarName(f.filename || ((dep.project.slug || 'mod') + '.jar'), used), data: bytes });
       } catch (err) {
-        skipped.push((dep.project.title || dep.project.slug) + ' → ' + f.url);
+        throw new Error('前置下载失败：' + (dep.project.title || dep.project.slug));
       }
     }
 
-    const zipFiles = jars.map(j => ({ path: 'mods/' + j.name, data: j.data }));
+    const zipFiles = originalFiles.concat(jars.map(j => ({ path: 'mods/' + j.name, data: j.data })));
     (opts.extras || []).forEach(x => {
       zipFiles.push({
         path: packFolder(x.kind) + '/' + uniqueName(x.name, used, '.zip'),
@@ -166,7 +207,7 @@
     return {
       blob: await MC.zipWriter.build(zipFiles),
       filename: baseName(env) + '-普通包.zip',
-      meta: { format: 'zip', jars: jars.length, online: downloaded, skipped }
+      meta: { format: 'zip', jars: jars.length + originalFiles.filter(f => /^mods\/[^/]+\.jar$/i.test(f.path)).length, online: downloaded, skipped }
     };
   }
 

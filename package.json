@@ -5,7 +5,8 @@
   "description": "Minecraft 模组整理、识别、检查更新与整合包导出",
   "scripts": {
     "start": "node server.js",
-    "test": "node --test \"tests/*.test.js\""
+    "test": "node --test \"tests/*.test.js\"",
+    "smoke:local": "node scripts/smoke-local.cjs"
   },
   "dependencies": {
     "mysql2": "^3.24.6"

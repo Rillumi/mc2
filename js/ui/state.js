@@ -23,6 +23,7 @@
       loaderVersion: (saved && saved.loaderVersion) || DEFAULTS.Forge
     },
     mods: [],           // 解析后的 jar（含资源包/光影）
+    packSources: [],    // 导入的整合包来源；普通文件夹模式为空
     analysis: null,     // analyzer 的输出
     selection: {},      // modId → 选中的 row.uid
     excluded: {},       // modId → true（用户手动不进包）

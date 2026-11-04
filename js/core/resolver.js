@@ -77,6 +77,16 @@
     saveMap(map);
   }
 
+  function chooseVersion(project, list, range, extra) {
+    const version = MC.api.modrinth.pickVersion(list, range);
+    // 下拉框也只给满足约束的版本，避免手动切回不兼容的前置。
+    const versions = range ? list.filter(v => MC.version.mcMatches(range, v.version_number)) : list;
+    return Object.assign({
+      ok: !!version, project, versions, version,
+      reason: version ? '' : '没有满足版本要求 ' + (range || '*') + ' 的候选'
+    }, extra);
+  }
+
   /**
    * @param dep {id, modId, searchWord}
    * @param ctx {env, range, searchWord} searchWord 有值表示用户手动指定的搜索词
@@ -119,15 +129,11 @@
       const list = await projectVersions(project, env);
       if (list.length) {
         if (!override) remember(dep, project);
-        return {
-          ok: true,
-          project,
-          versions: list,
-          version: API.pickVersion(list, range),
+        return chooseVersion(project, list, range, {
           via,
           searchWord: word,
           candidates: [brief(project)]
-        };
+        });
       }
       candidates = [brief(project)];
     }
@@ -171,15 +177,11 @@
       };
     }
     if (!override) remember(dep, project);
-    return {
-      ok: true,
-      project,
-      versions: list,
-      version: API.pickVersion(list, range),
+    return chooseVersion(project, list, range, {
       via,
       searchWord: word,
       candidates: uniq(candidates.concat([brief(project)]))
-    };
+    });
   }
 
   /** 用户从候选里直接点了一个项目 */
@@ -191,7 +193,7 @@
     if (!list.length) {
       return { ok: false, project, reason: '它没有 ' + env.loader + ' ' + env.mc + ' 的版本' };
     }
-    return { ok: true, project, versions: list, version: API.pickVersion(list, range || '') };
+    return chooseVersion(project, list, range || '', {});
   }
 
   MC.resolver = { resolve, resolveSlug, ALIASES, loadMap };

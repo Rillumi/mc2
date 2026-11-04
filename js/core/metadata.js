@@ -163,10 +163,12 @@
       const range = tomlStr(body, 'versionRange') || '*';
       if (/^minecraft$/i.test(modId)) { mcRange = range; continue; }
       if (/^(forge|neoforge)$/i.test(modId)) continue;
+      const type = tomlStr(body, 'type').toLowerCase();
+      if (type === 'incompatible' || type === 'discouraged') continue;
       deps.push({
         modId,
         versionRange: range,
-        mandatory: (tomlStr(body, 'mandatory') || 'true').toLowerCase() !== 'false'
+        mandatory: type ? type === 'required' : (tomlStr(body, 'mandatory') || 'true').toLowerCase() !== 'false'
       });
     }
     return {
@@ -187,12 +189,12 @@
     const deps = [];
     if (o.depends && typeof o.depends === 'object') {
       for (const [k, v] of Object.entries(o.depends)) {
-        deps.push({ modId: k, versionRange: String(v), mandatory: true });
+        deps.push({ modId: k, versionRange: Array.isArray(v) ? v.join(' || ') : String(v), mandatory: true });
       }
     }
     if (o.recommends && typeof o.recommends === 'object') {
       for (const [k, v] of Object.entries(o.recommends)) {
-        deps.push({ modId: k, versionRange: String(v), mandatory: false });
+        deps.push({ modId: k, versionRange: Array.isArray(v) ? v.join(' || ') : String(v), mandatory: false });
       }
     }
     const authors = [];
@@ -214,7 +216,8 @@
       }],
       deps,
       provides: Array.isArray(o.provides) ? o.provides : [],
-      mcRange: o.depends && o.depends.minecraft ? String(o.depends.minecraft) : '',
+      mcRange: o.depends && o.depends.minecraft ?
+        (Array.isArray(o.depends.minecraft) ? o.depends.minecraft.join(' || ') : String(o.depends.minecraft)) : '',
       authors,
       links
     };
@@ -363,6 +366,7 @@
   async function inspect(buf) {
     const z = zip.parseCentral(buf);
     const forge = await zip.readEntry(z, 'META-INF/mods.toml');
+    const neoforge = await zip.readEntry(z, 'META-INF/neoforge.mods.toml');
     const fabric = await zip.readEntry(z, 'fabric.mod.json');
     const legacy = await zip.readEntry(z, 'mcmod.info');
 
@@ -372,15 +376,16 @@
       const p = parseFabricJson(fabric);
       if (p) found.push({ loader: 'Fabric', meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
     }
-    if (forge) {
-      const p = parseForgeToml(forge);
+    for (const [text, loader] of [[forge, 'Forge'], [neoforge, 'NeoForge']]) {
+      if (!text) continue;
+      const p = parseForgeToml(text);
       if (p.mods.length) {
         // mods.toml 里常见 version = "${file.jarVersion}"，真实版本在 MANIFEST 里
         if (!p.mods[0].version) {
           const mv = manifest && String(manifest).match(/Implementation-Version:\s*(\S+)/i);
           if (mv) p.mods[0].version = mv[1].trim();
         }
-        found.push({ loader: 'Forge', meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
+        found.push({ loader, meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
       }
     }
     if (legacy) {

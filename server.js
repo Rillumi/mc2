@@ -7,6 +7,7 @@ const fs = require('fs');
 const path = require('path');
 const { exec } = require('child_process');
 const dns = require('dns');
+const { createStaticHandler } = require('./server/static');
 
 /* MC百科的 IPv6 地址经常连不上，Node 默认又优先 IPv6，
    结果是每次抓中文名都「连接超时」。强制走 IPv4。 */
@@ -29,6 +30,7 @@ const TYPES = {
   '.txt': 'text/plain; charset=utf-8',
   '.md': 'text/markdown; charset=utf-8'
 };
+const serveStatic = createStaticHandler(ROOT, TYPES);
 
 /* ================= 数据库（MySQL） ================= */
 const CFG_PATH = path.join(ROOT, 'db.config.json');
@@ -1446,27 +1448,7 @@ const server = http.createServer(async (req, res) => {
   }
 
   /* ---- 静态文件 ---- */
-  if (/^\/?(db\.config\.json|package-lock\.json)$/i.test(urlPath) || /node_modules|\.git\//i.test(urlPath)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('Forbidden');
-  }
-  const target = path.resolve(ROOT, '.' + (urlPath.startsWith('/') ? urlPath : '/' + urlPath));
-  if (target !== ROOT && !target.startsWith(ROOT + path.sep)) {
-    res.writeHead(403, { 'Content-Type': 'text/plain; charset=utf-8' });
-    return res.end('Forbidden');
-  }
-
-  fs.readFile(target, (err, data) => {
-    if (err) {
-      res.writeHead(404, { 'Content-Type': 'text/plain; charset=utf-8' });
-      return res.end('Not found: ' + urlPath);
-    }
-    res.writeHead(200, {
-      'Content-Type': TYPES[path.extname(target).toLowerCase()] || 'application/octet-stream',
-      'Cache-Control': 'no-cache'
-    });
-    res.end(data);
-  });
+  serveStatic(urlPath, req, res);
 });
 
 function openBrowser(url) {

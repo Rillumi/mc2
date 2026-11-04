@@ -116,3 +116,27 @@ test('MCreator 模板留下的 mcreator.net 不当成作者主页', () => {
   const p = MC.metadata.parseForgeToml(toml);
   assert.equal(p.links.length, 0);
 });
+
+test('NeoForge 元数据使用独立加载器并尊重新依赖 type 字段', async () => {
+  const data = [
+    'modLoader="javafml"', '[[mods]]', 'modId="neo_demo"', 'version="10.9"', 'displayName="Neo Demo"',
+    '[[dependencies.neo_demo]]', 'modId="minecraft"', 'type="required"', 'versionRange="[1.21.1,1.22)"',
+    '[[dependencies.neo_demo]]', 'modId="required_lib"', 'type="required"', 'versionRange="[2,)"',
+    '[[dependencies.neo_demo]]', 'modId="optional_lib"', 'type="optional"',
+    '[[dependencies.neo_demo]]', 'modId="conflicting_mod"', 'type="incompatible"'
+  ].join('\n');
+  const buf = makeZip([{name:'META-INF/neoforge.mods.toml', data}]);
+  const result = await MC.metadata.inspect(buf);
+  assert.equal(result.kind,'mod');
+  assert.equal(result.info.loader,'NeoForge');
+  assert.equal(result.info.id,'neo_demo');
+  assert.equal(result.info.mcRange,'[1.21.1,1.22)');
+  assert.deepEqual(result.info.deps.map(d=>d.modId),['required_lib']);
+  assert.deepEqual(result.info.optionalDeps.map(d=>d.modId),['optional_lib']);
+});
+
+test('Fabric 的版本数组保留 OR 语义', () => {
+  const result = MC.metadata.parseFabricJson(JSON.stringify({id:'fixture',name:'Fixture',version:'1',depends:{minecraft:['1.19.x','1.20.x'],library:['>=2.0.0','1.0.0']}}));
+  assert.equal(result.mcRange,'1.19.x || 1.20.x');
+  assert.equal(result.deps.find(d=>d.modId==='library').versionRange,'>=2.0.0 || 1.0.0');
+});
