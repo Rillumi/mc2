@@ -23,7 +23,8 @@
     const picked = MC.selector.selectedRows(s, a);
     const added = s.deps.filter(d => d.added && d.status === 'ok' && d.version);
     const adapted = adaptAdded(s);
-    const chain = s.plan ? s.plan.online.filter(d=>!s.plan.directOnline.includes(d)) : [];
+    const platform=s.plan?.platformOnline||[];
+    const chain = s.plan ? s.plan.online.filter(d=>!s.plan.directOnline.includes(d)&&!platform.includes(d)) : [];
     const adaptedGroups = {};
     adapted.forEach(x => { if (x.kind === 'group' && x.groupId) adaptedGroups[x.groupId] = true; });
     const excluded = MC.selector.excludedGroups(s, a);
@@ -44,16 +45,17 @@
     });
     const addedShown = added.filter(d => match([(d.project && d.project.title) || d.modId]));
     const adaptedShown = adapted.filter(x => match([(x.project && x.project.title) || x.id]));
+    const platformShown = platform.filter(d=>match([d.project.title,d.id,d.version.version_number]));
     const excludedShown = excluded.filter(g => match([g.displayId]));
     const badShown = bad.filter(g => match([g.displayId, g.rows[0].entry.name, g.rows[0].entry.nameZh, g.rows[0].entry.id]));
     const othersShown = others.filter(o => match([o.fileName]));
 
-    const depSize = added.concat(adapted,chain).reduce((n, d) => {
+    const depSize = added.concat(adapted,chain,platform).reduce((n, d) => {
       const f = d.version.files && d.version.files[0];
       return n + ((f && f.size) || 0);
     }, 0);
     const totalSize = picked.reduce((n, r) => n + (r.entry.size || 0), 0) + depSize;
-    const totalCount = picked.length + added.length + adapted.length + chain.length;
+    const totalCount = picked.length + added.length + adapted.length + chain.length + platform.length;
 
     const sec = (title, count, hint, body) => count
       ? '<div class="psec"><div class="psec-head"><b>' + title + '</b><span>' + count + '</span>' +
@@ -114,6 +116,9 @@
           const sections = sec('本地模组', localGroups.length, '点移除就不进包', localBody) +
             sec('自动补的前置', addedShown.length, '从 Modrinth 下载，版本已按你的环境筛过', depBody) +
             sec('间接前置',chainShown.length,'从实际 JAR 元数据继续展开',chainBody) +
+            sec('平台候选',platformShown.length,'你从原包平台依赖候选中加入；未读取 JAR 内部信息',platformShown.map(d=>
+              '<div class="pitem"><div class="t"><b>'+esc(d.project.title)+' '+esc(d.version.version_number||d.version.id)+'</b><small>被 '+esc(d.requiredBy.join('、'))+' 需要</small></div>'+
+              '<button type="button" class="btn line xs" data-act="platform-remove" data-project="'+esc(d.key)+'">移除</button></div>').join('')) +
             sec('换成适配版本', adaptedShown.length, '本地那份不兼容，已从 Modrinth 找好替代', adaptBody) +
             sec('已排除', excludedShown.length, '', exBody) +
             sec('不兼容', badShown.length, '加载器或游戏版本不符，已在包里跳过', badBody) +

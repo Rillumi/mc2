@@ -113,7 +113,8 @@
   }
 
   /** 批量：哈希 → 版本对象。不按加载器/版本过滤，所以资源包、光影也能查出所属项目 */
-  async function versionFiles(hashes) {
+  async function versionFiles(hashes, algorithm = 'sha1') {
+    if(!['sha1','sha512'].includes(algorithm))throw new Error('不支持的哈希算法');
     const uniq = Array.from(new Set((hashes || []).filter(Boolean)));
     if (!uniq.length) return {};
     let lastError = null;
@@ -123,7 +124,8 @@
         const res = await fetch(BASE + '/version_files', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
-          body: JSON.stringify({ hashes: uniq, algorithm: 'sha1' })
+          body: JSON.stringify({ hashes: uniq, algorithm }),
+          signal: AbortSignal.timeout(15000)
         });
         if (res.status === 429) {
           const after = Number(res.headers.get('Retry-After'));
@@ -138,6 +140,14 @@
       }
     }
     throw lastError || new Error('Modrinth 请求失败');
+  }
+
+  /** 精确发布版本批量查询，不替换为项目最新版。 */
+  async function versionsByIds(ids) {
+    const uniq=Array.from(new Set((ids||[]).filter(Boolean)));
+    if(!uniq.length)return [];
+    const data=await get('/versions?ids='+encodeURIComponent(JSON.stringify(uniq)));
+    return Array.isArray(data)?data:[];
   }
 
   /** 批量：项目 id / slug → 项目详情（含正文 body），每批最多 40 个 */
@@ -260,6 +270,6 @@
   }
 
   MC.api = MC.api || {};
-  MC.api.modrinth = { get, project, search, versions, versionFilesUpdate, versionFiles, projectsByIds, pickVersion, download, loaderSlug,
+  MC.api.modrinth = { get, project, search, versions, versionsByIds, versionFilesUpdate, versionFiles, projectsByIds, pickVersion, download, loaderSlug,
     teamMembers, cachedMembers, matchAuthors, matchOrg };
 })(globalThis);

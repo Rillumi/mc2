@@ -16,18 +16,28 @@
     const directOnline=st.deps.concat(Object.values(st.adapt||{})).filter(d=>d.added&&d.status==='ok'&&d.version&&d.project);
     const rootFingerprint=JSON.stringify({env:st.env,rows:rows.map(r=>[r.uid,r.entry.sha1,r.entry.version,r.entry.deps,r.entry.optionalDeps,r.entry.conflicts,r.entry.declaredMods]),
       online:directOnline.map(d=>[d.project.id,d.version]),includeOptional:st.includeOptional,
-      sources:(st.packSources||[]).map(p=>[p.name,p.onlineList]),includePacks:st.includePacks});
+      sources:(st.packSources||[]).map(p=>[p.name,p.onlineList]),platformSelections:st.platformSelections,includePacks:st.includePacks});
     const graph=st.dependencyGraph?.rootFingerprint===rootFingerprint?st.dependencyGraph:null;
-    const online=directOnline.concat(graph?.ok?graph.extra:[]);
+    const platformOnline=Object.values(st.platformSelections||{}).filter(d=>d.added&&d.version&&d.project);
+    const online=directOnline.concat(graph?.ok?graph.extra:[],platformOnline);
     const virtual=graph?.ok?graph.entries:directOnline.map((d,i)=>({uid:'online-'+i,id:d.modId||d.id||d.project.slug,
       name:d.project.title,version:d.version.version_number,loader:st.env.loader,mcRange:st.env.mc,
       sha1:'online-'+d.project.id+'-'+d.version.id,allIds:[d.modId||d.id||d.project.slug],deps:[]}));
-    const inspected=local.concat(virtual).map(e=>({...e,platformVersion:MC.conflicts.versionFor(e,st.fileVersions)}));
+    const quickInput=MC.platformDeps.input(st,local.concat(graph?.ok?graph.entries:[]),online);
+    const quickEnabled=quickInput.records.some(r=>r.kind==='source'||r.kind==='asset')||platformOnline.length>0;
+    const quickFingerprint=MC.platformDeps.fingerprint(quickInput);
+    const quick=st.platformGraph?.fingerprint===quickFingerprint&&st.platformGraph?.result?st.platformGraph.result:null;
+    const exactVersions={...(st.fileVersions||{}),...(quick?.byHash||{})};
+    const inspected=local.concat(virtual).map(e=>({...e,platformVersion:MC.conflicts.versionFor(e,exactVersions)}));
     const analysis=MC.analyzer.analyze(inspected,st.env,{includeOptional:st.includeOptional});
+    if(quick) {
+      const hashes=new Set(inspected.map(e=>String(e.sha1||'').toLowerCase()));
+      analysis.conflicts=MC.conflicts.analyze(inspected.concat(quick.sourceEntries.filter(e=>!hashes.has(String(e.sha1||'').toLowerCase()))),st.env);
+    }
     const uncertain=analysis.uncertain.slice();
     if(directOnline.length&&!graph?.ok) uncertain.push({reason:graph?'在线依赖链检查未通过':'正在等待检查在线模组的间接前置'});
     const sourceOnline=(st.packSources||[]).some(p=>(p.onlineList||[]).length);
-    if(sourceOnline) uncertain.push({reason:'原包在线文件未在本机展开，无法核实其内部前置'});
+    if(sourceOnline) uncertain.push({reason:quick?'原包在线文件已进行平台快速检查；内部 ID、版本区间和内嵌内容仍需 JAR 核实':'原包在线文件尚未完成平台快速检查，内部前置待确认'});
     const errors=[];
     if(graph&&!graph.ok)errors.push(...graph.errors);
     analysis.missing.filter(d=>d.requiredBy.length).forEach(d=>{
@@ -39,6 +49,11 @@
     analysis.rows.filter(r=>!r.usable).forEach(r=>errors.push(r.entry.name+' 与目标环境不兼容'));
     analysis.overlaps.forEach(o=>errors.push('重复声明 '+o.id));
     const warnings=[];
+    for(const f of quick?.findings||[]) {
+      if(f.severity==='error')errors.push(f.reason);
+      else if(f.severity==='warning')warnings.push(f);
+      else uncertain.push(f);
+    }
     for(const c of analysis.conflicts) {
       if(c.severity==='error')errors.push('明确互斥：'+c.reason);
       else if(c.severity==='warning')warnings.push(c);
@@ -49,6 +64,7 @@
       platform:inspected.filter(e=>e.platformVersion).length,
       platformUnchecked:inspected.filter(e=>!e.platformVersion).length,
       sourceOnline:(st.packSources||[]).reduce((n,p)=>n+(p.onlineList||[]).filter(f=>!f.path||/^mods\//i.test(f.path)).length,0),
+      sourceChecked:quick?.sourceIdentified||0,platformRelations:quick?.relations.length||0,
       limits:['平台互斥目前仅核对已识别的 Modrinth 文件','内嵌依赖尚未完整核实','未验证实际启动及游戏内行为'],platformStatus:st.platformCheck?.status||'idle'};
     const findings=errors.map(reason=>({severity:'error',reason})).concat(warnings,uncertain.map(x=>({...x,severity:'pending',reason:x.reason||x.modId+' 的版本无法比较'})));
     if(coverage.platformUnchecked)findings.push({severity:'pending',reason:'有 '+coverage.platformUnchecked+' 个所选模组尚无平台精确版本依据'+
@@ -58,8 +74,9 @@
     summary.status=summary.errors?'error':summary.pending?'pending':summary.warnings?'warning':'checked';
     summary.label=summary.errors?'发现明确问题，整合包导出已阻止':summary.pending?'检查尚有待确认项':summary.warnings?'发现警告，请核对声明':'已检查的声明未发现问题';
     const fingerprint=JSON.stringify([rootFingerprint,graph?.ok?graph.entries.map(e=>e.sha1):null,
-      inspected.map(e=>e.platformVersion&&[e.platformVersion.id,e.platformVersion.project_id,e.platformVersion.dependencies]),findings]);
-    st.plan={rows,directOnline,online,analysis,uncertain,errors,warnings,findings,summary,coverage,fingerprint,rootFingerprint};
+      inspected.map(e=>e.platformVersion&&[e.platformVersion.id,e.platformVersion.project_id,e.platformVersion.dependencies]),quick?.relations,findings]);
+    st.plan={rows,directOnline,platformOnline,online,analysis,uncertain,errors,warnings,findings,summary,coverage,fingerprint,rootFingerprint,
+      quickInput,quickEnabled,quickFingerprint,quick};
     // 候选目录保留供用户换版本；检查结果来自最终方案。
     st.analysis.missing=analysis.missing;
     st.analysis.versionIssues=analysis.versionIssues;

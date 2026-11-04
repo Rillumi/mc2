@@ -16,6 +16,10 @@
     try {
       const start = MC.plan.refresh(st).rootFingerprint;
       if (format !== 'manifest') await MC.dependencies.checkState(st);
+      if (format !== 'manifest') {
+        st.progress='正在核对原包在线依赖…';
+        await MC.platformDeps.checkState(st);
+      }
       const plan = MC.plan.refresh(st);
       if(plan.rootFingerprint!==start)throw new Error('依赖检查期间方案已改变，请重新生成');
       if(format!=='manifest'&&plan.errors.length)throw new Error(plan.errors.slice(0,3).join('；'));
@@ -40,13 +44,11 @@
       }
       const deps = plan.online;
 
-      const localNames = new Set(localJars.map(j => j.name.toLowerCase()));
       const localHashes = new Set(localJars.map(j => j.sha1).filter(Boolean));
       const onlineFiles = [];
       const seenOnline = new Map();
       for (const src of (st.packSources || [])) {
         for (const f of (src.onlineList || [])) {
-          if (f.path && /^mods\//i.test(f.path) && localNames.has(f.path.split('/').pop().toLowerCase())) continue;
           if (f.hashes && localHashes.has(f.hashes.sha1)) continue;
           const key = f.path || (f.projectID + ':' + f.fileID);
           const old = seenOnline.get(key);

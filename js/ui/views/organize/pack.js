@@ -11,6 +11,7 @@
     const blocks=[['error','明确错误',s.errors],['warning','警告',s.warnings],['pending','待确认',s.pending]];
     return '<div class="hintbox" role="status"><b>'+esc(s.label)+'</b><div>明确错误 '+s.errors+' · 警告 '+s.warnings+' · 待确认 '+s.pending+'</div>'+
       '<div>依据：本地 JAR '+c.local+' 个 · 已读取在线 JAR '+c.online+' 个 · Modrinth 精确版本 '+c.platform+' 个 · 原包在线模组 '+c.sourceOnline+' 项尚未展开</div>'+
+      '<div>原包平台快速检查：已识别 '+c.sourceChecked+' 项，检查 '+c.platformRelations+' 条关系；原包 JAR 内部信息仍待核实。</div>'+
       blocks.filter(([, ,n])=>n).map(([severity,label,n])=>'<details><summary>'+label+'（'+n+'）</summary>'+
         plan.findings.filter(f=>f.severity===severity).map(f=>'<div>'+esc(f.reason)+'</div>').join('')+'</details>').join('')+
       '<div>'+esc(c.limits.join('；'))+'。未发现问题仅指上述已检查的声明。</div></div>';
@@ -24,14 +25,15 @@
     const picked = MC.selector.selectedRows(s, a);
     const added = s.deps.filter(d => d.added && d.status === 'ok' && d.version);
     const adapted = adaptAdded(s);
-    const chain = s.plan ? s.plan.online.filter(d => !s.plan.directOnline.includes(d)) : [];
-    const total = picked.length + added.length + adapted.length + chain.length;
+    const platform=s.plan?.platformOnline||[];
+    const chain = s.plan ? s.plan.online.filter(d => !s.plan.directOnline.includes(d)&&!platform.includes(d)) : [];
+    const total = picked.length + added.length + adapted.length + chain.length + platform.length;
     const packList = ((a && a.others) || []).filter(o => o.kind === 'resourcepack' || o.kind === 'shader');
     const packsOn = !!(s.includePacks && packList.length);
     const packBytes = packList.reduce((n, o) => n + (o.size || 0), 0);
     const hasOptional = picked.some(r => ((r.entry && r.entry.optionalDeps) || []).length);
     const size = picked.reduce((n, r) => n + (r.entry.size || 0), 0) +
-      added.concat(adapted,chain).reduce((n, d) => {
+      added.concat(adapted,chain,platform).reduce((n, d) => {
         const f = d.version.files && d.version.files[0];
         return n + ((f && f.size) || 0);
       }, 0) + (packsOn ? packBytes : 0);
@@ -50,6 +52,7 @@
       (added.length ? ' · 含 ' + added.length + ' 个前置' : '') +
       (adapted.length ? ' · 换 ' + adapted.length + ' 个版本' : '') +
       (chain.length ? ' · 间接前置 ' + chain.length + ' 个' : '') +
+      (platform.length ? ' · 平台候选 '+platform.length+' 个' : '') +
       (sourceOnline ? ' · 原包在线文件 ' + sourceOnline + ' 项' : '') +
       (excluded ? ' · 排除 ' + excluded + ' 个' : '') +
       (packsOn ? ' · 另带 ' + packList.length + ' 个资源包/光影' : '') + '</div>' +

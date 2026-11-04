@@ -147,6 +147,12 @@
         st.rpOrder = [];
         st.projects = {};
         st.hashProject = {};
+        st.packSources = [];
+        st.fileVersions = {};
+        st.platformCheck = {status:'idle'};
+        st.platformGraph = null;
+        st.platformSelections = {};
+        st.platformProgress = null;
         st.packAdvice = null;
         st.mr = {};
         st.descTr = {};

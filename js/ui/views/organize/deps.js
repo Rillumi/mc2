@@ -116,7 +116,33 @@
       ? '<div class="deps-actions"><button type="button" class="btn line sm" data-act="retryall">重新匹配全部失败项</button></div>'
       : '';
 
-    el.innerHTML = head + warn + retry + s.deps.map(d => depCard(s, d)).join('');
+    el.innerHTML = head + warn + retry + platformHtml(s) + s.deps.map(d => depCard(s, d)).join('');
+  }
+
+  function platformHtml(s) {
+    const p=s.plan;if(!p?.quickEnabled)return '';
+    const q=p.quick;
+    const progress=s.platformProgress;
+    let html='<div class="warnbox"><div class="warnbox-head">原包在线依赖 · 平台快速检查</div>';
+    if(!q)html+='<div class="hint">'+(s.platformGraph?.fingerprint===p.quickFingerprint&&s.platformGraph?.status==='checking'
+      ?'正在查询'+(progress?'：已识别 '+progress.identified+' / '+progress.total+' 项，已发起 '+progress.requests+' 次请求':'')
+      :'等待检查；原包指定的文件版本会保留')+'</div>';
+    else {
+      html+='<div class="hint">原包在线模组 '+q.sourceIdentified+' / '+q.sourceTotal+' 项、资源文件 '+q.assetIdentified+' / '+q.assetTotal+' 项已定位精确发布版本；检查 '+q.relations.length+' 条关系。只查接口，不下载 JAR。</div>';
+      const labels={required:'必需',optional:'可选',incompatible:'不兼容',embedded:'内嵌'};
+      const states={'present-exact':'精确版本存在','present-project':'项目存在，内部版本区间待核实',missing:'缺失',unknown:'待确认',
+        'optional-absent':'可选，未加入','embedded':'声明内嵌，待核实','embedded-unverified':'可能由内嵌提供，待核实','same-file-unverified':'同一文件的发布版本身份待核实',conflict:'命中互斥',absent:'未命中'};
+      html+='<details><summary>查看文件与关系依据</summary>'+q.identified.filter(r=>r.kind==='source'||r.kind==='asset').map(r=>
+        '<div>'+esc(r.name)+' → '+esc(r.projectId)+' / '+esc(r.versionId)+'</div>').join('')+
+        q.relations.map(r=>'<div>'+esc(r.fromName)+' → '+esc(r.targetName||r.project_id||r.version_id||'?')+'：'+esc(labels[r.dependency_type])+' · '+esc(states[r.state]||'未完成')+'</div>').join('')+'</details>';
+      html+=q.candidates.map(c=>'<div class="wline"><b>'+esc(c.project.title)+' '+esc(c.version.version_number||c.version.id)+'</b>'+
+        '<small>'+esc(c.optional?'可选候选':'缺失前置候选')+' · 被 '+esc(c.requiredBy.join('、'))+' 需要；加入后继续检查其前置</small>'+
+        '<a class="btn line xs" target="_blank" rel="noopener" href="https://modrinth.com/mod/'+encodeURIComponent(c.project.id)+'">查看平台项目</a>'+
+        '<button type="button" class="btn line sm" data-act="platform-add" data-project="'+esc(c.key)+'">加入此候选</button></div>').join('');
+    }
+    html+=Object.entries(s.platformSelections||{}).map(([id,c])=>'<div class="wline"><b>已加入 '+esc(c.project.title)+' '+esc(c.version.version_number||c.version.id)+'</b>'+
+      '<button type="button" class="btn line xs" data-act="platform-remove" data-project="'+esc(id)+'">移除</button></div>').join('');
+    return html+'</div>';
   }
 
   function warnHtml(s) {

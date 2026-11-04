@@ -214,6 +214,8 @@
     const my = FC.getGen();
     await MC.flowMeta.prefetchProjects();
     if(my!==FC.getGen())return;
+    await MC.platformDeps.checkState(S(),{force:true});
+    if(my!==FC.getGen())return;
     const list = S().deps.filter(d => !(d.status === 'ok' && d.version));
     if (!list.length) {
       if (S().plan?.directOnline.length) {

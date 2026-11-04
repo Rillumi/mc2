@@ -14,7 +14,7 @@ function createApp() {
     fetch: async () => { throw new Error('测试不访问外网'); }
   });
   const load = file => vm.runInContext(fs.readFileSync(path.join(__dirname, '../..', file), 'utf8'), ctx, {filename:file});
-  for (const name of ['zip-reader', 'zip-writer', 'version', 'identity', 'metadata', 'conflicts', 'analyzer', 'selector', 'plan', 'dependencies', 'modpack', 'overrides']) load('js/core/' + name + '.js');
+  for (const name of ['zip-reader', 'zip-writer', 'version', 'identity', 'metadata', 'conflicts', 'analyzer', 'selector', 'platform-deps', 'plan', 'dependencies', 'modpack', 'overrides']) load('js/core/' + name + '.js');
   load('js/ui/state.js');
   const MC = ctx.MC;
   MC.uiBase = {

@@ -12,6 +12,12 @@
   }
 
   Object.assign(acts, {
+    'platform-add'(el) {
+      C.toast(MC.platformDeps.add(MC.store.state,el.dataset.project)?'候选已加入，正在继续检查它的前置':'方案已变化，请等待重新检查');
+    },
+    'platform-remove'(el) {
+      delete MC.store.state.platformSelections[el.dataset.project];touch();
+    },
     getconnector() {
       C.findConnector();
     },
@@ -184,6 +190,7 @@
         L.push('明确错误 '+plan.summary.errors+' · 警告 '+plan.summary.warnings+' · 待确认 '+plan.summary.pending);
         const c=plan.coverage;
         L.push('依据：本地 JAR '+c.local+'，已读取在线 JAR '+c.online+'，Modrinth 精确版本 '+c.platform+'，原包在线模组 '+c.sourceOnline+' 项尚未展开');
+        L.push('原包平台快速检查：已识别 '+c.sourceChecked+' 项，检查 '+c.platformRelations+' 条关系');
         plan.findings.forEach(f=>L.push('['+(f.severity==='error'?'明确错误':f.severity==='warning'?'警告':'待确认')+'] '+f.reason));
         L.push('边界：'+c.limits.join('；'));
       }

@@ -59,6 +59,9 @@
     hashProject: {},    // sha1 → projectId
     fileVersions: {},   // SHA-1 → 文件哈希核实后的 Modrinth 精确版本
     platformCheck: {status:'idle'},
+    platformGraph: null,
+    platformSelections: {},
+    platformProgress: null,
     prefetching: false, // 是否正在批量拉项目资料
     catsDb: null,       // 分类库：modId → { cats, primary }（来自本地 MySQL）
     catsTried: false,   // 是否已经读过分类库
@@ -89,6 +92,7 @@
   function touch() {
     if (MC.plan) MC.plan.refresh(state);
     if (MC.dependencies) MC.dependencies.schedule(state);
+    if (MC.platformDeps) MC.platformDeps.schedule(state);
     subs.forEach(fn => {
       try { fn(state); } catch (err) { console.error(err); }
     });

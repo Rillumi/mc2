@@ -117,7 +117,9 @@
           const target=to.platformVersion;if(!target)continue;
           if(d.project_id && target.project_id!==d.project_id)continue;
           if(d.version_id && target.id!==d.version_id)continue;
-          add(from,to,{...d,severity:'error',source:'Modrinth '+v.id+' → '+(d.version_id||d.project_id)},true,'modrinth');
+          const conditional=from.platformConditional||to.platformConditional;
+          add(from,to,{...d,severity:'error',source:'Modrinth '+v.id+' → '+(d.version_id||d.project_id)},conditional?null:true,'modrinth',
+            conditional?'原包文件有可选或目标端条件，需先确认是否安装':'');
         }
       }
     }
