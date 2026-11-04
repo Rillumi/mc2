@@ -14,6 +14,7 @@
     const hashes = Array.from(new Set(st.mods.filter(e => e.sha1).map(e => e.sha1)));
     if (!hashes.length) return;
     st.prefetching = true;
+    st.platformCheck = {status:'checking'};
     touch();
     try {
       // 一次请求：所有 jar / 资源包的哈希 → 所属项目 id（包括未在 Modrinth 上的会缺席）
@@ -21,13 +22,23 @@
       if (my !== FC.getGen()) return;
       const pidByHash = {};
       const pids = [];
+      const exact = {};
       Object.keys(map || {}).forEach(h => {
         const v = map[h];
+        const verified = MC.conflicts.versionFor({sha1:h}, {[h.toLowerCase()]:v});
+        if(!verified)return;
+        exact[h.toLowerCase()] = verified;
         const pid = v && v.project_id;
         if (!pid) return;
         pidByHash[h] = pid;
         if (pids.indexOf(pid) < 0) pids.push(pid);
       });
+      const nextVersions=Object.assign({},st.fileVersions||{});
+      hashes.forEach(h=>delete nextVersions[h.toLowerCase()]);
+      st.fileVersions = Object.assign(nextVersions,exact);
+      st.platformCheck = {status:'done'};
+      // 精确版本的关系不依赖项目简介请求成功，先刷新检查结果。
+      touch();
       const old = st.hashProject || {};
       st.hashProject = Object.assign({}, old, pidByHash);
       if (pids.length) {
@@ -39,7 +50,7 @@
         st.projects = next;
       }
     } catch (err) {
-      /* 预取失败不影响本地整理，详情页打开时还会再试一次 */
+      if(my===FC.getGen() && st.platformCheck.status!=='done')st.platformCheck = {status:'error',reason:err.message||'平台查询失败'};
     } finally {
       if (my === FC.getGen()) {
         st.prefetching = false;

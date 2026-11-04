@@ -29,7 +29,10 @@
   async function resolve(opts,services){
     const local=opts.local||[], roots=[], automatic=new Map(), errors=[], edges=[];
     const env={...opts.env};
-    const add=async d=>({item:d,entry:await inspect(d,services)});
+    const add=async d=>{
+      const entry=await inspect(d,services);
+      return {item:d,entry:{...entry,platformVersion:MC.conflicts.versionFor(entry,{[entry.sha1]:d.version})}};
+    };
     try{
       for(const d of opts.online||[])roots.push(await add(d));
       for(let pass=0;pass<24;pass++){

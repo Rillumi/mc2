@@ -212,13 +212,15 @@
 
   async function retryAll() {
     const my = FC.getGen();
+    await MC.flowMeta.prefetchProjects();
+    if(my!==FC.getGen())return;
     const list = S().deps.filter(d => !(d.status === 'ok' && d.version));
     if (!list.length) {
       if (S().plan?.directOnline.length) {
         const result=await MC.dependencies.checkState(S(),{force:true});
         return toast(result?.ok?'间接前置检查完成':(result?.errors||['检查尚未完成']).join('；'));
       }
-      return toast('没有需要重试的');
+      return toast('平台声明已重新查询，请查看检查结果与待确认项');
     }
     toast('重新匹配 ' + list.length + ' 个…');
     let cursor = 0;

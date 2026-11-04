@@ -253,11 +253,12 @@
       const names = results.map(r => r.filename).join(' 和 ');
       const v = results[0] && results[0].verify;
       let line = '已生成 ' + names;
-      if (plan.uncertain.length) line += ' · 有 '+plan.uncertain.length+' 项兼容性待确认';
+      if (plan.summary.pending) line += ' · 有 '+plan.summary.pending+' 项待确认';
+      if (plan.warnings.length) line += ' · 有 '+plan.warnings.length+' 项警告';
       if (v && v.ok) {
         line += v.total
-          ? ' · 校验通过（' + v.checked + '/' + v.total + ' 个 jar）'
-          : ' · 校验通过（清单结构完整）';
+          ? ' · 文件与清单校验通过（' + v.checked + '/' + v.total + ' 个 jar）'
+          : ' · 文件与清单校验通过（清单结构完整）';
       }
       const notes = [];
       if (skippedFiles.length) {
@@ -284,7 +285,11 @@
         overrideFailed: overrideFailed,
         depFailed: depFailed.slice(0, 10).join('、'),
         problems: problems,
-        uncertain: plan.uncertain
+        uncertain: plan.uncertain,
+        warnings: plan.warnings,
+        findings: plan.findings,
+        coverage: plan.coverage,
+        summary: plan.summary
       };
       toast(line);
 

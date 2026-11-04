@@ -164,7 +164,7 @@
         const env = st.env || {};
         L.push('【环境】');
         L.push('Minecraft ' + (env.mc || '?') + ' · ' + (env.loader || '?') + ' ' + (env.loaderVersion || ''));
-        const mods = an.mods || [];
+        const mods = st.mods.filter(e=>e.kind==='mod');
         mods.forEach(e => {
           const name = (e && (e.fileName || e.name)) || '?';
           const proj = MC.flowCommon && MC.flowCommon.projectForEntry
@@ -177,6 +177,16 @@
         L.push('其他文件 ' + (an.others || []).length + '，来源整合包 ' + (st.packSources || []).length);
       }
 
+      const plan=MC.plan.refresh(st);
+      if(plan) {
+        L.push('【当前方案检查】');
+        L.push(plan.summary.label);
+        L.push('明确错误 '+plan.summary.errors+' · 警告 '+plan.summary.warnings+' · 待确认 '+plan.summary.pending);
+        const c=plan.coverage;
+        L.push('依据：本地 JAR '+c.local+'，已读取在线 JAR '+c.online+'，Modrinth 精确版本 '+c.platform+'，原包在线模组 '+c.sourceOnline+' 项尚未展开');
+        plan.findings.forEach(f=>L.push('['+(f.severity==='error'?'明确错误':f.severity==='warning'?'警告':'待确认')+'] '+f.reason));
+        L.push('边界：'+c.limits.join('；'));
+      }
       const ups = st.updates || {};
       const cnt = { newer: 0, current: 0, older: 0, ambiguous: 0, other: 0 };
       const amb = [];
@@ -206,13 +216,14 @@
         L.push('本次会话还没有打包过。');
       } else {
         (lp.files || []).forEach(f => {
-          L.push('- ' + f.name + '：' + (f.ok ? '校验通过' : '校验有问题') +
+          L.push('- ' + f.name + '：' + (f.ok ? '文件与清单校验通过' : '文件与清单校验有问题') +
             '（' + f.checked + '/' + f.total + '）');
         });
         if (lp.skipped) L.push('跳过：' + lp.skipped);
         if (lp.overrideFailed) L.push('原包内容没复制进来：' + lp.overrideFailed + ' 个');
         if (lp.depFailed) L.push('前置下载失败：' + lp.depFailed);
         (lp.problems || []).slice(0, 30).forEach(x => L.push('  ! ' + x));
+        (lp.findings || []).forEach(f=>L.push('['+f.severity+'] '+f.reason));
       }
 
       L.push('【警告】');

@@ -107,9 +107,9 @@
 
     const open = s.deps.filter(d => !(d.added && d.status === 'ok' && d.version)).length;
     const warn = warnHtml(s);
-    const head = (s.deps.length || a.versionIssues.length || a.overlaps.length)
+    const head = (s.deps.length || a.versionIssues.length || a.overlaps.length || a.conflicts?.length)
       ? '<div class="section-label">前置与冲突 · ' +
-        (open ? '还有 ' + open + ' 个没配好' : s.plan?.errors.length ? '依赖检查未通过' : s.plan?.uncertain.length ? '有待确认项' : '所选方案前置检查通过') + '</div>'
+        (open ? '还有 ' + open + ' 个没配好' : s.plan?.summary.label || '等待检查') + '</div>'
       : '';
 
     const retry = open
@@ -122,6 +122,10 @@
   function warnHtml(s) {
     const a = s.analysis;
     const boxes = [];
+    if(a.conflicts?.length) {
+      boxes.push('<div class="warnbox"><div class="warnbox-head">模组互斥声明（'+a.conflicts.length+'）</div>'+
+        a.conflicts.map(c=>'<div class="wline"><b>'+esc(c.severity==='error'?'明确错误':c.severity==='warning'?'警告':'待确认')+'</b><span>'+esc(c.reason)+'</span></div>').join('')+'</div>');
+    }
 
     if (a.versionIssues.length) {
       boxes.push('<div class="warnbox">' +

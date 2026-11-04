@@ -27,6 +27,9 @@
     st.updates = {};
     st.packSources = [];
     st.dependencyGraph = null;
+    st.fileVersions = {};
+    st.platformCheck = {status:'idle'};
+    st.prefetching = false;
   }
 
   /** 这个文件是整合包吗（.mrpack 或带 mods/ 清单的 .zip），是就返回类型 */

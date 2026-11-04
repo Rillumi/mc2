@@ -57,6 +57,8 @@
     mr: {},             // 组 id → Modrinth 完整简介 { status, text, title, url, downloads }
     projects: {},       // projectId → Modrinth 项目详情（扫描后批量预取，详情页秒开）
     hashProject: {},    // sha1 → projectId
+    fileVersions: {},   // SHA-1 → 文件哈希核实后的 Modrinth 精确版本
+    platformCheck: {status:'idle'},
     prefetching: false, // 是否正在批量拉项目资料
     catsDb: null,       // 分类库：modId → { cats, primary }（来自本地 MySQL）
     catsTried: false,   // 是否已经读过分类库

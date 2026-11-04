@@ -5,6 +5,17 @@
   const R = (MC.render = MC.render || {});
   const { esc, icon, IC, fmtSize, adaptAdded } = R;
 
+  function checkSummaryHtml(plan) {
+    if(!plan)return '';
+    const {summary:s,coverage:c}=plan;
+    const blocks=[['error','明确错误',s.errors],['warning','警告',s.warnings],['pending','待确认',s.pending]];
+    return '<div class="hintbox" role="status"><b>'+esc(s.label)+'</b><div>明确错误 '+s.errors+' · 警告 '+s.warnings+' · 待确认 '+s.pending+'</div>'+
+      '<div>依据：本地 JAR '+c.local+' 个 · 已读取在线 JAR '+c.online+' 个 · Modrinth 精确版本 '+c.platform+' 个 · 原包在线模组 '+c.sourceOnline+' 项尚未展开</div>'+
+      blocks.filter(([, ,n])=>n).map(([severity,label,n])=>'<details><summary>'+label+'（'+n+'）</summary>'+
+        plan.findings.filter(f=>f.severity===severity).map(f=>'<div>'+esc(f.reason)+'</div>').join('')+'</details>').join('')+
+      '<div>'+esc(c.limits.join('；'))+'。未发现问题仅指上述已检查的声明。</div></div>';
+  }
+
   function renderPack(s) {
     const el = document.getElementById('pack');
     if (!el) return;
@@ -29,14 +40,6 @@
 
     const open = s.deps.filter(d => !(d.added && d.status === 'ok' && d.version));
     const excluded = MC.selector.excludedGroups(s, a).length;
-    const checks = [
-      ['本地模组加载器一致', s.plan ? s.plan.analysis.rows.every(r => !r.issues.some(i => i.type === 'loader')) : false],
-      ['本地模组游戏版本一致', s.plan ? s.plan.analysis.rows.every(r => !r.issues.some(i => i.type === 'mc')) : false],
-      ['同 modId 只留一份', true],
-      ['缺前置已补齐', s.plan ? !s.plan.analysis.missing.some(d => d.requiredBy.length) : false],
-      ['前置版本满足要求', s.plan ? s.plan.analysis.versionIssues.length === 0 && !s.plan.analysis.uncertain.length : false],
-      ['modId 声明无冲突', a ? a.overlaps.length === 0 : true]
-    ];
 
     const disabled = (!hasContent || s.busy) ? ' disabled' : '';
     const verLabel = s.env.loader === 'Fabric' ? 'Fabric Loader' : (s.env.loader + ' 版本');
@@ -73,19 +76,13 @@
         : '') +
 
       (hasContent
-        ? '<div class="checks">' + checks.map(([text, ok]) =>
-          '<div' + (ok ? '' : ' class="bad"') + '>' +
-          icon(ok ? IC.check : '<path d="M6 6l12 12M18 6L6 18"/>', ok ? null : '#DE5E84') +
-          text + '</div>'
-        ).join('') + '</div>'
+        ? checkSummaryHtml(s.plan)
         : '<div class="hint err" style="margin:12px 0">' + (a
           ? '还没有能进包的模组。给不兼容的模组找适配版本，或在列表里恢复被排除的。'
           : '先把 mods 文件夹拖进来。') + '</div>') +
 
       (chain.length ? '<div class="hint">已补充间接前置：' + esc(chain.map(d=>d.project.title+' '+d.version.version_number+'（被 '+d.requiredBy.join('、')+' 需要）').join('；')) + '</div>' : '') +
-      (s.plan && s.plan.errors.length ? '<div class="hint err">' + esc(s.plan.errors.join('；')) + '</div>' : '') +
-      (s.plan?.directOnline.length ? '<button type="button" class="btn line sm" data-act="retryall">重新检查依赖链</button>' : '') +
-      (s.plan && s.plan.uncertain.length ? '<div class="hint err">有 ' + s.plan.uncertain.length + ' 项兼容性待确认：' + esc(s.plan.uncertain.map(x=>x.reason || (x.modId+' 的版本无法比较')).join('；')) + '</div>' : '') +
+      (s.plan ? '<button type="button" class="btn line sm" data-act="retryall">重新查询平台声明与依赖链</button>' : '') +
       (s.busy ? '<div class="loading"><span class="spinner"></span>' + esc(s.progress || '正在打包…') + '</div>' : '') +
 
       '<div class="pack-actions">' +
@@ -101,6 +98,8 @@
       'key 在「工具 → 设置」里填，只存本机。从整合包扫描进来的会带上 config、defaultconfigs、kubejs、emotes、资源包/光影和 options.txt（不带 PCL、存档和 ffmpeg）。<br>' +
       '写进清单的加载器版本：<b>' + esc(s.env.loaderVersion || '未填') + '</b>（顶部「' + esc(verLabel) + '」可改）</div>';
   }
+
+  R.checkSummaryHtml = checkSummaryHtml;
 
   /* 选整合包格式：Modrinth 那种一行一个选项的弹窗 */
   function packPickHtml(s) {

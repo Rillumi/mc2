@@ -154,17 +154,22 @@
       });
     }
 
-    const deps = [];
+    const deps = [], conflicts = [];
     let mcRange = '';
-    for (const m of text.matchAll(/\[\[dependencies\.[^\]]+\]\]([\s\S]*?)(?=\[\[|$)/g)) {
-      const body = m[1];
+    for (const m of text.matchAll(/\[\[dependencies\.([^\]]+)\]\]([\s\S]*?)(?=\n\s*\[|$)/g)) {
+      const body = m[2];
       const modId = tomlStr(body, 'modId');
       if (!modId) continue;
       const range = tomlStr(body, 'versionRange') || '*';
       if (/^minecraft$/i.test(modId)) { mcRange = range; continue; }
       if (/^(forge|neoforge)$/i.test(modId)) continue;
       const type = tomlStr(body, 'type').toLowerCase();
-      if (type === 'incompatible' || type === 'discouraged') continue;
+      if (type === 'incompatible' || type === 'discouraged') {
+        conflicts.push({modId,ownerId:m[1].replace(/^["']|["']$/g,''),versionRange:range,
+          severity:type==='incompatible'?'error':'warning',syntax:'maven',
+          side:tomlStr(body,'side')||'BOTH',reason:tomlStr(body,'reason'),type});
+        continue;
+      }
       deps.push({
         modId,
         versionRange: range,
@@ -174,6 +179,7 @@
     return {
       mods,
       deps,
+      conflicts,
       mcRange,
       provides: tomlArray(text, 'provides'),
       authors: mods.length ? mods[0].authors : [],
@@ -186,7 +192,14 @@
     let o;
     try { o = parseJson(text); } catch { return null; }
     if (!o || !o.id) return null;
-    const deps = [];
+    const deps = [], conflicts = [];
+    const sides=Array.isArray(o.environment)?o.environment:[o.environment||'*'];
+    const side=sides.includes('*')||(sides.includes('client')&&sides.includes('server'))?'BOTH':sides.length===1?sides[0]:'UNKNOWN';
+    for(const type of ['breaks','conflicts']) {
+      if(!o[type] || typeof o[type]!=='object' || Array.isArray(o[type]))continue;
+      for(const [modId,range] of Object.entries(o[type])) conflicts.push({modId,ownerId:o.id,
+        versionRange:range,severity:type==='breaks'?'error':'warning',syntax:'fabric',side,type});
+    }
     if (o.depends && typeof o.depends === 'object') {
       for (const [k, v] of Object.entries(o.depends)) {
         deps.push({ modId: k, versionRange: Array.isArray(v) ? v.join(' || ') : String(v), mandatory: true });
@@ -215,6 +228,7 @@
         description: plainText(o.description).slice(0, 600)
       }],
       deps,
+      conflicts,
       provides: Array.isArray(o.provides) ? o.provides : [],
       mcRange: o.depends && o.depends.minecraft ?
         (Array.isArray(o.depends.minecraft) ? o.depends.minecraft.join(' || ') : String(o.depends.minecraft)) : '',
@@ -449,11 +463,15 @@
     const primary = found[0];
     const depMap = new Map();
     const ids = new Set();
+    const conflicts = [], declaredMods = [];
     let mcRange = '';
 
     for (const f of found) {
       if (!mcRange) mcRange = f.mcRange || (f.meta.mods[0] && f.meta.mods[0].mc) || '';
       (f.meta.mods || []).forEach(m => m.modId && ids.add(m.modId));
+      (f.meta.mods || []).forEach(m => declaredMods.push({id:m.modId,version:sanitizeVersion(m.version),loader:f.loader}));
+      (f.meta.conflicts || []).forEach(d => conflicts.push({...d,loader:f.loader,
+        source:(f.loader==='Fabric'?'fabric.mod.json':f.loader==='NeoForge'?'META-INF/neoforge.mods.toml':'META-INF/mods.toml')+' '+d.type}));
       (f.provides || []).forEach(x => ids.add(x));
       (f.meta.deps || []).forEach(d => {
         const k = d.modId.toLowerCase();
@@ -495,6 +513,9 @@
         mc: normalizeMc(mcRange),
         mcRange,
         allIds: [...ids],
+        declaredMods,
+        conflicts,
+        metadataRead: true,
         deps: deps.filter(d => d.mandatory),
         optionalDeps: deps.filter(d => !d.mandatory),
         authors,

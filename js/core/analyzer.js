@@ -273,6 +273,7 @@
     const versionIssues = [...issueMap.values()].sort((a, b) => a.id.localeCompare(b.id));
     const dups = groups.filter(g => g.sizes > 1);
     const needChoose = groups.filter(g => g.usableRows.length > 1);
+    const conflicts = MC.conflicts ? MC.conflicts.analyze(rows.filter(r=>r.usable).map(r=>r.entry),env) : [];
 
     return {
       rows,
@@ -283,6 +284,7 @@
       versionIssues,
       overlaps,
       uncertain,
+      conflicts,
       dups,
       stats: {
         total: rows.length,

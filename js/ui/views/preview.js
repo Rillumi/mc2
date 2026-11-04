@@ -109,6 +109,7 @@
         '<input id="previewQuery" value="' + esc(s.previewQuery) + '" placeholder="在包里搜模组名" spellcheck="false" aria-label="搜索包内模组">' +
       '</div>' +
       '<div class="sheet-body">' +
+        R.checkSummaryHtml(s.plan) +
         (function () {
           const sections = sec('本地模组', localGroups.length, '点移除就不进包', localBody) +
             sec('自动补的前置', addedShown.length, '从 Modrinth 下载，版本已按你的环境筛过', depBody) +

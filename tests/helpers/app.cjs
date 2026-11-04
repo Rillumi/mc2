@@ -14,7 +14,7 @@ function createApp() {
     fetch: async () => { throw new Error('测试不访问外网'); }
   });
   const load = file => vm.runInContext(fs.readFileSync(path.join(__dirname, '../..', file), 'utf8'), ctx, {filename:file});
-  for (const name of ['zip-reader', 'zip-writer', 'version', 'identity', 'metadata', 'analyzer', 'selector', 'plan', 'dependencies', 'modpack', 'overrides']) load('js/core/' + name + '.js');
+  for (const name of ['zip-reader', 'zip-writer', 'version', 'identity', 'metadata', 'conflicts', 'analyzer', 'selector', 'plan', 'dependencies', 'modpack', 'overrides']) load('js/core/' + name + '.js');
   load('js/ui/state.js');
   const MC = ctx.MC;
   MC.uiBase = {
@@ -31,7 +31,7 @@ function createApp() {
   MC.flowMeta = Object.fromEntries(['prefetchProjects','prefetchLite','prefetchZhNames','applyCats'].map(k=>[k,()=>{}]));
   MC.pager = {resetAll(){}};
   for (const file of ['js/pack/mrpack.js','js/pack/verify.js','js/ui/flow/scan.js','js/ui/flow/pack.js']) load(file);
-  return {MC,saved,messages,errors,load};
+  return {MC,saved,messages,errors,load,ctx};
 }
 
 module.exports = { createApp };
