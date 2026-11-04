@@ -21,8 +21,9 @@
   const FOUND_MAX = 400;
 
   function foundKey(e) {
-    const v = String((e && (e.id || e.name)) || '').toLowerCase().trim();
-    return v;
+    if (!e) return '';
+    if (e.sha1) return 'sha1:' + String(e.sha1).toLowerCase();
+    return 'file:' + [e.id,e.name,e.fileName,e.version,e.loader].map(v=>String(v||'').toLowerCase().trim()).join('|');
   }
 
   function readFound() {
@@ -115,11 +116,10 @@
 
   function fileMatch(entry, list) {
     const fn = String((entry && entry.fileName) || '').toLowerCase();
-    const ver = String((entry && entry.version) || '');
-    return (list || []).some(v =>
-      (fn && (v.files || []).some(f => String(f.filename || '').toLowerCase() === fn)) ||
-      (ver && String(v.version_number || '') === ver)
-    );
+    // 公共版本号（如 1.0.0）不能证明项目身份；已有哈希时必须匹配哈希。
+    return (list || []).some(v => (v.files || []).some(f => entry.sha1
+      ? String(f.hashes && f.hashes.sha1 || '').toLowerCase() === String(entry.sha1).toLowerCase()
+      : fn && String(f.filename || '').toLowerCase() === fn));
   }
 
   /* 项目确实发布了这个文件（或这个版本号），才认它是同一个模组 */
@@ -213,7 +213,7 @@
     const latest = MC.api.modrinth.pickVersion(versions, '');
     if (!latest) return { status: 'nomatch', url: projectUrl(proj), project: proj.title };
 
-    let status = 'newer';
+    let status = 'ambiguous';
     if (entry.version) {
       const info = MC.version.compareInfo(latest.version_number, entry.version);
       if (info.ambiguous) status = 'ambiguous';

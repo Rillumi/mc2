@@ -35,7 +35,8 @@ async function main() {
     if ((i+1)%25===0) console.log('已读取',i+1,'/',paths.length);
   }
   const s = MC.store.state;
-  const candidates = entries.filter(e=>e.size<8*1024*1024 && MC.analyzer.matchesEnv(e,s.env,false)).sort((a,b)=>a.size-b.size);
+  const candidates = entries.filter(e=>e.size<8*1024*1024 && MC.analyzer.matchesEnv(e,s.env,false) &&
+    (e.deps||[]).every(d=>d.mandatory===false || MC.analyzer.ENV_IDS.has(d.modId))).sort((a,b)=>a.size-b.size);
   const ids = new Set();
   const selected = candidates.filter(e=>!ids.has(e.id)&&ids.add(e.id)).slice(0,8);
   s.mods = selected.map(e=>({...e,file:new File([fs.readFileSync(e.sourcePath)],e.fileName)}));

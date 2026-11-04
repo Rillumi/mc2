@@ -7,6 +7,7 @@
 
   /* ---------- 缺前置卡片 ---------- */
   function depCard(s, dep) {
+    const requirementText = (dep.requirements || []).map(r => r.by + '：' + (r.range || '*')).join('；');
     const cf = MC.links.curseforgeSearch(dep.modId, s.env.mc);
     const pm = MC.links.planetMinecraftSearch(dep.modId);
     const mrl = MC.links.modrinthSearch(dep.modId, s.env);
@@ -64,7 +65,8 @@
       '<a class="btn line sm" href="' + esc(mrl) + '" target="_blank" rel="noopener">Modrinth 页面</a>' +
       '</div>';
 
-    return '<div class="dep' + (dep.added && dep.status === 'ok' ? ' done' : '') + '">' + head + body + search + links + '</div>';
+    return '<div class="dep' + (dep.added && dep.status === 'ok' ? ' done' : '') + '">' + head +
+      (requirementText ? '<div class="hint">需同时满足：' + esc(requirementText) + '</div>' : '') + body + search + links + '</div>';
   }
 
   function candidateHtml(s, dep) {

@@ -103,3 +103,10 @@ test('首次从普通 jar 导入后直接打包，不依赖先导入整合包初
   assert.equal(app.saved.length,1,app.messages.join('\n'));
   assert.equal(app.MC.store.state.lastPack.files[0].total,1);
 });
+
+test('打包期间切换环境会停止下载，避免导出混合状态',async()=>{
+ const app=createApp();await app.MC.flowScan.importFiles([await fixture(app)]);
+ const original=app.MC.pack.verify;
+ app.MC.pack.verify=async(...args)=>{const r=await original(...args);app.MC.store.state.env.mc='1.21.1';return r;};
+ await app.MC.flowPack.buildPack('mrpack');assert.equal(app.saved.length,0);assert.match(app.messages.at(-1),/已改变/);
+});

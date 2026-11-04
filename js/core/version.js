@@ -51,6 +51,7 @@
 
   /** range 支持 [1.20.1,1.21) / [1.20.1,) / >=1.20 / ~1.20.1 / 1.20.1 / * */
   function mcMatches(range, target) {
+    if (Array.isArray(range)) return range.every(r => mcMatches(r, target));
     if (!range || range === '*') return true;
     const r = String(range).trim();
     if (r.startsWith('[') || r.startsWith('(')) {
@@ -195,7 +196,8 @@
   }
 
   function equals(a, b) {
-    return compare(a, b) === 0;
+    const info = compareInfo(a, b);
+    return !info.ambiguous && info.cmp === 0;
   }
 
   /** 给存储 / 显示用的规范化字符串（不含环境与变体） */

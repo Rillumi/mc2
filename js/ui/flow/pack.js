@@ -10,11 +10,16 @@
     const st = S();
     if (st.busy) return;
     if (!st.analysis) return toast('先拖入模组文件夹');
+    const plan = MC.plan.refresh(st);
+    if (format !== 'manifest' && plan.errors.length) {
+      st.lastPack = {at:Date.now(),files:[],problems:plan.errors};
+      return toast('暂不能生成整合包：'+plan.errors.slice(0,3).join('；'));
+    }
     st.busy = true;
     st.progress = '正在读取本地 jar…';
     touch();
     try {
-      const picked = MC.selector.selectedRows(st, st.analysis);
+      const picked = plan.rows;
       // 拖入的文件直接读；整合包扫出来的条目按包内路径回读
       const readData = async e => {
         if (e.file) return new Uint8Array(await e.file.arrayBuffer());
@@ -33,9 +38,7 @@
         }
         localJars.push({ name: row.entry.fileName, sha1: row.entry.sha1 || '', data });
       }
-      const adapted = Object.keys(st.adapt || {}).map(k => st.adapt[k])
-        .filter(x => x.added && x.status === 'ok' && x.version && x.project);
-      const deps = st.deps.filter(d => d.added && d.status === 'ok' && d.version && d.project).concat(adapted);
+      const deps = plan.online;
 
       const localNames = new Set(localJars.map(j => j.name.toLowerCase()));
       const localHashes = new Set(localJars.map(j => j.sha1).filter(Boolean));
@@ -244,11 +247,13 @@
 
       const failedChecks = results.flatMap(r => (r.verify && r.verify.problems) || []);
       if (failedChecks.length) throw new Error('回读校验未通过，已停止导出：' + failedChecks.slice(0, 3).join('；'));
+      if (MC.plan.refresh(st).fingerprint !== plan.fingerprint) throw new Error('打包期间选择或目标环境已改变，请重新生成');
       results.forEach(r => saveBlob(r.blob, r.filename));
 
       const names = results.map(r => r.filename).join(' 和 ');
       const v = results[0] && results[0].verify;
       let line = '已生成 ' + names;
+      if (plan.uncertain.length) line += ' · 有 '+plan.uncertain.length+' 项兼容性待确认';
       if (v && v.ok) {
         line += v.total
           ? ' · 校验通过（' + v.checked + '/' + v.total + ' 个 jar）'
@@ -278,7 +283,8 @@
         skipped: skippedFiles.slice(0, 20).join('、'),
         overrideFailed: overrideFailed,
         depFailed: depFailed.slice(0, 10).join('、'),
-        problems: problems
+        problems: problems,
+        uncertain: plan.uncertain
       };
       toast(line);
 

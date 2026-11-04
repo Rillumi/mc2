@@ -85,6 +85,7 @@
 
   const subs = [];
   function touch() {
+    if (MC.plan) MC.plan.refresh(state);
     subs.forEach(fn => {
       try { fn(state); } catch (err) { console.error(err); }
     });

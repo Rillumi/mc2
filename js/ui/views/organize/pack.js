@@ -29,11 +29,11 @@
     const open = s.deps.filter(d => !(d.added && d.status === 'ok' && d.version));
     const excluded = MC.selector.excludedGroups(s, a).length;
     const checks = [
-      ['加载器全部一致', true],
-      ['游戏版本全部一致', true],
+      ['本地模组加载器一致', s.plan ? s.plan.analysis.rows.every(r => !r.issues.some(i => i.type === 'loader')) : false],
+      ['本地模组游戏版本一致', s.plan ? s.plan.analysis.rows.every(r => !r.issues.some(i => i.type === 'mc')) : false],
       ['同 modId 只留一份', true],
-      ['缺前置已补齐', open.length === 0],
-      ['前置版本满足要求', a ? a.versionIssues.every(w => s.adapt['i:' + w.id] && s.adapt['i:' + w.id].added) : true],
+      ['缺前置已补齐', s.plan ? !s.plan.analysis.missing.some(d => d.requiredBy.length) : false],
+      ['前置版本满足要求', s.plan ? s.plan.analysis.versionIssues.length === 0 && !s.plan.analysis.uncertain.length : false],
       ['modId 声明无冲突', a ? a.overlaps.length === 0 : true]
     ];
 
@@ -80,6 +80,7 @@
           ? '还没有能进包的模组。给不兼容的模组找适配版本，或在列表里恢复被排除的。'
           : '先把 mods 文件夹拖进来。') + '</div>') +
 
+      (s.plan && s.plan.uncertain.length ? '<div class="hint err">有 ' + s.plan.uncertain.length + ' 项兼容性待确认：' + esc(s.plan.uncertain.map(x=>x.reason || (x.modId+' 的版本无法比较')).join('；')) + '</div>' : '') +
       (s.busy ? '<div class="loading"><span class="spinner"></span>' + esc(s.progress || '正在打包…') + '</div>' : '') +
 
       '<div class="pack-actions">' +

@@ -82,8 +82,8 @@
     if (!range) return Object.assign(base, { state: 'local', by: list[0].name, version: list[0].version });
     const hit = list.find(e => e.version && V.mcMatches(range, e.version));
     if (hit) return Object.assign(base, { state: 'local', by: hit.name, version: hit.version });
-    if (list.every(e => !e.version)) {
-      return Object.assign(base, { state: 'local', by: list[0].name, version: '', uncertain: true });
+    if (list.some(e => V.parse(e.version).ambiguous)) {
+      return Object.assign(base, { state: 'uncertain', by: list[0].name, version: list[0].version || '', uncertain: true });
     }
     return Object.assign(base, { state: 'version', by: list[0].name, version: list[0].version });
   }
@@ -117,11 +117,6 @@
     // 同一模组的不同打包常把 ID 写成 mizunoky_mod / mizunoky-mod，去掉分隔符再分组
     const groupKey = entry => String(entry.id || '').toLowerCase().replace(/[_-]/g, '');
     const nameKey = entry => String(entry.name || entry.nameZh || entry.id || '').toLowerCase().replace(/[^a-z0-9\u4e00-\u9fa5]/g, '');
-    // 显示名完全相同（例如 ID 从 nti_ziran 改成 ntileriaziran）也当作同一个模组
-    const sameDisplayName = (a, b) => {
-      const na = nameKey(a), nb = nameKey(b);
-      return !!na && na === nb && na.length >= 4;
-    };
 
     const byKey = new Map();
     modFiles.forEach(m => {
@@ -131,7 +126,7 @@
     });
 
     // 同名、且两个 ID 互为包含（cocricot / cocricotmod）→ 当作同一个模组的两个版本；
-    // 显示名完全一致也合并（作者改过 modId 但名字没变）
+    // 仅同名不足以认定相同，避免吞掉内部 ID 无关的另一个模组。
     const pooled = [...byKey.entries()];
     const dropped = new Set();
     for (let i = 0; i < pooled.length; i++) {
@@ -142,7 +137,7 @@
         const na = nameKey(pooled[i][1][0]), nb = nameKey(pooled[j][1][0]);
         if (!na || na !== nb) continue;
         const idRelated = kb.length >= 5 && (ka.indexOf(kb) >= 0 || kb.indexOf(ka) >= 0);
-        if (idRelated || sameDisplayName(pooled[i][1][0], pooled[j][1][0])) {
+        if (idRelated) {
           pooled[i][1] = pooled[i][1].concat(pooled[j][1]);
           dropped.add(j);
         }
@@ -206,6 +201,8 @@
 
     const missingMap = new Map();
     const issueMap = new Map();
+    const requirements = new Map();
+    const uncertain = [];
 
     rows.forEach(r => {
       if (!r.usable) return;
@@ -214,6 +211,9 @@
 
       r.depInfo.forEach(info => {
         if (!info.mandatory && !includeOptional) return;
+        if (!requirements.has(info.key)) requirements.set(info.key, []);
+        requirements.get(info.key).push({ by: r.entry.name, range: info.range, mandatory: info.mandatory });
+        if (info.state === 'uncertain') uncertain.push(Object.assign({ requiredBy: r.entry.name }, info));
         if (info.state === 'missing') {
           if (!missingMap.has(info.key)) {
             missingMap.set(info.key, {
@@ -262,6 +262,11 @@
       .filter(([, owners]) => owners.size > 1)
       .map(([id, owners]) => ({ id, owners: [...owners.values()] }));
 
+    for (const item of [...missingMap.values(), ...issueMap.values()]) {
+      item.requirements = requirements.get(item.id) || [];
+      item.range = [...new Set(item.requirements.map(r => r.range).filter(Boolean))];
+      item.requiredBy = [...new Set(item.requirements.filter(r => r.mandatory).map(r => r.by))];
+    }
     const missing = [...missingMap.values()]
       .filter(m => m.requiredBy.length || includeOptional)
       .sort((a, b) => a.id.localeCompare(b.id));
@@ -277,6 +282,7 @@
       missing,
       versionIssues,
       overlaps,
+      uncertain,
       dups,
       stats: {
         total: rows.length,

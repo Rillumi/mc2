@@ -72,7 +72,8 @@
         }
       } else if (el.dataset.id) {
         const id = el.dataset.id;
-        C.runAdapt('i:' + id, { kind: 'issue', id, title: id }, el.dataset.range || '');
+        const issue = st.analysis.versionIssues.find(w => w.id === id);
+        C.runAdapt('i:' + id, { kind: 'issue', id, title: id }, issue ? issue.range : el.dataset.range || '');
       }
     },
 

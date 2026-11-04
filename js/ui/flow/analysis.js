@@ -116,11 +116,13 @@
 
   async function chooseCandidate(dep, slug) {
     const st = S();
+    const my = FC.getGen();
     dep.status = 'loading';
     dep.reason = '';
     touch();
     try {
       const res = await MC.resolver.resolveSlug(slug, st.env, dep.range);
+      if (my !== FC.getGen() || !st.deps.includes(dep)) return;
       if (res.ok) {
         dep.project = res.project;
         dep.versions = res.versions;
