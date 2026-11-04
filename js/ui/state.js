@@ -86,6 +86,7 @@
   const subs = [];
   function touch() {
     if (MC.plan) MC.plan.refresh(state);
+    if (MC.dependencies) MC.dependencies.schedule(state);
     subs.forEach(fn => {
       try { fn(state); } catch (err) { console.error(err); }
     });

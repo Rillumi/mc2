@@ -254,7 +254,7 @@
   }
 
   async function download(url) {
-    const res = await fetch(url, { mode: 'cors' });
+    const res = await fetch(url, { mode: 'cors', signal: AbortSignal.timeout(30000) });
     if (!res.ok) throw new Error('下载失败 ' + res.status);
     return new Uint8Array(await res.arrayBuffer());
   }

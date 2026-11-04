@@ -26,6 +26,7 @@
     st.rpPair = {};
     st.updates = {};
     st.packSources = [];
+    st.dependencyGraph = null;
   }
 
   /** 这个文件是整合包吗（.mrpack 或带 mods/ 清单的 .zip），是就返回类型 */

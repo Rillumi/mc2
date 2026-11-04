@@ -44,6 +44,7 @@
       await Promise.all([worker(), worker(), worker()]);
     }
     if (my !== FC.getGen()) return;
+    await MC.dependencies.checkState(st);
     MC.flowMeta.analyzePacks(st);
     touch();
   }
@@ -212,7 +213,13 @@
   async function retryAll() {
     const my = FC.getGen();
     const list = S().deps.filter(d => !(d.status === 'ok' && d.version));
-    if (!list.length) return toast('没有需要重试的');
+    if (!list.length) {
+      if (S().plan?.directOnline.length) {
+        const result=await MC.dependencies.checkState(S(),{force:true});
+        return toast(result?.ok?'间接前置检查完成':(result?.errors||['检查尚未完成']).join('；'));
+      }
+      return toast('没有需要重试的');
+    }
     toast('重新匹配 ' + list.length + ' 个…');
     let cursor = 0;
     const worker = async () => {
@@ -223,6 +230,7 @@
       }
     };
     await Promise.all([worker(), worker(), worker()]);
+    await MC.dependencies.checkState(S(), {force:true});
   }
 
   MC.flowAnalysis = {

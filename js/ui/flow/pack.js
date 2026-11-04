@@ -10,15 +10,15 @@
     const st = S();
     if (st.busy) return;
     if (!st.analysis) return toast('先拖入模组文件夹');
-    const plan = MC.plan.refresh(st);
-    if (format !== 'manifest' && plan.errors.length) {
-      st.lastPack = {at:Date.now(),files:[],problems:plan.errors};
-      return toast('暂不能生成整合包：'+plan.errors.slice(0,3).join('；'));
-    }
     st.busy = true;
-    st.progress = '正在读取本地 jar…';
+    st.progress = '正在核对间接前置…';
     touch();
     try {
+      const start = MC.plan.refresh(st).rootFingerprint;
+      if (format !== 'manifest') await MC.dependencies.checkState(st);
+      const plan = MC.plan.refresh(st);
+      if(plan.rootFingerprint!==start)throw new Error('依赖检查期间方案已改变，请重新生成');
+      if(format!=='manifest'&&plan.errors.length)throw new Error(plan.errors.slice(0,3).join('；'));
       const picked = plan.rows;
       // 拖入的文件直接读；整合包扫出来的条目按包内路径回读
       const readData = async e => {

@@ -109,7 +109,7 @@
     const warn = warnHtml(s);
     const head = (s.deps.length || a.versionIssues.length || a.overlaps.length)
       ? '<div class="section-label">前置与冲突 · ' +
-        (open ? '还有 ' + open + ' 个没配好' : '前置已配齐') + '</div>'
+        (open ? '还有 ' + open + ' 个没配好' : s.plan?.errors.length ? '依赖检查未通过' : s.plan?.uncertain.length ? '有待确认项' : '所选方案前置检查通过') + '</div>'
       : '';
 
     const retry = open

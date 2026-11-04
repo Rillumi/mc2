@@ -13,13 +13,14 @@
     const picked = MC.selector.selectedRows(s, a);
     const added = s.deps.filter(d => d.added && d.status === 'ok' && d.version);
     const adapted = adaptAdded(s);
-    const total = picked.length + added.length + adapted.length;
+    const chain = s.plan ? s.plan.online.filter(d => !s.plan.directOnline.includes(d)) : [];
+    const total = picked.length + added.length + adapted.length + chain.length;
     const packList = ((a && a.others) || []).filter(o => o.kind === 'resourcepack' || o.kind === 'shader');
     const packsOn = !!(s.includePacks && packList.length);
     const packBytes = packList.reduce((n, o) => n + (o.size || 0), 0);
     const hasOptional = picked.some(r => ((r.entry && r.entry.optionalDeps) || []).length);
     const size = picked.reduce((n, r) => n + (r.entry.size || 0), 0) +
-      added.concat(adapted).reduce((n, d) => {
+      added.concat(adapted,chain).reduce((n, d) => {
         const f = d.version.files && d.version.files[0];
         return n + ((f && f.size) || 0);
       }, 0) + (packsOn ? packBytes : 0);
@@ -45,6 +46,7 @@
       '<div class="sum">包里 <b>' + total + '</b> 个模组 · 约 ' + fmtSize(size) +
       (added.length ? ' · 含 ' + added.length + ' 个前置' : '') +
       (adapted.length ? ' · 换 ' + adapted.length + ' 个版本' : '') +
+      (chain.length ? ' · 间接前置 ' + chain.length + ' 个' : '') +
       (sourceOnline ? ' · 原包在线文件 ' + sourceOnline + ' 项' : '') +
       (excluded ? ' · 排除 ' + excluded + ' 个' : '') +
       (packsOn ? ' · 另带 ' + packList.length + ' 个资源包/光影' : '') + '</div>' +
@@ -80,6 +82,9 @@
           ? '还没有能进包的模组。给不兼容的模组找适配版本，或在列表里恢复被排除的。'
           : '先把 mods 文件夹拖进来。') + '</div>') +
 
+      (chain.length ? '<div class="hint">已补充间接前置：' + esc(chain.map(d=>d.project.title+' '+d.version.version_number+'（被 '+d.requiredBy.join('、')+' 需要）').join('；')) + '</div>' : '') +
+      (s.plan && s.plan.errors.length ? '<div class="hint err">' + esc(s.plan.errors.join('；')) + '</div>' : '') +
+      (s.plan?.directOnline.length ? '<button type="button" class="btn line sm" data-act="retryall">重新检查依赖链</button>' : '') +
       (s.plan && s.plan.uncertain.length ? '<div class="hint err">有 ' + s.plan.uncertain.length + ' 项兼容性待确认：' + esc(s.plan.uncertain.map(x=>x.reason || (x.modId+' 的版本无法比较')).join('；')) + '</div>' : '') +
       (s.busy ? '<div class="loading"><span class="spinner"></span>' + esc(s.progress || '正在打包…') + '</div>' : '') +
 
