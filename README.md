@@ -6,6 +6,7 @@ Minecraft 模组整理工具：扫描本地模组，识别来源，检查前置�
 
 ## 项目文档
 
+- [规则讨论白话版.md](规则讨论白话版.md)：用具体例子解释检查结果和打包选择，适合一起商量产品规则；建议尚未定案、未实现。
 - [FUNCTIONAL_LOGIC.md](FUNCTIONAL_LOGIC.md)：现有功能、数据流、三条依赖检查路径、实际判级、缓存、边界及模块导航。开发和排查先读这份。
 - [DECISION_RULES_DRAFT.md](DECISION_RULES_DRAFT.md)：交叉验证、六种结果和原因细分的讨论稿；待定、未实现，不能当作当前行为。
 - [TODO.md](TODO.md)：后续工作与验收条件。
