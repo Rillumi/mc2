@@ -6,15 +6,64 @@
 
 当前实现见 [FUNCTIONAL_LOGIC.md](FUNCTIONAL_LOGIC.md)；本文记录拟议规则、细分原因与验收例子。保存 / 提交本文不代表已经改动检查逻辑，也不代表用户已经确认所有建议。
 
+## 0. 修改规则前先看：已核实事实与证据边界
+
+统一核对日期：**2026-11-07**。本节优先于后文的讨论建议；后文有矛盾时先核实和修正文档，不能凭印象择一实现。
+
+记录用语：**文档事实**＝官方说明明确给出；**源码事实**＝固定版本的特定代码路径；**推论**＝由证据推导的边界；**产品选择**＝本工具决定如何提示 / 阻止；**未核实**＝尚无足够证据。产品选择不能写成接口规定，静态源码核对不能写成已实际运行验证。
+
+### 0.1 Modrinth：返回了什么，不能额外理解成什么
+
+适用范围：本项目当前调用 `/v2`；本轮核对官方版本接口、项目版本列表文档及项目的请求封装。没有重新调用真实 API 或下载 JAR，已有实际联网记录见 VALIDATION。
+
+| 编号 | 已核实内容 | 类型 / 依据 | 使用边界 |
+| --- | --- | --- | --- |
+| MR-01 | `game_versions` 列出该发布记录标注支持的 MC；`loaders` 列出加载器。 | 文档事实：[版本字段](https://docs.modrinth.com/api/operations/getversion/) | 已列出、有效列表未列出、列表未取得 / 无效要分开；本字段没有独立的“明确禁止此 MC”值。 |
+| MR-02 | 项目版本列表可按 `game_versions`、`loaders` 等参数筛选。 | 文档事实：[列表查询](https://docs.modrinth.com/api/operations/getprojectversions/) | 空结果只描述这次查询及其条件；不是网络失败，也不是证明所有文件无法运行。查询条件、工具限额和数据完整性须按实际记录判断。 |
+| MR-03 | `dependency_type` 包括 required、optional、incompatible、embedded；依赖可指向项目或具体发布，ID 字段可为空。 | 文档事实：[依赖字段](https://docs.modrinth.com/api/operations/getversion/) | `incompatible` 是平台关系，不是 JAR 强互斥字段；`embedded` 是声明，不是已经解析并验证内部提供者。 |
+| MR-04 | `version_id` 是发布 ID，`version_number` 是发布版本号。 | 文档事实：[版本与依赖字段](https://docs.modrinth.com/api/operations/getversion/) | ID 不是最低版本；不同发布 ID 不直接证明内部允许范围无交集，也不能悄悄忽略平台的精确指定。 |
+| MR-05 | mrpack 的 `env.client` / `env.server` 可为 required、optional、unsupported；server 指独立服务端。 | 文档事实：[mrpack 规范](https://support.modrinth.com/en/articles/8802351-modrinth-modpack-format-mrpack) | 这是安装端条件，不是 MC 支持列表中的否定值，也不是游戏内逻辑端。 |
+
+**推论边界：**“平台未列出目标版本”可以成为平台筛选未匹配的依据，但不能单凭它证明实际无法运行；同样不能反过来说实际兼容。是否提醒、要求深度检查或允许确认测试，是本工具的产品选择，不能归因于接口自动给出该决定。
+
+### 0.2 加载器：按版本与格式区分必需、强互斥、软提示
+
+Fabric 除官方当前说明外，补核了 Loader **0.15.11** 固定提交 `1a833267b54beea5eb635222df4af149f8a6a1d6` 的求解代码；NeoForge 使用 **1.20.3—1.20.4** 版本文档，不把当前 26.x 文档直接当成全部旧版规则。
+
+| 编号 | 已核实内容 | 类型 / 依据 | 使用边界 |
+| --- | --- | --- | --- |
+| LD-01 | Fabric `depends` 是强依赖，`breaks` 是强负依赖；求解时处理相应版本匹配。 | 源码事实：[0.15.11 求解分支](https://github.com/FabricMC/fabric-loader/blob/1a833267b54beea5eb635222df4af149f8a6a1d6/src/main/java/net/fabricmc/loader/impl/discovery/ModSolver.java#L739-L782)；[官方说明](https://docs.fabricmc.net/develop/loader/fabric-mod-json#dependency-resolution) | 已选模组的适用必需依赖缺失 / 范围不满足，或同时选择命中的 breaks 对象，会违反加载约束；必须确认身份、范围、提供者与条件，不能只比名字。 |
+| LD-02 | Fabric `recommends` / `suggests` 非必需；`conflicts` 与 `breaks` 不同，官方将 conflicts 说明为警告。 | 文档事实：[依赖种类](https://docs.fabricmc.net/develop/loader/fabric-mod-json#dependency-resolution)；源码事实同 LD-01 | 不把英文 conflicts 自动翻译成“禁止共存”；可选项缺失不能改成确认缺必需前置。 |
+| LD-03 | NeoForge 1.20.3—1.20.4 使用 required / optional / incompatible / discouraged；required 缺失、incompatible 命中阻止加载，discouraged 提醒。 | 版本文档事实：[该版本依赖配置](https://docs.neoforged.net/docs/1.20.4/gettingstarted/modfiles/#dependency-configurations) | optional 缺失可不阻止，但存在时仍需核对其兼容要求；还要按 versionRange、side 判断，不能当作所有版本无条件关系。 |
+| LD-04 | Forge 1.20.x 的 `mods.toml` 依赖配置使用 mandatory、versionRange、ordering、side。 | 版本文档事实：[Forge 1.20.x](https://docs.minecraftforge.net/en/1.20.x/gettingstarted/modfiles/#dependency-configurations) | 不能将 NeoForge 的 type 字段语义不加区分地套给全部 Forge / 旧 NeoForge 文件。尚未核实的历史格式按未知处理。 |
+| LD-05 | Fabric 官方承认某些依赖要求可能过严，并提供独立的 dependency override 机制供尝试。 | 文档事实：[依赖覆盖](https://docs.fabricmc.net/players/troubleshooting/dependency-overrides) | 声明不满足不是运行实验的结论；但单纯允许生成测试包也不会完成覆盖，更不证明任意跨版本文件可用。本项目没有获准自动改 JAR / 写覆盖配置。 |
+
+**推论边界：**强互斥不需要双方相互声明；单方适用的约束也要保留。平台关系、内部加载约束与实际启动结果是不同证据。已核实的内嵌 / 别名提供关系要考虑，未核实的可能提供者不能直接当成满足或确定缺失。
+
+### 0.3 PCL：明确到具体路径，不能把“能下载”当作“已兼容”
+
+适用范围：**原版 Meloong-Git/PCL** 固定提交 `93ede5d9e638c99fcec853a9ba1eecd91ceee7f5`。本轮核对源码，**未运行 PCL、未验证界面实际表现、未审计全部组件或社区版**。下表只描述列出的路径。
+
+| 编号 | 源码直接显示的行为 | 固定来源 | 不能扩大成的结论 |
+| --- | --- | --- | --- |
+| PCL-01 | 解析 Modrinth `game_versions` 后生成内部版本展示列表，部分预览版会归组；筛选器没有匹配目标时回落到首项，在多筛选项路径首项为“全部”。 | [原始字段转换](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Modules/Resource/ResourceVersion.vb#L204-L217)、[默认筛选](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Pages/PageDownload/Resource/PageDownloadCompDetail.xaml.vb#L118-L152) | 回落到全部可能继续显示其他版本，不是将未列出的目标 MC 改判为支持；内部展示列表也不等于完整原始 JSON。 |
+| PCL-02 | “所选版本”卡片按目标 MC 是否在列表中及加载器交集填充。 | [卡片归类](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Pages/PageDownload/Resource/PageDownloadCompDetail.xaml.vb#L189-L199) | 未进入目标卡片、仍在其他卡片可见，与禁止下载、内部检查失败是不同事项。 |
+| PCL-03 | 为单文件下载建议默认目录时，Mod / 数据包进行版本判断，常规正式版按相等比较；资源包 / 光影不走这段 MC 判断。随后允许选择保存位置并创建下载任务。 | [目录适配](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Pages/PageDownload/Resource/PageDownloadCompDetail.xaml.vb#L393-L484)、[保存下载](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Pages/PageDownload/Resource/PageDownloadCompDetail.xaml.vb#L508-L523) | 这里是目录建议，不能改称对整个资源类型的兼容保证；快照还有单独分支，不能概括为所有版本都精确匹配。 |
+| PCL-04 | 本地 Modrinth 更新查询提交目标 MC 与文件原加载器；返回后比较加载器列表、发布时间和哈希。 | [更新路径](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Modules/Resource/LocalResourceLoaders.vb#L170-L195) | 这是更新候选选择，不能说已验证 JAR 内部前置或运行兼容；也不能称这段进行了完整模组版本语义比较。 |
+| PCL-05 | 所查下载元数据路径只把 required 项目收进前置展示字段，排除 Fabric API / Quilt API；下载页显示前置资源。崩溃分析另外读取缺依赖 / 不兼容日志。 | [前置字段](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Modules/Resource/ResourceVersion.vb#L196-L202)、[失败日志分析](https://github.com/Meloong-Git/PCL/blob/93ede5d9e638c99fcec853a9ba1eecd91ceee7f5/Plain%20Craft%20Launcher%202/Modules/Minecraft/ModCrash.vb#L537-L549) | 不能由这个字段断言已覆盖平台 incompatible / embedded，不能把该路径排除的 API 当作本工具无需检查的前置；失败后分析不等于打包前完整核对。 |
+
+**结论范围：**尚未从这些路径证实 PCL 在启动前对所有 Mod 做完整的内部 / 平台强互斥交叉验证；也没有证据断言所有 PCL 版本都不做。对本工具来说，借鉴交互或实现必须注明是哪条路径，不能拿“PCL 就这样”代替独立规则依据。
+
+### 0.4 保持未核实，不抢先定案的项目
+
+- 仅平台 incompatible 命中时，本工具如何影响普通包 / 测试包；以及不同精确前置发布记录在内部范围满足时如何判级。这些是产品边界，接口字段本身不能替我们决定。
+- 资源包不同 MC 格式的具体行为、早期 Forge / NeoForge 历史格式、转接加载器、嵌套依赖与覆盖配置，需要按目标版本和实际字节补证据，不能套用上表的其他对象。
+- 已有乌托邦平台疑点没有因此变成 JAR 核实或游戏运行结论；需要下载核实的仍遵循用户已确认的深度检查流程。
+- 新增事实按“具体问题 → 官方文档 / 固定代码 → 条件与反例 → 是否需要样本复现 → 产品处理选择 → 测试”记录；来源失效、版本变化或出现反例时重新核对。无法核实就明确标未知，不要求用户猜技术事实。
+
 ## 1. 先确认事实，避免把接口字段说成结论
 
-- Modrinth 版本接口的 `game_versions` 是支持的 MC 版本列表；`loaders` 是支持的加载器列表。针对当前 MC，我们可观察到「列出」「未列出」「未取得有效列表」，不是接口直接返回「兼容 / 明确不兼容」两个结论。
-- `game_versions` 未包含 1.20.1，只能准确表述为该发布记录未列出 1.20.1。不得凭空制造一个接口没有提供的「明确不支持该 MC」字段。
-- mrpack 文件的 `env.client` / `env.server` 可以有 required / optional / unsupported；这是安装端条件，不能拿它表达 MC 版本是否支持。
-- Modrinth `incompatible` 是依赖关系类型，也不等于 MC 支持列表中的否定项。不同维度分开保存和判断。
-- `version_id` 标识具体发布版本，`version_number` 是发布版本号，JAR 的内部 version / 允许范围又是其他信息。不得将发布 ID 自动解释成最低版本，也不得把不同 ID 直接证明为内部范围互斥。
-
-来源：[Modrinth 版本接口](https://docs.modrinth.com/api/operations/getversion/)、[mrpack 格式](https://support.modrinth.com/en/articles/8802351-modrinth-modpack-format-mrpack)。
+字段事实、PCL 路径、加载器软硬语义与核对范围集中放在开头第 0 节，避免重复维护完整规则。实现以下设计时先定位适用的事实编号；没有依据的新场景先核实，不把未列出、表达不同、查询失败或尚未检查自动升级为运行不兼容。
 
 ## 2. 记录结构的建议
 
@@ -236,6 +285,8 @@ Fabric 官方明确说明，部分模组依赖要求可能过严，并提供单�
 - 必需前置可能由嵌套内容 / 已核实别名提供；还有未识别文件或条件不确定时不能仅凭列表找不到就声称确定缺失。
 
 来源：[Fabric 依赖类型](https://docs.fabricmc.net/develop/loader/fabric-mod-json#dependency-resolution)、[NeoForge 依赖配置](https://docs.neoforged.net/docs/gettingstarted/modfiles/#dependency-configurations)、[Modrinth 版本接口](https://docs.modrinth.com/api/operations/getversion/)。
+
+版本补核与引用优先看第 0.2 节：NeoForge 的对应结论已另对照 1.20.3—1.20.4 文档，Fabric 另对照 Loader 0.15.11 求解代码；这里的旧通用链接不表示所有历史版本都适用。
 
 ### 11.2 PCL 本轮核实到的路径
 
