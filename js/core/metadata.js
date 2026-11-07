@@ -145,22 +145,29 @@
       const modId = tomlStr(body, 'modId');
       if (!modId || /\$\{/.test(modId)) continue; // Fabric 包里的模板文件跳过
       let version = tomlStr(body, 'version');
+      const rawVersion = version;
       if (/\$\{/.test(version)) version = '';      // ${file.jarVersion} 由 Forge 启动时替换
       mods.push({
-        modId, version, name: tomlStr(body, 'displayName') || modId,
+        modId, version, rawVersion, name: tomlStr(body, 'displayName') || modId,
         description: plainText(tomlText(body, 'description') || tomlText(text, 'description')).slice(0, 600),
         authors: splitNames(tomlStr(body, 'authors')),
         displayURL: tomlStr(body, 'displayURL')
       });
     }
 
-    const deps = [], conflicts = [];
+    const deps = [], conflicts = [], requirements = [];
     let mcRange = '';
     for (const m of text.matchAll(/\[\[dependencies\.([^\]]+)\]\]([\s\S]*?)(?=\n\s*\[|$)/g)) {
       const body = m[2];
       const modId = tomlStr(body, 'modId');
       if (!modId) continue;
       const range = tomlStr(body, 'versionRange') || '*';
+      requirements.push({ownerId:m[1].replace(/^["']|["']$/g,''),modId,
+        raw:tomlStr(body,'versionRange'),value:range,syntax:'maven',
+        rawMandatory:tomlStr(body,'mandatory'),rawType:tomlStr(body,'type'),
+        defaulted:!tomlStr(body,'versionRange'),field:'dependencies.'+m[1]+'.versionRange',
+        type:tomlStr(body,'type').toLowerCase()||((tomlStr(body,'mandatory')||'true').toLowerCase()==='false'?'optional':'required'),
+        side:tomlStr(body,'side')||'BOTH'});
       if (/^minecraft$/i.test(modId)) { mcRange = range; continue; }
       if (/^(forge|neoforge)$/i.test(modId)) continue;
       const type = tomlStr(body, 'type').toLowerCase();
@@ -180,6 +187,7 @@
       mods,
       deps,
       conflicts,
+      requirements,
       mcRange,
       provides: tomlArray(text, 'provides'),
       authors: mods.length ? mods[0].authors : [],
@@ -224,11 +232,20 @@
     if (contact.issues) links.push({ label: '问题反馈', url: String(contact.issues) });
     return {
       mods: [{
-        modId: o.id, version: o.version || '', name: o.name || o.id, mc: '',
+        modId: o.id, version: o.version || '', rawVersion:o.version??null, name: o.name || o.id, mc: '',
         description: plainText(o.description).slice(0, 600)
       }],
       deps,
       conflicts,
+      schemaSupported:o.schemaVersion===1,
+      metadataSide:side,
+      requirementsValid:['depends','recommends'].every(key=>o[key]==null||typeof o[key]==='object'&&!Array.isArray(o[key])),
+      requirements:['depends','recommends'].flatMap(key=>{
+        const values=o[key];
+        return values&&typeof values==='object'&&!Array.isArray(values)?Object.entries(values).map(([modId,raw])=>
+          ({ownerId:o.id,modId,raw,value:raw,syntax:'fabric',defaulted:false,field:key+'.'+modId,
+            type:key==='depends'?'required':'optional',side})):[];
+      }),
       provides: Array.isArray(o.provides) ? o.provides : [],
       mcRange: o.depends && o.depends.minecraft ?
         (Array.isArray(o.depends.minecraft) ? o.depends.minecraft.join(' || ') : String(o.depends.minecraft)) : '',
@@ -244,6 +261,7 @@
     const mods = list.filter(x => x && x.modid).map(x => ({
       modId: x.modid,
       version: x.version || '',
+      rawVersion:x.version??null,
       name: x.name || x.modid,
       mc: x.mcversion || '',
       description: plainText(x.description).slice(0, 600),
@@ -366,12 +384,14 @@
   }
 
   /** 声明的版本坏了/太笼统时，用文件名里的版本兜底 */
-  function resolveVersion(declared, fileName, modName) {
+  function resolveVersionEvidence(declared, fileName, modName) {
     const d = sanitizeVersion(declared);
     const f = fileVersionOf(fileName, modName);
-    if (!f) return d;
-    if (!d || isGenericVersion(d)) return f;
-    return d;
+    const inferred=!!f&&(!d||isGenericVersion(d));
+    return {value:inferred?f:d,source:inferred?'filename':d?'metadata':'unknown',declared:declared??'',candidate:f};
+  }
+  function resolveVersion(declared, fileName, modName) {
+    return resolveVersionEvidence(declared,fileName,modName).value;
   }
 
   /** 读取一个文件，返回 { kind, info }：
@@ -384,10 +404,16 @@
     const fabric = await zip.readEntry(z, 'fabric.mod.json');
     const legacy = await zip.readEntry(z, 'mcmod.info');
 
-    const found = [];
+    const found = [], metadataEvidence=[];
+    const record=(loader,path,p)=>metadataEvidence.push({loader,path,state:p?'parsed':'parse-failed',
+      readAt:Date.now(),parserVersion:1,side:p?.metadataSide||'BOTH',schemaSupported:p?.schemaSupported!==false,requirementsValid:p?.requirementsValid!==false,
+      mods:(p?.mods||[]).map(m=>({id:m.modId,rawVersion:m.rawVersion??null,version:m.version,
+        versionSource:m.versionSource||'version'})),requirements:(p?.requirements||[]).map(r=>({...r,
+          structureValid:loader!=='Forge'||!r.rawType&&['true','false'].includes(r.rawMandatory)}))});
     const manifest = await zip.readEntry(z, 'META-INF/MANIFEST.MF');
     if (fabric) {
       const p = parseFabricJson(fabric);
+      record('Fabric','fabric.mod.json',p);
       if (p) found.push({ loader: 'Fabric', meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
     }
     for (const [text, loader] of [[forge, 'Forge'], [neoforge, 'NeoForge']]) {
@@ -398,12 +424,15 @@
         if (!p.mods[0].version) {
           const mv = manifest && String(manifest).match(/Implementation-Version:\s*(\S+)/i);
           if (mv) p.mods[0].version = mv[1].trim();
+          if (mv) p.mods[0].versionSource='META-INF/MANIFEST.MF Implementation-Version';
         }
         found.push({ loader, meta: p, provides: p.provides || [], mcRange: p.mcRange || '' });
       }
+      record(loader,loader==='Forge'?'META-INF/mods.toml':'META-INF/neoforge.mods.toml',p.mods.length?p:null);
     }
     if (legacy) {
       const p = parseMcmodInfo(legacy);
+      record('Forge1.12','mcmod.info',p.mods.length?p:null);
       if (p.mods.length) found.push({ loader: 'Forge1.12', meta: p, provides: [], mcRange: p.mods[0].mc || '' });
     }
     if (!found.length) {
@@ -418,7 +447,10 @@
             loader: 'Forge', loaders: ['Forge'], id: 'connectormod',
             version: ver, name: 'Sinytra Connector', nameZh: 'Sinytra Connector',
             description: '让一部分 Fabric 模组跑在 Forge 上（需要 Forgified Fabric API）。', recipes: 0,
-            mc, mcRange: mc, allIds: ['connectormod'], deps: [], optionalDeps: []
+            mc, mcRange: mc, allIds: ['connectormod'], deps: [], optionalDeps: [],metadataRead:true,
+            metadataEvidence:metadataEvidence.concat([{loader:'Forge',path:'META-INF/MANIFEST.MF',state:'derived',
+              readAt:Date.now(),parserVersion:1,side:'BOTH',mods:[{id:'connectormod',rawVersion:ver,version:ver,
+                versionSource:'META-INF/MANIFEST.MF Implementation-Version'}],requirements:[]}])
           }
         };
       }
@@ -450,7 +482,7 @@
           }
         };
       }
-      return { kind: 'unknown', info: null };
+      return { kind: 'unknown', info: null, metadataEvidence };
     }
 
     // 统计 jar 自带的配方文件：data/<ns>/recipes/*.json（1.13+），老版本在 assets/<ns>/recipes/
@@ -516,6 +548,7 @@
         declaredMods,
         conflicts,
         metadataRead: true,
+        metadataEvidence,
         deps: deps.filter(d => d.mandatory),
         optionalDeps: deps.filter(d => !d.mandatory),
         authors,
@@ -529,5 +562,5 @@
     return (await inspect(buf)).info;
   }
 
-  MC.metadata = { inspect, parseJarBuffer, normalizeMc, inferMcFromName, parseForgeToml, parseFabricJson, parseMcmodInfo, sanitizeVersion, isGenericVersion, fileVersionOf, resolveVersion, splitNames };
+  MC.metadata = { inspect, parseJarBuffer, normalizeMc, inferMcFromName, parseForgeToml, parseFabricJson, parseMcmodInfo, sanitizeVersion, isGenericVersion, fileVersionOf, resolveVersion, resolveVersionEvidence, splitNames };
 })(globalThis);

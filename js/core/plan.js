@@ -14,7 +14,7 @@
         {key:m.id,id:m.id,modId:m.modId,range:m.range,requirements:m.requirements,requiredBy:m.requiredBy});
     });
     const directOnline=st.deps.concat(Object.values(st.adapt||{})).filter(d=>d.added&&d.status==='ok'&&d.version&&d.project);
-    const rootFingerprint=JSON.stringify({env:st.env,rows:rows.map(r=>[r.uid,r.entry.sha1,r.entry.version,r.entry.deps,r.entry.optionalDeps,r.entry.conflicts,r.entry.declaredMods]),
+    const rootFingerprint=JSON.stringify({env:st.env,rows:rows.map(r=>[r.uid,r.entry.sha1,r.entry.version,r.entry.deps,r.entry.optionalDeps,r.entry.conflicts,r.entry.declaredMods,r.entry.metadataEvidence,r.entry.versionEvidence,r.entry.mcEvidence]),
       online:directOnline.map(d=>[d.project.id,d.version]),includeOptional:st.includeOptional,
       sources:(st.packSources||[]).map(p=>[p.name,p.onlineList]),platformSelections:st.platformSelections,includePacks:st.includePacks});
     const graph=st.dependencyGraph?.rootFingerprint===rootFingerprint?st.dependencyGraph:null;
@@ -74,9 +74,16 @@
     summary.status=summary.errors?'error':summary.pending?'pending':summary.warnings?'warning':'checked';
     summary.label=summary.errors?'发现明确问题，整合包导出已阻止':summary.pending?'检查尚有待确认项':summary.warnings?'发现警告，请核对声明':'已检查的声明未发现问题';
     const fingerprint=JSON.stringify([rootFingerprint,graph?.ok?graph.entries.map(e=>e.sha1):null,
-      inspected.map(e=>e.platformVersion&&[e.platformVersion.id,e.platformVersion.project_id,e.platformVersion.dependencies]),quick?.relations,findings]);
+      inspected.map(e=>e.platformVersion&&[e.platformVersion.id,e.platformVersion.project_id,e.platformVersion.dependencies,e.platformVersion.game_versions,e.platformVersion.loaders]),quick?.relations,findings]);
+    const reviewed=inspected.slice(),reviewedHashes=new Set(reviewed.map(e=>e.sha1));
+    const assetHashes=new Set(quickInput.records.filter(r=>r.asset).map(r=>r.hashes?.sha1).filter(Boolean));
+    for(const e of quick?.sourceEntries||[])if(!reviewedHashes.has(e.sha1)){
+      reviewed.push({...e,kind:assetHashes.has(e.sha1)?'resource':'mod'});reviewedHashes.add(e.sha1);
+    }
+    // 第一批没有完整解析内嵌提供者，不能只因外层文件都已读取就声称提供者范围完整。
+    const evidence=MC.evidence.review(reviewed,st.env,{versions:exactVersions,platformStatus:st.platformCheck?.status||'idle',providersComplete:false});
     st.plan={rows,directOnline,platformOnline,online,analysis,uncertain,errors,warnings,findings,summary,coverage,fingerprint,rootFingerprint,
-      quickInput,quickEnabled,quickFingerprint,quick};
+      quickInput,quickEnabled,quickFingerprint,quick,evidence};
     // 候选目录保留供用户换版本；检查结果来自最终方案。
     st.analysis.missing=analysis.missing;
     st.analysis.versionIssues=analysis.versionIssues;

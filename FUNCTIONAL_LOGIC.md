@@ -1,10 +1,10 @@
 # ModPilot 现有功能与判断逻辑
 
-最后核对：2026-11-07。实现基线：`f3a566f`（新增本文前的正式项目提交）。
+最后核对：2026-11-07。本轮在 `3f04fac` 上新增第一批声明证据核对；历史实现与验证见 VALIDATION。
 
 本文描述当前代码的实际行为，供开发、排查和交接时先行阅读。建议中的行为只放在「已知缺口」中，不代表已经实现。验证次数与日期见 [VALIDATION.md](VALIDATION.md)，后续任务见 [TODO.md](TODO.md)。
 
-交叉验证和结果细分的拟议规则单独记录在 [DECISION_RULES_DRAFT.md](DECISION_RULES_DRAFT.md)。它是待讨论设计，不改变本文描述的四类现有汇总结果。
+交叉验证和结果细分的规则记录在 [DECISION_RULES_DRAFT.md](DECISION_RULES_DRAFT.md)。第一批证据核对已接入当前方案和诊断报告，尚未接管四类现有汇总与导出阻止；其余设计不能视为已实现。
 
 ## 目录与阅读方式
 
@@ -90,7 +90,8 @@ analyzer 分析目录 → selector 选择 / 排除 → plan.refresh 计算最终
 
 读取 `fabric.mod.json`、`META-INF/mods.toml`、`META-INF/neoforge.mods.toml`、旧 `mcmod.info` 等元数据，提取 ID、版本、加载器、MC 范围、必需 / 部分可选依赖及互斥声明。
 
-- 模组版本声明缺失或被判为过于笼统时，`resolveVersion` 会尝试采用文件名版本；缺少 MC 信息时也有文件名推断兜底。目前这类推断尚未形成完整的来源 / 可信度字段。
+- 模组版本声明缺失或被判为过于笼统时，扫描会采用文件名兜底；现在用 `versionEvidence` 保存原声明、推测候选与实际采用来源，MC 文件名兜底用 `mcEvidence` 标记。原始内部声明另存，不被展示值覆盖。旧 analyzer 尚未全面改为使用这些来源字段。
+- `metadataEvidence` 分别保留元数据文件、加载器、内部 ID、原始 / MANIFEST 版本、每个 owner 的依赖原值、语法、端条件和缺省范围。Fabric JSON 无法解析可记录 parse-failed；未知 schema / 不支持格式在新核对层保留不足。简化 TOML 解析器未升级为完整验证器，旧格式和 Connector 派生信息不冒充新支持的明确约束。
 - `analyzer` 按所选文件检查环境、可提供的内部 ID、缺失前置、版本范围和重复 ID。多个上层的前置要求同时保留，不能只满足其中一个。
 - 识别到 Sinytra Connector 时有 Fabric → Forge 转接的环境处理；这不代表每个 Fabric 模组都经过转接运行验证。
 - minecraft / java / 加载器等环境依赖不会被当作普通缺失模组；尚未完整检查 Java 和加载器自身版本要求。
@@ -145,6 +146,18 @@ analyzer 分析目录 → selector 选择 / 排除 → plan.refresh 计算最终
 
 后两类平台 error 也会汇入阻止打包的条件。这个行为已经存在，但作为运行兼容性结论证据偏重，是待修问题，不能在说明中提前写成「已自动降级」或「已完成两层核对」。
 
+### 第一批声明证据核对：已实现，仅作诊断
+
+- `js/core/evidence.js` 为 `plan.evidence` 生成当前环境的独立结果快照；不请求接口、不下载、不安装、不运行模组。诊断报告增加对应章节，原界面四类汇总和导出判级仍走既有逻辑。
+- 范围为所选本地 / 已读在线 JAR，以及快速检查已识别的原包文件。平台 MC 列表仅在合法 SHA-1 与具体发布文件匹配后作为证据；不把平台发布号当内部版本。SHA-512 单独身份、同哈希全部发布记录、未识别原包项尚未完整纳入新层，旧覆盖提示仍保留。
+- 逐来源核对内部 MC、必需 / 可选依赖；内部满足且平台未列出时记录标注覆盖差异，不能造出平台显式禁止。内部要求违反且平台在同加载器条件列出支持时，保留违反并附来源差异；不同文件或加载器条件不直接比较。
+- 前置版本从提供者原始内部声明 / 已解析 MANIFEST 读取，不采用文件名兜底或平台版本号。多提供者、别名未知版本、端未知及提供者范围未覆盖时保留不足；不会因当前版本不满足就声称范围无交集。不做完整区间交集 / 版本求解。
+- 计划接入时不会声明提供者范围完整：内嵌尚未核实，外层文件都读取也不够。因此新诊断层对找不到的前置保留提供者未核实；原有缺失前置错误仍按旧判级阻止，并未被新结果清除。纯函数支持调用方明确给出已核实的完整提供者范围，用于封闭场景测试和后续接入。
+- 未读、解析失败、格式 / schema 不支持、值非法、范围不支持、未声明约束和格式缺省通配范围分别记录。Java / 加载器版本约束尚未执行，内嵌、转接和资源包格式不假装已验证。
+- 证据字段纳入当前方案指纹；平台 MC / 加载器列表变化也纳入导出依据指纹。复用旧快照不会被随后改动原数据污染。核对时间是 review 时间，不能当作平台查询时间。
+
+这批结果尚未替换旧错误：可能同时看到旧摘要的 error 与新诊断中的“平台未列出”。这是记录并暴露现状差异，不代表已开放测试包或已修复全部判级。
+
 ### 两层信息核对的实际完成度
 
 本地文件会读内部元数据，也会尝试查平台；并非每个文件都能查到平台。部分互斥范围矛盾已有处理，但环境标注、发布 ID、文件名推测与内部约束尚未形成统一的证据核对模型。原包平台候选也没有自动转为 B 路径的全面 JAR 检查。
@@ -198,7 +211,7 @@ analyzer 分析目录 → selector 选择 / 排除 → plan.refresh 计算最终
 | 编号 | 缺口 | 当前影响 / 后续方向 |
 | --- | --- | --- |
 | K1：优先 | 平台列表未列出目标环境、不同发布 ID 仍可能直接成为 error | 会阻止部分尚未证明内部不兼容的包；程序还有“平台声明不支持”的过重提示，需拆分来源、按需核对并修正。另需重审平台互斥因 JAR 禁止范围未命中而降为 pending 的局部规则 |
-| K2：优先 | 文件名版本 / MC 推测未完整记录可信度 | 需要区分声明值和推测值，不能把推测包装成已经核实 |
+| K2：优先 | 原始声明与扫描兜底已留来源，但旧判定尚未全面使用 | 新诊断层不以文件名推测替代内部声明；仍需接入旧 analyzer、候选筛选和统一判级 |
 | K3 | CurseForge 文件依赖与通用识别未完整接入 | 对应 TODO 第 4 项，已有指纹能力应复用 |
 | K4 | 嵌套 JAR / Jar-in-Jar、独立内嵌版本未完整处理 | 对应 TODO 第 5 项；不能把所有 embedded 或 provides 当成已满足前置 |
 | K5 | 客户端 / 独立服务端目标未完整实现 | 对应 TODO 第 6 项，原包 env 的保留不等于已经按端正确筛选全部输出 |
@@ -217,6 +230,7 @@ analyzer 分析目录 → selector 选择 / 排除 → plan.refresh 计算最终
 | 补前置与 JAR 间接链 | [resolver.js](js/core/resolver.js)、[dependencies.js](js/core/dependencies.js) | resolver、dependencies 测试 |
 | 原包平台递归与候选 | [platform-deps.js](js/core/platform-deps.js)、[modrinth.js](js/api/modrinth.js) | platform-deps 测试 |
 | 明确互斥及证据矛盾 | [conflicts.js](js/core/conflicts.js)、metadata、plan | conflicts 测试 |
+| 第一批证据与诊断核对 | [evidence.js](js/core/evidence.js)、metadata、plan、organize 动作 | evidence 测试：原值 / 推测、MC、身份、条件、前置版本、快照与报告 |
 | 平台资料、项目确认、更新 | [flow/metadata.js](js/ui/flow/metadata.js)、[core/updates.js](js/core/updates.js)、[flow/updates.js](js/ui/flow/updates.js)、[curseforge.js](js/api/curseforge.js) | updates、curseforge、modrinth-authors 测试 |
 | 资源建议、比较、日志、目录 | [packs.js](js/core/packs.js)、[diff.js](js/core/diff.js)、[logscan.js](js/core/logscan.js)、[library.js](js/core/library.js) | resourcepacks、ui-wiring 等；并非每个辅助模块都有独立完整测试 |
 | 导出、回读、配置保留 | [flow/pack.js](js/ui/flow/pack.js)、[js/pack](js/pack)、[overrides.js](js/core/overrides.js) | roundtrip、verify、overrides、modlist 测试 |

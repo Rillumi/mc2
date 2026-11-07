@@ -193,6 +193,7 @@
         L.push('原包平台快速检查：已识别 '+c.sourceChecked+' 项，检查 '+c.platformRelations+' 条关系');
         plan.findings.forEach(f=>L.push('['+(f.severity==='error'?'明确错误':f.severity==='warning'?'警告':'待确认')+'] '+f.reason));
         L.push('边界：'+c.limits.join('；'));
+        if(plan.evidence)L.push(...MC.evidence.reportLines(plan.evidence));
       }
       const ups = st.updates || {};
       const cnt = { newer: 0, current: 0, older: 0, ambiguous: 0, other: 0 };

@@ -52,12 +52,17 @@
     entry.kind = res.kind;
     if (res.info) Object.assign(entry, res.info);
     else if (res.kind === 'mod') entry.error = '没有找到模组元数据';
+    if(res.metadataEvidence)entry.metadataEvidence=res.metadataEvidence;
     if (res.kind === 'mod' || res.kind === 'resourcepack') entry.sha1 = await sha1Hex(buf);
     if (res.kind === 'mod') {
       // mods.toml 里写的版本常常是摆设（1.0.0），真实版本在文件名里
-      entry.version = MC.metadata.resolveVersion(entry.version, entry.fileName, entry.name);
+      entry.versionEvidence=MC.metadata.resolveVersionEvidence(entry.version,entry.fileName,entry.name);
+      entry.version=entry.versionEvidence.value;
     }
-    if (!entry.mc) entry.mc = MC.metadata.inferMcFromName(entry.fileName);
+    if (!entry.mc) {
+      entry.mc=MC.metadata.inferMcFromName(entry.fileName);
+      if(entry.mc)entry.mcEvidence={value:entry.mc,source:'filename'};
+    }
     if (!entry.id) entry.id = entry.fileName.replace(/\.(jar|zip)$/i, '').toLowerCase();
     return res;
   }
